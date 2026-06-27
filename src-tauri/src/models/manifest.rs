@@ -35,6 +35,10 @@ pub struct ManifestCapabilities {
     pub write: Vec<String>,
     #[serde(default)]
     pub provide: Vec<String>,
+    #[serde(default)]
+    pub schemas: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub descriptions: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -144,8 +148,8 @@ impl Manifest {
                 read: self.capabilities.read.clone(),
                 write: self.capabilities.write.clone(),
                 provide: self.capabilities.provide.clone(),
-                schemas: std::collections::HashMap::new(),
-                descriptions: std::collections::HashMap::new(),
+                schemas: self.capabilities.schemas.clone(),
+                descriptions: self.capabilities.descriptions.clone(),
             },
             runtime: RuntimeConfig {
                 runtime_type,
@@ -161,5 +165,48 @@ impl Manifest {
             is_builtin,
             category,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_schemas_and_descriptions() {
+        let toml = r#"
+[plugin]
+id = "com.test.plugin"
+name = "Test Plugin"
+version = "1.0.0"
+author = "Test"
+description = "A test plugin"
+
+[capabilities]
+provide = ["test.echo"]
+
+[capabilities.schemas]
+"test.echo" = '{"message":"string"}'
+
+[capabilities.descriptions]
+"test.echo" = "Echoes a message back"
+
+[runtime]
+type = "python"
+entry = "main.py"
+"#;
+
+        let manifest = Manifest::from_toml(toml).unwrap();
+        let plugin = manifest.to_plugin(None, false);
+
+        assert_eq!(plugin.capabilities.provide, vec!["test.echo"]);
+        assert_eq!(
+            plugin.capabilities.schemas.get("test.echo"),
+            Some(&"{\"message\":\"string\"}".to_string())
+        );
+        assert_eq!(
+            plugin.capabilities.descriptions.get("test.echo"),
+            Some(&"Echoes a message back".to_string())
+        );
     }
 }

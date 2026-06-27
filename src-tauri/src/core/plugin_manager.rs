@@ -210,6 +210,10 @@ impl PluginManager {
         Ok(all_plugins)
     }
 
+    fn extracted_dir(&self, plugin_id: &str) -> PathBuf {
+        self.plugin_dir.join(".extracted").join(plugin_id)
+    }
+
     fn load_wpk_plugin(&self, path: &PathBuf) -> Result<Plugin, WeaveError> {
         let file = std::fs::File::open(path)?;
         let mut archive = zip::ZipArchive::new(file)?;
@@ -221,7 +225,34 @@ impl PluginManager {
             manifest_file.read_to_string(&mut manifest_content)?;
         }
         let manifest = Manifest::from_toml(&manifest_content)?;
-        let mut plugin = manifest.to_plugin(Some(path.clone()), false);
+
+        let extract_dir = self.extracted_dir(&manifest.plugin.id);
+        if extract_dir.exists() {
+            std::fs::remove_dir_all(&extract_dir)?;
+        }
+        std::fs::create_dir_all(&extract_dir)?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let outpath = match file.enclosed_name() {
+                Some(p) => extract_dir.join(p),
+                None => continue,
+            };
+
+            if file.name().ends_with('/') {
+                std::fs::create_dir_all(&outpath)?;
+            } else {
+                if let Some(parent) = outpath.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                }
+                let mut outfile = std::fs::File::create(&outpath)?;
+                std::io::copy(&mut file, &mut outfile)?;
+            }
+        }
+
+        let mut plugin = manifest.to_plugin(Some(extract_dir), false);
         plugin.state = PluginState::Discovered;
         Ok(plugin)
     }
@@ -242,6 +273,25 @@ impl PluginManager {
         if plugin.is_loaded() {
             return Err(WeaveError::PluginAlreadyLoaded(plugin_id.to_string()));
         }
+
+        match plugin.runtime.runtime_type {
+            crate::models::plugin::RuntimeType::Python => {
+                let rt = crate::runtime::python::PythonRuntime::new()?;
+                if let Err(e) = rt.load(plugin) {
+                    let msg = format!("{}", e);
+                    plugin.state = PluginState::Error(msg.clone());
+                    return Err(WeaveError::PluginLoadError {
+                        plugin_id: plugin.id.clone(),
+                        reason: msg,
+                    });
+                }
+            }
+            crate::models::plugin::RuntimeType::Wasm => {
+                // WASM modules are compiled per execution; no load-time setup required.
+            }
+            _ => {}
+        }
+
         plugin.state = PluginState::Loaded;
         info!("Loaded plugin: {} ({})", plugin.name, plugin.id);
         Ok(plugin.clone())
@@ -304,6 +354,19 @@ impl PluginManager {
         if plugin.runtime.runtime_type == crate::models::plugin::RuntimeType::Python {
             let python_runtime = crate::runtime::python::PythonRuntime::new()?;
             return python_runtime.execute(&plugin, capability, params);
+        }
+
+        // Route to WasmRuntime if it's a wasm plugin
+        if plugin.runtime.runtime_type == crate::models::plugin::RuntimeType::Wasm {
+            #[cfg(feature = "wasm-runtime")]
+            {
+                let wasm_runtime = crate::runtime::wasm::WasmRuntime::new()?;
+                return wasm_runtime.execute(&plugin, capability, params);
+            }
+            #[cfg(not(feature = "wasm-runtime"))]
+            {
+                return Err(WeaveError::PluginError("WASM runtime feature is not enabled".to_string()));
+            }
         }
 
         // Use executor registry instead of hardcoded match

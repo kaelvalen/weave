@@ -1,0 +1,20 @@
+[plugin]
+id = "com.weave.test.echo_python"
+name = "Echo Python"
+version = "1.0.0"
+author = "Weave Test"
+description = "Echo capability for testing Python runtime"
+category = "development"
+
+[capabilities]
+provide = ["echo.echo"]
+
+[capabilities.schemas]
+"echo.echo" = '{"message":"string"}'
+
+[capabilities.descriptions]
+"echo.echo" = "Echoes a message"
+
+[runtime]
+type = "python"
+entry = "main.py"

@@ -45,6 +45,24 @@ pub enum WeaveError {
     ParseError(String),
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
+    #[error("Python runtime error: {message}")]
+    PythonRuntimeError {
+        message: String,
+        #[serde(default)]
+        stderr: Option<String>,
+    },
+    #[error("Dependency install error: {stderr}")]
+    DependencyInstallError {
+        #[serde(default)]
+        package: Option<String>,
+        stderr: String,
+    },
+    #[error("WASM runtime error: {0}")]
+    WasmRuntimeError(String),
+    #[error("WASM ABI error: {detail}")]
+    WasmAbiError { detail: String },
+    #[error("Plugin load error for {plugin_id}: {reason}")]
+    PluginLoadError { plugin_id: String, reason: String },
 }
 
 impl From<std::io::Error> for WeaveError {
