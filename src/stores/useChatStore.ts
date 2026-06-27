@@ -163,7 +163,14 @@ export const useChatStore = create<ChatState>()(
           }).catch(console.error);
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        let errorMsg = String(err);
+        if (typeof err === 'object' && err !== null && !(err instanceof Error)) {
+          const key = Object.keys(err)[0];
+          if (key && typeof (err as any)[key] === 'string') errorMsg = `${key}: ${(err as any)[key]}`;
+          else errorMsg = JSON.stringify(err);
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
         set((state) => {
           state.isStreaming = false;
           state.error = errorMsg;
@@ -230,7 +237,14 @@ export const useChatStore = create<ChatState>()(
           }).catch(console.error);
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        let errorMsg = String(err);
+        if (typeof err === 'object' && err !== null && !(err instanceof Error)) {
+          const key = Object.keys(err)[0];
+          if (key && typeof (err as any)[key] === 'string') errorMsg = `${key}: ${(err as any)[key]}`;
+          else errorMsg = JSON.stringify(err);
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
         set((state) => {
           state.isStreaming = false;
           state.error = errorMsg;
@@ -412,11 +426,22 @@ export const useChatStore = create<ChatState>()(
                 provider: get().selectedProvider,
               }).then(() => set((state) => { state.isStreaming = false; }))
               .catch(err => {
-                set((state) => { state.isStreaming = false; state.error = String(err); });
+                let errorStr = String(err);
+                if (typeof err === 'object' && err !== null) {
+                  const key = Object.keys(err)[0];
+                  if (key && typeof (err as any)[key] === 'string') errorStr = `${key}: ${(err as any)[key]}`;
+                  else errorStr = JSON.stringify(err);
+                }
+                set((state) => { state.isStreaming = false; state.error = errorStr; });
               });
             })
             .catch(err => {
-              const errorStr = String(err);
+              let errorStr = String(err);
+              if (typeof err === 'object' && err !== null) {
+                const key = Object.keys(err)[0];
+                if (key && typeof (err as any)[key] === 'string') errorStr = `${key}: ${(err as any)[key]}`;
+                else errorStr = JSON.stringify(err);
+              }
               set((state) => {
                 const assistantMsg = state.messages.find(m => m.id === messageId);
                 if (assistantMsg && assistantMsg.metadata) {
