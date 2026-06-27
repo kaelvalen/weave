@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
-import { ArrowUp, Loader2, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star } from 'lucide-react';
+import { ArrowUp, Loader2, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
 import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
@@ -55,6 +55,7 @@ const PLUGIN_HINTS = [
 
 export function ChatInput() {
   const [input, setInput] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -63,6 +64,7 @@ export function ChatInput() {
   const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
   const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } = useModelPreferenceStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [forceRefresh, setForceRefresh] = useState(0);
 
@@ -104,12 +106,22 @@ export function ChatInput() {
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || isStreaming) return;
+    if ((!trimmed && images.length === 0) || isStreaming) return;
     setInput('');
+    const currentImages = [...images];
+    setImages([]);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (selectedModel) addRecentModel(selectedModel);
-    await sendMessage(trimmed);
-  }, [input, isStreaming, sendMessage, selectedModel, addRecentModel]);
+    await sendMessage(trimmed, currentImages);
+  }, [input, images, isStreaming, sendMessage, selectedModel, addRecentModel]);
+
+  const handleStop = useCallback(async () => {
+    try {
+      await invoke('chat_abort_generation');
+    } catch (err) {
+      console.error('Failed to abort generation', err);
+    }
+  }, []);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -123,10 +135,75 @@ export function ChatInput() {
     }
   }, []);
 
+  const processFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        // Compress image using canvas
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setImages(prev => [...prev, dataUrl]);
+        };
+        img.src = result;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          processFile(file);
+          e.preventDefault();
+        }
+      }
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        processFile(e.dataTransfer.files[i]);
+      }
+    }
+  }, []);
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const hints = PLUGIN_HINTS.filter((h) => input.toLowerCase().includes(h.keyword));
   const currentProvider = models.find((m) => m.value === selectedModel)?.provider ?? 'openai';
   const pm = PROVIDER_META[currentProvider] ?? PROVIDER_META.openai;
-  const canSend = !!input.trim() && !isStreaming;
+  const canSend = (!!input.trim() || images.length > 0) && !isStreaming;
 
   return (
     <div className="flex-shrink-0 px-4 pb-4 pt-1 max-w-4xl mx-auto w-full">
@@ -261,16 +338,58 @@ export function ChatInput() {
 
           <div className="h-4 w-px bg-border flex-shrink-0 mb-2" />
 
-          {/* Textarea */}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onFocus={() => {
-              if (!isChatExpanded) toggleChat(true);
-            }}
-            placeholder="Ask anything..."
+          {/* Attach Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mb-0.5"
+            title="Attach image"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            accept="image/*" 
+            multiple 
+            className="hidden" 
+            onChange={(e) => {
+              if (e.target.files) {
+                Array.from(e.target.files).forEach(processFile);
+              }
+              e.target.value = ''; // reset
+            }} 
+          />
+
+          <div className="flex-1 flex flex-col min-w-0">
+            {images.length > 0 && (
+              <div className="flex items-center gap-2 px-1 pb-2 overflow-x-auto">
+                {images.map((img, idx) => (
+                  <div key={idx} className="relative group w-12 h-12 flex-shrink-0 rounded-md overflow-hidden border">
+                    <img src={img} alt="attachment" className="w-full h-full object-cover" />
+                    <button 
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 bg-background/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3 text-foreground" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Textarea */}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              onFocus={() => {
+                if (!isChatExpanded) toggleChat(true);
+              }}
+              placeholder="Ask anything..."
             disabled={isStreaming}
             rows={1}
             className={[
@@ -280,24 +399,33 @@ export function ChatInput() {
               'placeholder:text-muted-foreground',
             ].join(' ')}
           />
+        </div>
 
-          {/* Send button */}
+        {/* Send / Stop button */}
+        {isStreaming ? (
+          <button
+            type="button"
+            onClick={handleStop}
+            aria-label="Stop generation"
+            className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors mb-0.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            <Square className="w-3 h-3 fill-current" />
+          </button>
+        ) : (
           <button
             type="button"
             disabled={!canSend}
             onClick={handleSend}
             aria-label="Send"
             className={[
-              'flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed mb-0.5',
+              'flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors mb-0.5',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
               canSend ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground'
             ].join(' ')}
           >
-            {isStreaming
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <ArrowUp className="w-4 h-4" />
-            }
+            <ArrowUp className="w-4 h-4" />
           </button>
+        )}
         </div>
       </div>
     </div>

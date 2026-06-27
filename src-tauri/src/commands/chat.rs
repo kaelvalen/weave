@@ -1,6 +1,7 @@
 use tauri::{Emitter, State};
 use tracing::{error, info};
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 
 use crate::models::chat::ChatMessage;
 use crate::AppState;
@@ -19,12 +20,14 @@ pub async fn chat_send_message(
     model: Option<String>,
     provider: Option<String>,
     ui_context: Option<String>,
+    images: Option<Vec<String>>,
     app_handle: tauri::AppHandle,
     app_state: State<'_, AppState>,
 ) -> Result<String, WeaveError> {
     info!("Chat message received: {} (model: {:?})", message, model);
 
-    let user_msg = ChatMessage::new_user(message.clone());
+    let mut user_msg = ChatMessage::new_user(message.clone());
+    user_msg.images = images.clone();
     let _msg_id = user_msg.id.clone();
     
     {
@@ -132,6 +135,10 @@ pub async fn chat_send_message(
     match stream_result {
         Ok(mut rx) => {
             while let Some(chunk) = rx.recv().await {
+                if app_state.abort_generation.load(Ordering::SeqCst) {
+                    app_state.abort_generation.store(false, Ordering::SeqCst);
+                    break;
+                }
                 let mut history = app_state.chat_history.write();
                 if let Some(last) = history.last_mut() {
                     if last.id == assistant_id {
@@ -207,4 +214,13 @@ pub fn chat_get_message(
     let history = app_state.chat_history.read();
     let msg = history.iter().find(|m| m.id == message_id).cloned();
     Ok(msg)
+}
+
+#[tauri::command]
+pub fn chat_abort_generation(
+    app_state: State<'_, AppState>,
+) -> Result<(), WeaveError> {
+    app_state.abort_generation.store(true, Ordering::SeqCst);
+    info!("Generation aborted by user");
+    Ok(())
 }

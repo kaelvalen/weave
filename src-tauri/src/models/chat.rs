@@ -8,6 +8,8 @@ pub struct ChatMessage {
     pub timestamp: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<MessageMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -80,6 +82,7 @@ impl ChatMessage {
             content,
             timestamp: current_timestamp(),
             metadata: None,
+            images: None,
         }
     }
 
@@ -96,6 +99,7 @@ impl ChatMessage {
                 intent: None,
                 is_hidden: None,
             }),
+            images: None,
         }
     }
 

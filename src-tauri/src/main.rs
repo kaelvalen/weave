@@ -26,6 +26,7 @@ fn main() {
             weave::commands::chat::chat_set_history,
             weave::commands::chat::chat_clear_history,
             weave::commands::chat::chat_get_message,
+            weave::commands::chat::chat_abort_generation,
             weave::commands::session::chat_list_sessions,
             weave::commands::session::chat_load_session,
             weave::commands::session::chat_save_session,

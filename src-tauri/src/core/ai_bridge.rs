@@ -25,7 +25,7 @@ struct OpenAiRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OpenAiMessage {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -55,7 +55,7 @@ struct AnthropicRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AnthropicMessage {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -183,9 +183,10 @@ impl AiBridge {
         let system_msg = ChatMessage {
             id: "sys_tools".to_string(),
             role: ChatRole::System,
-            content: system_prompt,
+            content: system_prompt.clone(),
             timestamp: 0,
             metadata: None,
+            images: None,
         };
         let mut enhanced_messages = vec![system_msg];
         enhanced_messages.extend(messages);
@@ -285,6 +286,7 @@ impl AiBridge {
             content: system_prompt,
             timestamp: 0,
             metadata: None,
+            images: None,
         };
         let mut enhanced_messages = vec![system_msg];
         enhanced_messages.extend(messages);
@@ -355,13 +357,33 @@ impl AiBridge {
         }
 
         let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
-        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "system".to_string(),
-            },
-            content: m.content.clone(),
+        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    content_arr.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": img
+                        }
+                    }));
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            OpenAiMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "system".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = OpenAiRequest {
@@ -409,13 +431,41 @@ impl AiBridge {
         }
 
         let url = api_url.unwrap_or("https://api.anthropic.com/v1/messages");
-        let anthropic_messages: Vec<AnthropicMessage> = messages.iter().map(|m| AnthropicMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "user".to_string(),
-            },
-            content: m.content.clone(),
+        let anthropic_messages: Vec<AnthropicMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    let parts: Vec<&str> = img.split(',').collect();
+                    if parts.len() == 2 {
+                        let meta = parts[0];
+                        let data = parts[1];
+                        let mime_type = meta.replace("data:", "").replace(";base64", "");
+                        content_arr.push(serde_json::json!({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": data
+                            }
+                        }));
+                    }
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            AnthropicMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "user".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = AnthropicRequest {
@@ -513,13 +563,33 @@ impl AiBridge {
         if !url.ends_with("/chat/completions") {
             url = format!("{}/chat/completions", url.trim_end_matches('/'));
         }
-        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "system".to_string(),
-            },
-            content: m.content.clone(),
+        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    content_arr.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": img
+                        }
+                    }));
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+            
+            OpenAiMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "system".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = OpenAiRequest {
@@ -565,13 +635,33 @@ impl AiBridge {
         let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("OpenAI".to_string()))?;
         let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
         
-        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "system".to_string(),
-            },
-            content: m.content.clone(),
+        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    content_arr.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": img
+                        }
+                    }));
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            OpenAiMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "system".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = OpenAiRequest {
@@ -639,13 +729,41 @@ impl AiBridge {
         let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Anthropic".to_string()))?;
         let url = api_url.unwrap_or("https://api.anthropic.com/v1/messages");
         
-        let anthropic_messages: Vec<AnthropicMessage> = messages.iter().map(|m| AnthropicMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "user".to_string(),
-            },
-            content: m.content.clone(),
+        let anthropic_messages: Vec<AnthropicMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    let parts: Vec<&str> = img.split(',').collect();
+                    if parts.len() == 2 {
+                        let meta = parts[0];
+                        let data = parts[1];
+                        let mime_type = meta.replace("data:", "").replace(";base64", "");
+                        content_arr.push(serde_json::json!({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": data
+                            }
+                        }));
+                    }
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            AnthropicMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "user".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = AnthropicRequest {
@@ -844,13 +962,33 @@ impl AiBridge {
             url = format!("{}/chat/completions", url.trim_end_matches('/'));
         }
 
-        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
-            role: match m.role {
-                ChatRole::User => "user".to_string(),
-                ChatRole::Assistant => "assistant".to_string(),
-                ChatRole::System => "system".to_string(),
-            },
-            content: m.content.clone(),
+        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    content_arr.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": img
+                        }
+                    }));
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            OpenAiMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "system".to_string(),
+                },
+                content,
+            }
         }).collect();
 
         let request = OpenAiRequest {

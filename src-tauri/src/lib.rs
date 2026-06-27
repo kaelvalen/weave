@@ -1,5 +1,6 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::info;
 
 pub mod commands;
@@ -22,6 +23,7 @@ pub struct AppState {
     pub workflow_engine: Arc<WorkflowEngine>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
+    pub abort_generation: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -61,6 +63,7 @@ impl AppState {
             workflow_engine,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
+            abort_generation: Arc::new(AtomicBool::new(false)),
         })
     }
 }

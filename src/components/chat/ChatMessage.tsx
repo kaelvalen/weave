@@ -3,8 +3,26 @@ import { useChatStore } from '@/stores/useChatStore';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { User, Bot, Copy, Check, Brain } from 'lucide-react';
+import { User, Bot, Copy, Check, Brain, Edit2, RefreshCw } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
+import { Textarea } from '@/components/ui/textarea';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+
+SyntaxHighlighter.registerLanguage('tsx', tsx);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('rust', rust);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('python', python);
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -15,21 +33,46 @@ function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/```(\w+)?\n([\s\S]*?)```/g,
-      '<pre class="bg-muted p-4 rounded-lg border overflow-x-auto my-3 text-sm"><code class="font-mono text-foreground">$2</code></pre>')
-    .replace(/`([^`]+)`/g,
-      '<code class="px-1 py-0.5 rounded-md bg-muted text-foreground border font-mono text-sm">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-sm font-semibold mt-4 mb-2 text-foreground">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-base font-semibold mt-5 mb-2 text-foreground">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold mt-5 mb-3 text-foreground">$1</h1>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 mb-1 list-disc">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1 list-decimal">$1</li>')
-    .replace(/^(?!<[hl]|<li|<pre)(.+)$/gm, '<p class="mb-2 last:mb-0">$1</p>');
-}
+// Custom code block component for ReactMarkdown
+const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
+  const [isCopied, setIsCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || '');
+  const lang = match ? match[1] : '';
+  
+  const handleCopy = () => {
+    navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  if (!inline && match) {
+    return (
+      <div className="relative group rounded-md overflow-hidden my-4 border border-border">
+        <div className="flex items-center justify-between px-4 py-1.5 bg-muted/50 border-b border-border">
+          <span className="text-xs font-mono text-muted-foreground">{lang}</span>
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground transition-opacity opacity-0 group-hover:opacity-100" onClick={handleCopy}>
+            {isCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
+        <SyntaxHighlighter
+          {...props}
+          style={vscDarkPlus}
+          language={lang}
+          PreTag="div"
+          customStyle={{ margin: 0, padding: '1rem', background: 'transparent', fontSize: '13px' }}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      </div>
+    );
+  }
+
+  return (
+    <code {...props} className={`${className} bg-muted text-foreground px-1.5 py-0.5 rounded-md text-sm font-mono border border-border/50`}>
+      {children}
+    </code>
+  );
+};
 
 function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
   const isUser = role === 'user';
@@ -54,7 +97,10 @@ function InlineBadge({ children }: { children: React.ReactNode }) {
 
 export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
-  const isStreaming = useChatStore((s) => s.isStreaming);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  
+  const { isStreaming, editAndResend, regenerateResponse } = useChatStore();
   const isAssistant = message.role === 'assistant';
   const showCursor  = _isLast && isStreaming && isAssistant;
 
@@ -64,6 +110,13 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
       setTimeout(() => setCopied(false), 2000);
     });
   }, [message.content]);
+
+  const handleEditSave = () => {
+    if (editContent.trim() && editContent !== message.content) {
+      editAndResend(message.id, editContent);
+    }
+    setIsEditing(false);
+  };
 
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
   const hasIntent      = message.metadata?.intent;
@@ -89,8 +142,28 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
             <InlineBadge>{message.metadata.model}</InlineBadge>
           )}
 
-          {/* Copy button */}
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+          {/* Actions */}
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
+            {isAssistant && !isStreaming && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => regenerateResponse(message.id)}>
+                    <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Regenerate response</p></TooltipContent>
+              </Tooltip>
+            )}
+            {!isAssistant && !isEditing && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
+                    <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Edit message</p></TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy}>
@@ -125,11 +198,41 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
 
         {/* Message Body */}
         <div className="text-sm text-foreground leading-relaxed break-words">
-          <div
-            className="prose prose-sm dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-          />
-          {showCursor && <span className="streaming-cursor" />}
+          {message.images && message.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {message.images.map((img, idx) => (
+                <img key={idx} src={img} alt="attachment" className="max-w-[300px] max-h-[300px] object-contain rounded-md border" />
+              ))}
+            </div>
+          )}
+          {isEditing ? (
+            <div className="mt-2 flex flex-col gap-2">
+              <Textarea 
+                value={editContent} 
+                onChange={(e) => setEditContent(e.target.value)} 
+                className="min-h-[100px] font-sans"
+                autoFocus
+              />
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setEditContent(message.content); }}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleEditSave} disabled={!editContent.trim() || isStreaming}>
+                  Save & Submit
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{ code: CodeBlock as any }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
+          {showCursor && !isEditing && <span className="streaming-cursor" />}
         </div>
       </div>
     </div>

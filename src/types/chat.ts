@@ -33,6 +33,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   metadata?: MessageMetadata;
+  images?: string[];
 }
 
 export interface ModelConfig {

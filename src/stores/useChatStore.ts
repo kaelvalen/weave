@@ -15,7 +15,9 @@ interface ChatState {
   conversationTitle: string;
   sessions: { id: string; title: string; updated_at: number; pinned?: boolean; folder?: string }[];
 
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, images?: string[]) => Promise<void>;
+  editAndResend: (messageId: string, newContent: string) => Promise<void>;
+  regenerateResponse: (messageId: string) => Promise<void>;
   appendChunk: (chunk: string, messageId: string) => void;
   finalizeMessage: (messageId: string) => void;
   clearChat: () => void;
@@ -44,15 +46,16 @@ export const useChatStore = create<ChatState>()(
     conversationTitle: 'New Chat',
     sessions: [],
 
-    sendMessage: async (content: string) => {
+    sendMessage: async (content: string, images?: string[]) => {
       const state = get();
-      if (state.isStreaming || !content.trim()) return;
+      if (state.isStreaming || (!content.trim() && (!images || images.length === 0))) return;
 
       const userMessage: ChatMessage = {
         id: generateId(),
         role: 'user',
         content: content.trim(),
         timestamp: Date.now(),
+        images,
       };
 
       set((state) => {
@@ -73,6 +76,7 @@ export const useChatStore = create<ChatState>()(
           model: get().selectedModel,
           provider: get().selectedProvider,
           ui_context: uiContext,
+          images: images || [],
         });
 
         // Auto-save session
@@ -91,6 +95,139 @@ export const useChatStore = create<ChatState>()(
           }).catch(console.error);
           
           store.listSessions();
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        set((state) => {
+          state.isStreaming = false;
+          state.error = errorMsg;
+          state.messages.push({
+            id: generateId(),
+            role: 'assistant',
+            content: `**Error:** ${errorMsg}`,
+            timestamp: Date.now(),
+          });
+        });
+      }
+    },
+
+    editAndResend: async (messageId: string, newContent: string) => {
+      const state = get();
+      if (state.isStreaming || !newContent.trim()) return;
+
+      const msgIndex = state.messages.findIndex(m => m.id === messageId);
+      if (msgIndex === -1) return;
+
+      const editedMessage = { ...state.messages[msgIndex], content: newContent.trim(), timestamp: Date.now() };
+
+      // Truncate history and replace the edited message
+      set((s) => {
+        s.messages = s.messages.slice(0, msgIndex);
+        s.messages.push(editedMessage);
+        s.isStreaming = true;
+        s.error = null;
+      });
+
+      // We need to tell the backend about the new truncated history
+      // The easiest way is to save the session first so backend has it, then send the message.
+      // Wait, `chat_send_message` in backend reads from `SESSION_STATE`.
+      // We must first update the session backend state before sending a new message.
+      // Wait! `chat_send_message` appends to whatever is in `SESSION_STATE`.
+      // If we truncate frontend, we MUST tell the backend to truncate too.
+      // We can use `chat_set_history`!
+      
+      const store = get();
+      try {
+        await invoke('chat_set_history', { history: store.messages.slice(0, -1) }); // set history without the new message
+        
+        let uiContext = useAppStore.getState().activeView as string;
+        if (uiContext === 'files') {
+          const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
+          uiContext = `Files View (Directory: ${rootDir})`;
+        }
+
+        await invoke('chat_send_message', {
+          message: newContent.trim(),
+          model: store.selectedModel,
+          provider: store.selectedProvider,
+          ui_context: uiContext,
+          images: editedMessage.images || [],
+        });
+
+        // Auto-save session
+        if (store.messages.length > 0) {
+          await invoke('chat_save_session', {
+            id: store.conversationId,
+            title: store.conversationTitle,
+            messages: store.messages,
+          }).catch(console.error);
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        set((state) => {
+          state.isStreaming = false;
+          state.error = errorMsg;
+          state.messages.push({
+            id: generateId(),
+            role: 'assistant',
+            content: `**Error:** ${errorMsg}`,
+            timestamp: Date.now(),
+          });
+        });
+      }
+    },
+
+    regenerateResponse: async (messageId: string) => {
+      const state = get();
+      if (state.isStreaming) return;
+
+      const msgIndex = state.messages.findIndex(m => m.id === messageId);
+      if (msgIndex === -1) return;
+
+      // Ensure the message to regenerate is an assistant message
+      if (state.messages[msgIndex].role !== 'assistant') return;
+
+      // Find the last user message before this assistant message
+      let lastUserIndex = msgIndex - 1;
+      while (lastUserIndex >= 0 && state.messages[lastUserIndex].role !== 'user') {
+        lastUserIndex--;
+      }
+
+      if (lastUserIndex === -1) return; // No user message found to regenerate from
+
+      const lastUserMsg = state.messages[lastUserIndex];
+
+      // Truncate history up to the last user message (inclusive)
+      set((s) => {
+        s.messages = s.messages.slice(0, lastUserIndex + 1);
+        s.isStreaming = true;
+        s.error = null;
+      });
+
+      const store = get();
+      try {
+        await invoke('chat_set_history', { history: store.messages }); // update backend history
+        
+        let uiContext = useAppStore.getState().activeView as string;
+        if (uiContext === 'files') {
+          const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
+          uiContext = `Files View (Directory: ${rootDir})`;
+        }
+
+        await invoke('chat_send_message', {
+          message: lastUserMsg.content,
+          model: store.selectedModel,
+          provider: store.selectedProvider,
+          ui_context: uiContext,
+          images: lastUserMsg.images || [],
+        });
+
+        if (store.messages.length > 0) {
+          await invoke('chat_save_session', {
+            id: store.conversationId,
+            title: store.conversationTitle,
+            messages: store.messages,
+          }).catch(console.error);
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
