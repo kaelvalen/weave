@@ -1,3 +1,10 @@
 pub mod calc_plugin;
 pub mod file_plugin;
 pub mod note_plugin;
+pub mod sys_plugin;
+pub mod shell_plugin;
+pub mod web_plugin;
+pub mod sqlite_plugin;
+pub mod git_plugin;
+pub mod http_plugin;
+pub mod memory_plugin;

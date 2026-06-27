@@ -144,6 +144,8 @@ impl Manifest {
                 read: self.capabilities.read.clone(),
                 write: self.capabilities.write.clone(),
                 provide: self.capabilities.provide.clone(),
+                schemas: std::collections::HashMap::new(),
+                descriptions: std::collections::HashMap::new(),
             },
             runtime: RuntimeConfig {
                 runtime_type,

@@ -1,6 +1,6 @@
 export type ThemeMode = 'system' | 'light' | 'dark';
 
-export type View = 'chat' | 'plugins' | 'files' | 'settings';
+export type View = 'chat' | 'plugins' | 'files' | 'settings' | 'notes';
 
 export interface ProviderConfig {
   api_key: string;
@@ -24,6 +24,7 @@ export interface AiConfig {
   openai: ProviderConfig;
   anthropic: ProviderConfig;
   kimi: ProviderConfig;
+  opencode: ProviderConfig;
   local: LocalConfig;
 }
 

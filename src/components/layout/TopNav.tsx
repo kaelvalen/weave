@@ -1,77 +1,82 @@
 import { useAppStore } from '@/stores/useAppStore';
-import { MessageCircle, Package, FolderOpen, Settings, Waves } from 'lucide-react';
+import { MessageCircle, Package, FolderOpen, Settings, FileText } from 'lucide-react';
 import type { View } from '@/types/app';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems: { view: View; label: string; icon: typeof MessageCircle }[] = [
-  { view: 'chat', label: 'Chat', icon: MessageCircle },
-  { view: 'plugins', label: 'Plugins', icon: Package },
-  { view: 'files', label: 'Files', icon: FolderOpen },
-  { view: 'settings', label: 'Settings', icon: Settings },
+  { view: 'chat',     label: 'Chat',     icon: MessageCircle },
+  { view: 'files',    label: 'Files',    icon: FolderOpen },
+  { view: 'notes',    label: 'Notes',    icon: FileText },
+  { view: 'plugins',  label: 'Plugins',  icon: Package },
 ];
 
 export function TopNav() {
-  const activeView = useAppStore((s) => s.activeView);
+  const activeView   = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
 
   return (
-    <div
-      className="flex justify-center pt-3 px-4 pb-2 cursor-default select-none"
+    <header
+      className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between gap-4 h-12 px-2 select-none rounded-full"
       data-tauri-drag-region
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      style={{
+        background: 'hsl(var(--card) / 0.8)',
+        border: '1px solid hsl(var(--border))',
+        backdropFilter: 'blur(12px)',
+        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)',
+        WebkitAppRegion: 'drag',
+      } as React.CSSProperties}
     >
+      {/* ── Nav Links ── */}
       <nav
-        className="relative flex items-center justify-between gap-2 w-full max-w-4xl mx-auto rounded-[2rem] px-2 py-2 liquid-glass"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        className="flex items-center gap-1"
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {/* Logo */}
-        <div
-          className="relative z-10 flex items-center gap-2 pl-2 pr-3 flex-shrink-0"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center shadow-lg shadow-primary/25">
-            <Waves className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-sm text-foreground hidden sm:inline tracking-tight">
-            Weave
-          </span>
-        </div>
+        {navItems.map((item) => {
+          const isActive = activeView === item.view;
+          const Icon = item.icon;
+          return (
+            <Tooltip key={item.view}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setActiveView(item.view)}
+                  className={[
+                    'relative flex items-center justify-center w-8 h-8 rounded-full',
+                    'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isActive ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ].join(' ')}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={8}>
+                <p>{item.label}</p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
 
-        {/* Center Nav Items */}
-        <div
-          className="relative z-10 flex items-center gap-1 flex-1 justify-center"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          {navItems.map((item) => {
-            const isActive = activeView === item.view;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.view}
-                type="button"
-                onClick={() => setActiveView(item.view)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`
-                  relative flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium
-                  transition-all duration-200 ease-out
-                  ${isActive
-                    ? 'text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }
-                `}
-              >
-                {isActive && (
-                  <span className="absolute inset-0 rounded-xl bg-gradient-to-b from-primary to-primary/90 shadow-lg shadow-primary/30" />
-                )}
-                <Icon className="w-4 h-4 relative z-10" />
-                <span className="hidden sm:inline relative z-10">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <div className="w-px h-4 bg-border mx-1" />
 
-        {/* Right spacer for balance — keeps nav centered */}
-        <div className="w-[76px] hidden sm:block flex-shrink-0" aria-hidden="true" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setActiveView('settings')}
+              className={[
+                'relative flex items-center justify-center w-8 h-8 rounded-full',
+                'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                activeView === 'settings' ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ].join(' ')}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={8}>
+            <p>Settings</p>
+          </TooltipContent>
+        </Tooltip>
       </nav>
-    </div>
+    </header>
   );
 }

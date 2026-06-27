@@ -24,6 +24,7 @@ export interface MessageMetadata {
   tokens_used?: number;
   plugin_calls: PluginCall[];
   intent?: IntentResult;
+  isHidden?: boolean;
 }
 
 export interface ChatMessage {

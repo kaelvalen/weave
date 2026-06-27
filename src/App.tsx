@@ -3,7 +3,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { TopNav } from '@/components/layout/TopNav';
 import { Workspace } from '@/components/layout/Workspace';
-import { StatusBar } from '@/components/layout/StatusBar';
+import { CommandPalette } from '@/components/ui/CommandPalette';
 import { invoke } from '@tauri-apps/api/core';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -12,7 +12,6 @@ function App() {
   const { theme, setReady, setVersion } = useAppStore();
 
   useEffect(() => {
-    // Theme initialization
     const root = document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
@@ -25,7 +24,6 @@ function App() {
       }
     }
 
-    // System theme listener
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
       if (useAppStore.getState().theme === 'system') {
@@ -38,12 +36,10 @@ function App() {
     };
     mediaQuery.addEventListener('change', handleChange);
 
-    // Load version
     invoke<string>('system_get_version')
       .then((v) => setVersion(v))
       .catch(console.error);
 
-    // Discover plugins on mount
     usePluginStore.getState().discoverPlugins();
 
     setReady(true);
@@ -55,10 +51,10 @@ function App() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="h-screen w-screen flex flex-col bg-ambient text-foreground overflow-hidden">
+      <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
         <TopNav />
         <Workspace />
-        <StatusBar />
+        <CommandPalette />
         <Toaster position="bottom-right" />
       </div>
     </TooltipProvider>

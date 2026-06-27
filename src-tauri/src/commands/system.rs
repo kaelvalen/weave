@@ -34,6 +34,7 @@ pub async fn list_provider_models(
         "openai" => Provider::Openai,
         "anthropic" => Provider::Anthropic,
         "kimi" => Provider::Kimi,
+        "opencode" => Provider::Opencode,
         "local" => Provider::Local,
         _ => return Err(WeaveError::ConfigError(format!("Unknown provider: {}", provider))),
     };

@@ -17,6 +17,7 @@ pub struct AiConfig {
     pub openai: ProviderConfig,
     pub anthropic: ProviderConfig,
     pub kimi: ProviderConfig,
+    pub opencode: ProviderConfig,
     pub local: LocalConfig,
 }
 
@@ -26,6 +27,7 @@ pub enum Provider {
     Openai,
     Anthropic,
     Kimi,
+    Opencode,
     Local,
 }
 
@@ -103,8 +105,15 @@ impl Default for AppConfig {
                 },
                 kimi: ProviderConfig {
                     api_key: String::new(),
-                    model: "kimi-k2-0711-preview".to_string(),
+                    model: "kimi-k2.6".to_string(),
                     api_url: Some("https://api.moonshot.cn/v1".to_string()),
+                    temperature: 0.7,
+                    max_tokens: 4096,
+                },
+                opencode: ProviderConfig {
+                    api_key: String::new(),
+                    model: "opencode-go".to_string(),
+                    api_url: Some("https://opencode.ai/zen/v1".to_string()),
                     temperature: 0.7,
                     max_tokens: 4096,
                 },
@@ -192,6 +201,14 @@ impl AppConfig {
         Ok(home.join(".weave").join("config.json"))
     }
 
+    pub fn app_data_dir() -> Result<PathBuf, WeaveError> {
+        let home = dirs::home_dir()
+            .ok_or_else(|| WeaveError::ConfigError("Cannot find home directory".to_string()))?;
+        let dir = home.join(".weave");
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir)
+    }
+
     pub fn plugin_dir() -> Result<PathBuf, WeaveError> {
         let home = dirs::home_dir()
             .ok_or_else(|| WeaveError::ConfigError("Cannot find home directory".to_string()))?;
@@ -212,6 +229,7 @@ impl AppConfig {
         if self.ai.openai.api_key.is_empty()
             && self.ai.anthropic.api_key.is_empty()
             && self.ai.kimi.api_key.is_empty()
+            && self.ai.opencode.api_key.is_empty()
             && !self.ai.local.enabled
         {
             return Err(WeaveError::ConfigError(

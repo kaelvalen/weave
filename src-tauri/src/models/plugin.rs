@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::collections::HashMap;
+
+/// Trait that all plugin executors must implement.
+/// This provides a unified dispatch interface for both built-in and external plugins.
+pub trait PluginExecutor: Send + Sync {
+    fn execute(&self, capability: &str, params: serde_json::Value) -> Result<serde_json::Value, crate::utils::errors::WeaveError>;
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plugin {
@@ -26,6 +33,11 @@ pub struct Capabilities {
     pub write: Vec<String>,
     #[serde(default)]
     pub provide: Vec<String>,
+    #[serde(default)]
+    pub schemas: HashMap<String, String>,
+    /// Human-readable descriptions for each capability.
+    #[serde(default)]
+    pub descriptions: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +106,8 @@ impl Default for Capabilities {
             read: Vec::new(),
             write: Vec::new(),
             provide: Vec::new(),
+            schemas: HashMap::new(),
+            descriptions: HashMap::new(),
         }
     }
 }
@@ -132,5 +146,63 @@ impl Plugin {
 
     pub fn is_loaded(&self) -> bool {
         matches!(self.state, PluginState::Loaded | PluginState::Active)
+    }
+}
+
+/// Builder for constructing built-in Plugin definitions concisely.
+pub struct PluginBuilder {
+    plugin: Plugin,
+}
+
+impl PluginBuilder {
+    pub fn builtin(id: &str, name: &str) -> Self {
+        Self {
+            plugin: Plugin {
+                id: id.to_string(),
+                name: name.to_string(),
+                version: "0.2.0".to_string(),
+                author: "Weave Team".to_string(),
+                description: String::new(),
+                capabilities: Capabilities::default(),
+                runtime: RuntimeConfig::default(),
+                ui: PluginUiConfig::default(),
+                state: PluginState::Active,
+                path: None,
+                is_builtin: true,
+                category: PluginCategory::System,
+            },
+        }
+    }
+
+    pub fn description(mut self, desc: &str) -> Self {
+        self.plugin.description = desc.to_string();
+        self
+    }
+
+    pub fn category(mut self, cat: PluginCategory) -> Self {
+        self.plugin.category = cat;
+        self
+    }
+
+    pub fn read_access(mut self, patterns: &[&str]) -> Self {
+        self.plugin.capabilities.read = patterns.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn write_access(mut self, patterns: &[&str]) -> Self {
+        self.plugin.capabilities.write = patterns.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// Register a capability with its schema and description.
+    pub fn capability(mut self, name: &str, schema: &str, desc: &str) -> Self {
+        self.plugin.capabilities.provide.push(name.to_string());
+        self.plugin.capabilities.schemas.insert(name.to_string(), schema.to_string());
+        self.plugin.capabilities.descriptions.insert(name.to_string(), desc.to_string());
+        self
+    }
+
+    pub fn build(self) -> Plugin {
+        self.plugin
     }
 }

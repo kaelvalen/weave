@@ -12,6 +12,8 @@ export interface Capabilities {
   read: string[];
   write: string[];
   provide: string[];
+  schemas: Record<string, string>;
+  descriptions: Record<string, string>;
 }
 
 export interface RuntimeConfig {

@@ -1,367 +1,193 @@
 import { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Slider } from '@/components/ui/slider';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/stores/useAppStore';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
-import {
-  Settings,
-  Sparkles,
-  Palette,
-  Package,
-  Info,
-  ExternalLink,
-  Github,
-  Save,
-  FolderOpen,
-} from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Save, Server, Settings as SettingsIcon, Monitor, Sun, Moon, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function SettingsPanel() {
-  const { theme, setTheme, setVersion, refreshConfig } = useAppStore();
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [saved, setSaved] = useState(false);
+  const { theme, setTheme, refreshConfig } = useAppStore();
 
   useEffect(() => {
     invoke<AppConfig>('system_get_config')
-      .then((cfg) => {
-        setConfig(cfg);
-        setVersion(cfg.version);
-      })
-      .catch(console.error);
-  }, [setVersion]);
+      .then(setConfig)
+      .catch((e) => toast.error('Failed to load settings', { description: String(e) }));
+  }, []);
 
   const handleSave = async () => {
     if (!config) return;
     try {
       await invoke('system_set_config', { config });
       refreshConfig();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      console.error('Failed to save config:', err);
+      toast.success('Settings saved successfully');
+    } catch (e) {
+      toast.error('Failed to save settings', { description: String(e) });
     }
   };
 
-  const updateAi = (provider: 'openai' | 'anthropic' | 'kimi', field: string, value: string | number) => {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        ai: {
-          ...prev.ai,
-          [provider]: {
-            ...prev.ai[provider],
-            [field]: value,
-          },
-        },
-      };
-    });
-  };
-
-  const updateUi = (field: string, value: unknown) => {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        ui: {
-          ...prev.ui,
-          [field]: value,
-        },
-      };
-    });
-  };
-
-  if (!config) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-muted-foreground">Loading settings...</div>
-      </div>
-    );
-  }
+  if (!config) return null;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between h-12 px-4 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Settings className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-medium">Settings</h2>
+    <div className="flex flex-col h-full max-w-4xl mx-auto w-full">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between h-14 px-6 flex-shrink-0 border-b">
+        <div className="flex items-center gap-3">
+          <SettingsIcon className="w-5 h-5 text-foreground" />
+          <h2 className="text-base font-semibold">Settings</h2>
         </div>
-        <Button
-          size="sm"
-          className="h-7 text-xs gap-1.5"
-          onClick={handleSave}
-        >
-          <Save className="w-3 h-3" />
-          {saved ? 'Saved!' : 'Save'}
+        <Button size="sm" onClick={handleSave} className="gap-2">
+          <Save className="w-4 h-4" /> Save Changes
         </Button>
       </div>
 
-      {/* Settings Content */}
-      <div className="flex-1 overflow-auto p-6 bg-gradient-subtle">
-        <Tabs defaultValue="ai" className="max-w-2xl mx-auto">
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-auto p-6">
+        <Tabs defaultValue="ai" className="w-full">
           <TabsList className="mb-6">
-            <TabsTrigger value="ai" className="gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              AI
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="gap-1.5">
-              <Palette className="w-3.5 h-3.5" />
-              Appearance
-            </TabsTrigger>
-            <TabsTrigger value="plugins" className="gap-1.5">
-              <Package className="w-3.5 h-3.5" />
-              Plugins
-            </TabsTrigger>
-            <TabsTrigger value="about" className="gap-1.5">
-              <Info className="w-3.5 h-3.5" />
-              About
-            </TabsTrigger>
+            <TabsTrigger value="ai" className="gap-2"><Server className="w-4 h-4" /> AI Providers</TabsTrigger>
+            <TabsTrigger value="general" className="gap-2"><Monitor className="w-4 h-4" /> General</TabsTrigger>
           </TabsList>
 
-          {/* AI Tab */}
           <TabsContent value="ai" className="space-y-6">
-            {/* OpenAI */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1 bg-emerald-500/5 text-emerald-600 border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  OpenAI
-                </Badge>
-              </div>
-              <div className="grid gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">API Key</Label>
-                  <Input
-                    type="password"
-                    value={config.ai.openai.api_key}
-                    onChange={(e) => updateAi('openai', 'api_key', e.target.value)}
-                    placeholder="sk-..."
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Model</Label>
-                  <Input
-                    value={config.ai.openai.model}
-                    onChange={(e) => updateAi('openai', 'model', e.target.value)}
-                    placeholder="gpt-4o-mini"
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Anthropic */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1 bg-amber-500/5 text-amber-600 border-amber-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Anthropic
-                </Badge>
-              </div>
-              <div className="grid gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">API Key</Label>
-                  <Input
-                    type="password"
-                    value={config.ai.anthropic.api_key}
-                    onChange={(e) => updateAi('anthropic', 'api_key', e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Model</Label>
-                  <Input
-                    value={config.ai.anthropic.model}
-                    onChange={(e) => updateAi('anthropic', 'model', e.target.value)}
-                    placeholder="claude-sonnet-4-20250514"
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Kimi */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1 bg-purple-500/5 text-purple-600 border-purple-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                  Kimi
-                </Badge>
-              </div>
-              <div className="grid gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">API Key</Label>
-                  <Input
-                    type="password"
-                    value={config.ai.kimi.api_key}
-                    onChange={(e) => updateAi('kimi', 'api_key', e.target.value)}
-                    placeholder="sk-..."
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Model</Label>
-                  <Input
-                    value={config.ai.kimi.model}
-                    onChange={(e) => updateAi('kimi', 'model', e.target.value)}
-                    placeholder="kimi-k2-0711-preview"
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Temperature */}
-            <div className="space-y-3">
-              <Label className="text-xs">Temperature: {config.ai.openai.temperature}</Label>
-              <Slider
-                value={[config.ai.openai.temperature]}
-                min={0}
-                max={2}
-                step={0.1}
-                onValueChange={([v]) => updateAi('openai', 'temperature', v)}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>Focused (0)</span>
-                <span>Balanced (1)</span>
-                <span>Creative (2)</span>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Appearance Tab */}
-          <TabsContent value="appearance" className="space-y-6">
-            <div className="space-y-4">
-              <Label className="text-xs">Theme</Label>
-              <div className="grid grid-cols-3 gap-3">
-                {(['system', 'light', 'dark'] as const).map((t) => (
-                  <Button
-                    key={t}
-                    variant={theme === t ? 'default' : 'outline'}
-                    className="h-auto py-3 flex flex-col gap-1.5 capitalize"
-                    onClick={() => setTheme(t)}
-                  >
-                    <div className={`w-8 h-8 rounded-full border-2 ${
-                      t === 'dark' ? 'bg-slate-900 border-slate-700'
-                      : t === 'light' ? 'bg-white border-slate-200'
-                      : 'bg-gradient-to-br from-white to-slate-900 border-slate-400'
-                    }`} />
-                    <span className="text-xs">{t}</span>
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-3">
-              <Label className="text-xs">Font Size: {config.ui.font_size}px</Label>
-              <Slider
-                value={[config.ui.font_size]}
-                min={8}
-                max={24}
-                step={1}
-                onValueChange={([v]) => updateUi('font_size', v)}
-              />
-            </div>
-          </TabsContent>
-
-          {/* Plugins Tab */}
-          <TabsContent value="plugins" className="space-y-6">
-            <div className="space-y-3">
-              <Label className="text-xs">Plugin Directory</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={config.plugins.directory}
-                  readOnly
-                  className="text-sm bg-muted"
+            <SectionCard title="OpenAI" desc="Configure your OpenAI API connection.">
+              <FieldLabel label="API Key">
+                <PasswordInput
+                  value={config.ai.openai.api_key}
+                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, openai: { ...config.ai.openai, api_key: v } } })}
+                  placeholder="sk-..."
                 />
-                <Button variant="outline" size="icon" className="flex-shrink-0"
-                  onClick={() => invoke('system_open_plugin_dir')}>
-                  <FolderOpen className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+              </FieldLabel>
+            </SectionCard>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs">Auto-discover plugins</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Scan plugin directory on startup
-                </p>
+            <SectionCard title="Anthropic" desc="Configure your Anthropic API connection.">
+              <FieldLabel label="API Key">
+                <PasswordInput
+                  value={config.ai.anthropic.api_key}
+                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, anthropic: { ...config.ai.anthropic, api_key: v } } })}
+                  placeholder="sk-ant-..."
+                />
+              </FieldLabel>
+            </SectionCard>
+
+            <SectionCard title="Kimi" desc="Configure your Kimi (Moonshot) API connection.">
+              <FieldLabel label="API Key">
+                <PasswordInput
+                  value={config.ai.kimi.api_key}
+                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, kimi: { ...config.ai.kimi, api_key: v } } })}
+                  placeholder="sk-..."
+                />
+              </FieldLabel>
+            </SectionCard>
+
+            <SectionCard title="Opencode" desc="Configure your Opencode (Zen/Go) API connection.">
+              <FieldLabel label="API Key">
+                <PasswordInput
+                  value={config.ai.opencode.api_key}
+                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, opencode: { ...config.ai.opencode, api_key: v } } })}
+                  placeholder="sk-..."
+                />
+              </FieldLabel>
+            </SectionCard>
+
+            <SectionCard title="Local LLMs" desc="Configure your local models (Ollama/Llama.cpp).">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm font-medium">Enable Local Models</span>
+                <Switch
+                  checked={config.ai.local.enabled}
+                  onCheckedChange={(c) => setConfig({ ...config, ai: { ...config.ai, local: { ...config.ai.local, enabled: c } } })}
+                />
               </div>
-              <Switch
-                checked={config.plugins.auto_discover}
-                onCheckedChange={(v) =>
-                  setConfig((prev) => prev ? { ...prev, plugins: { ...prev.plugins, auto_discover: v } } : prev)
-                }
-              />
-            </div>
+              <FieldLabel label="API URL">
+                <Input
+                  value={config.ai.local.api_url || ''}
+                  onChange={(e) => setConfig({ ...config, ai: { ...config.ai, local: { ...config.ai.local, api_url: e.target.value } } })}
+                  placeholder="http://localhost:11434/api/generate"
+                />
+              </FieldLabel>
+            </SectionCard>
           </TabsContent>
 
-          {/* About Tab */}
-          <TabsContent value="about" className="space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
-                <span className="text-xl font-bold text-primary-foreground">W</span>
+          <TabsContent value="general" className="space-y-6">
+            <SectionCard title="Appearance" desc="Customize the look and feel of Weave.">
+              <div className="flex gap-4">
+                <ThemeButton active={theme === 'light'} onClick={() => setTheme('light')} icon={Sun} label="Light" />
+                <ThemeButton active={theme === 'dark'} onClick={() => setTheme('dark')} icon={Moon} label="Dark" />
+                <ThemeButton active={theme === 'system'} onClick={() => setTheme('system')} icon={Monitor} label="System" />
               </div>
-              <div>
-                <h3 className="font-semibold">Weave</h3>
-                <p className="text-xs text-muted-foreground">Version {config.version}</p>
-              </div>
-            </div>
+            </SectionCard>
 
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Weave is an AI-native, plugin-based, local-first productivity system.
-              It combines the power of artificial intelligence with a flexible plugin
-              architecture to create a universal workspace for developers, engineers,
-              researchers, and power users.
-            </p>
-
-            <div className="space-y-2">
-              <Label className="text-xs">Tech Stack</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {['Tauri v2', 'Rust', 'React 18', 'TypeScript', 'Tailwind CSS', 'shadcn/ui'].map((tech) => (
-                  <Badge key={tech} variant="secondary" className="text-[10px]">
-                    {tech}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild>
-                <a href="https://github.com/kaelvalen/weave" target="_blank" rel="noopener noreferrer">
-                  <Github className="w-3.5 h-3.5" />
-                  GitHub
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </Button>
-            </div>
-
-            <p className="text-[10px] text-muted-foreground/60">
-              Licensed under MIT. Built with love for the open source community.
-            </p>
+            <SectionCard title="System Paths" desc="Configure where Weave looks for plugins and data.">
+              <FieldLabel label="Plugins Directory">
+                <Input value={config.plugins.directory} disabled />
+              </FieldLabel>
+            </SectionCard>
           </TabsContent>
         </Tabs>
       </div>
     </div>
+  );
+}
+
+// Sub-components
+
+function SectionCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+  return (
+    <div className="p-5 rounded-lg border bg-card">
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="text-xs text-muted-foreground">{desc}</p>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <label className="block text-xs font-medium text-foreground/80 mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function PasswordInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10 font-mono text-sm"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+}
+
+function ThemeButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center w-24 h-20 rounded-lg border transition-colors ${
+        active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted'
+      }`}
+    >
+      <Icon className="w-6 h-6 mb-2" />
+      <span className="text-xs font-medium">{label}</span>
+    </button>
   );
 }

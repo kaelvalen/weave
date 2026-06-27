@@ -1,22 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
-import { Bot, Trash2, Sparkles } from 'lucide-react';
+import { Bot, Trash2, History } from 'lucide-react';
+import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 const SUGGESTED_PROMPTS = [
-  { text: 'List files in current directory', icon: '📁' },
-  { text: 'Calculate 42 * 18 + 7', icon: '🔢' },
-  { text: 'Create a note about my ideas', icon: '📝' },
-  { text: 'Convert 100 km to miles', icon: '🔄' },
-  { text: 'What is sqrt(144) + 25?', icon: '🧮' },
+  { text: 'List files in current directory', icon: '📁', desc: 'Browse filesystem' },
+  { text: 'Calculate 42 * 18 + 7', icon: '🔢', desc: 'Math & conversions' },
+  { text: 'Create a note about my ideas', icon: '📝', desc: 'Save notes' },
+  { text: 'Convert 100 km to miles', icon: '🔄', desc: 'Unit conversion' },
+  { text: 'What is sqrt(144) + 25?', icon: '🧮', desc: 'Calculation' },
 ];
 
 export function ChatPanel() {
   const { messages, isStreaming, clearChat } = useChatStore();
+  const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -35,89 +36,122 @@ export function ChatPanel() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-col h-full bg-gradient-chat">
-      {/* Minimal Header — clear button and streaming indicator only */}
-      <div className="flex items-center justify-end h-10 px-4 flex-shrink-0">
-        {isStreaming && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground animate-pulse">
-            <Sparkles className="w-3 h-3" />
-            Thinking...
-          </span>
-        )}
-        {hasMessages && !isStreaming && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={clearChat}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        )}
-      </div>
+    <div className="flex h-full overflow-hidden">
+      {/* ── Sidebar ── */}
+      {showHistory && (
+        <ChatHistorySidebar onClose={() => setShowHistory(false)} />
+      )}
+      
+      {/* ── Main Chat Area ── */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* ── Toolbar ── */}
+        <div className="flex items-center justify-between h-10 px-4 flex-shrink-0 gap-2 border-b border-transparent">
+          <div>
+            <button
+              type="button"
+              title="Toggle History"
+              onClick={() => setShowHistory(!showHistory)}
+              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${showHistory ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'} active:scale-95`}
+            >
+              <History className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            {isStreaming && (
+              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Thinking...
+              </div>
+            )}
+            {hasMessages && !isStreaming && (
+              <button
+                type="button"
+                title="Clear chat"
+                onClick={clearChat}
+                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
 
-      {/* Messages Area */}
+      {/* ── Messages ── */}
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="flex flex-col">
+        <div className="flex flex-col max-w-4xl mx-auto w-full">
           {!hasMessages ? (
-            /* Empty State */
-            <div className="flex flex-col items-center justify-center min-h-[400px] px-8">
-              <div className="glass-strong rounded-3xl p-8 mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center shadow-lg shadow-primary/25">
-                  <Bot className="w-8 h-8 text-primary-foreground" />
-                </div>
-              </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-2">
-                Welcome to Weave
-              </h3>
-              <p className="text-sm text-muted-foreground text-center max-w-md mb-8 leading-relaxed">
-                Your AI-powered workspace. I can read files, calculate, take notes,
-                and much more. Just ask me anything or try one of the suggestions below.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
-                {SUGGESTED_PROMPTS.map((prompt, i) => (
-                  <Button
-                    key={i}
-                    variant="outline"
-                    className="h-auto py-3 px-4 justify-start text-left gap-3 text-sm glass hover:bg-accent/50 transition-all duration-200 hover:-translate-y-0.5"
-                    onClick={() => useChatStore.getState().sendMessage(prompt.text)}
-                  >
-                    <span className="text-lg">{prompt.icon}</span>
-                    <span className="truncate">{prompt.text}</span>
-                  </Button>
-                ))}
-              </div>
-
-              <div className="mt-8 text-xs text-muted-foreground/60 flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3" />
-                Powered by AI with plugin capabilities
-              </div>
-            </div>
+            <EmptyState />
           ) : (
-            /* Messages */
-            <div className="py-4 space-y-1">
-              {messages.map((msg, index) => (
-                <ChatMessage key={msg.id} message={msg} isLast={index === messages.length - 1} />
+            <div className="py-2 space-y-4">
+              {messages.filter(m => !m.metadata?.isHidden).map((msg, index, arr) => (
+                <ChatMessage key={msg.id} message={msg} isLast={index === arr.length - 1} />
               ))}
-              {isStreaming && messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.content === '' && (
-                <div className="flex items-center gap-1.5 px-4 py-2 text-xs text-muted-foreground">
-                  <span>Thinking</span>
-                  <div className="flex items-center gap-1">
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
+              {isStreaming &&
+                messages[messages.length - 1]?.role === 'assistant' &&
+                messages[messages.length - 1]?.content === '' && (
+                  <div className="flex items-start gap-4 px-5 py-3">
+                    <div className="w-8 h-8 rounded-md border bg-muted flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                    <div className="flex gap-1 mt-2">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
               <div ref={bottomRef} className="h-4" />
             </div>
           )}
         </div>
       </ScrollArea>
 
-      {/* Input */}
+      {/* ── Input ── */}
       <ChatInput />
+    </div>
+  </div>
+  );
+}
+
+import { Loader2 } from 'lucide-react';
+
+import logoLight from '@/assets/weave-logo/light-mode.svg';
+import logoDark from '@/assets/weave-logo/dark-mode.svg';
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[420px] px-6">
+      <div className="w-16 h-16 flex items-center justify-center mb-6">
+        <img src={logoLight} alt="Weave" className="w-full h-full object-contain dark:hidden" />
+        <img src={logoDark} alt="Weave" className="w-full h-full object-contain hidden dark:block" />
+      </div>
+
+      <h2 className="text-xl font-semibold mb-2 text-foreground">
+        Welcome to Weave
+      </h2>
+      <p className="text-sm text-muted-foreground text-center max-w-sm mb-8">
+        Your AI-powered workspace. Read files, calculate, take notes — just ask.
+      </p>
+
+      {/* Suggestion grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+        {SUGGESTED_PROMPTS.map((p, i) => (
+          <button
+            key={i}
+            type="button"
+            className="flex items-start gap-3 p-3 rounded-lg border bg-card text-left transition-colors hover:bg-muted"
+            onClick={() => useChatStore.getState().sendMessage(p.text)}
+          >
+            <span className="text-xl flex-shrink-0">{p.icon}</span>
+            <div className="min-w-0 mt-0.5">
+              <p className="text-sm font-medium text-foreground truncate">
+                {p.text}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{p.desc}</p>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -10,7 +10,6 @@ pub mod runtime;
 pub mod utils;
 
 use core::ai_bridge::AiBridge;
-use core::intent_engine::IntentEngine;
 use core::plugin_manager::PluginManager;
 use core::workflow_engine::WorkflowEngine;
 use models::chat::ChatMessage;
@@ -21,7 +20,6 @@ pub struct AppState {
     pub plugin_manager: Arc<PluginManager>,
     pub ai_bridge: Arc<AiBridge>,
     pub workflow_engine: Arc<WorkflowEngine>,
-    pub intent_engine: Arc<IntentEngine>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
 }
@@ -52,7 +50,6 @@ impl AppState {
         let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone()));
         let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
         let workflow_engine = Arc::new(WorkflowEngine::new(plugin_manager.clone()));
-        let intent_engine = Arc::new(IntentEngine::new());
 
         let _ = plugin_manager.discover();
 
@@ -62,7 +59,6 @@ impl AppState {
             plugin_manager,
             ai_bridge,
             workflow_engine,
-            intent_engine,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
         })

@@ -10,6 +10,7 @@ use crate::utils::errors::WeaveError;
 pub struct AiBridge {
     client: reqwest::Client,
     pub config: Arc<RwLock<AiConfig>>,
+    pub llama_server: Arc<tokio::sync::Mutex<Option<(String, tokio::process::Child)>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,13 +116,18 @@ impl AiBridge {
             .build()
             .unwrap_or_default();
         
-        Self { client, config }
+        Self { 
+            client, 
+            config,
+            llama_server: Arc::new(tokio::sync::Mutex::new(None)),
+        }
     }
 
     pub async fn chat(
         &self,
         messages: Vec<ChatMessage>,
         model_config: Option<ModelConfig>,
+        system_prompt: String,
     ) -> Result<String, WeaveError> {
         let config = self.config.read();
         let provider_config = model_config.as_ref().map(|mc| {
@@ -152,6 +158,14 @@ impl AiBridge {
                     config.kimi.temperature,
                     config.kimi.max_tokens,
                 ),
+                Provider::Opencode => (
+                    Provider::Opencode,
+                    config.opencode.model.clone(),
+                    Some(config.opencode.api_key.clone()),
+                    config.opencode.api_url.clone(),
+                    config.opencode.temperature,
+                    config.opencode.max_tokens,
+                ),
                 Provider::Local => (
                     Provider::Local,
                     config.local.model_alias.clone(),
@@ -166,18 +180,38 @@ impl AiBridge {
 
         let (provider, model, api_key, api_url, temperature, max_tokens) = provider_config;
 
+        let system_msg = ChatMessage {
+            id: "sys_tools".to_string(),
+            role: ChatRole::System,
+            content: system_prompt,
+            timestamp: 0,
+            metadata: None,
+        };
+        let mut enhanced_messages = vec![system_msg];
+        enhanced_messages.extend(messages);
+
         let result = match provider {
             Provider::Openai => {
-                self.chat_openai(messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
+                self.chat_openai(enhanced_messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
             }
             Provider::Anthropic => {
-                self.chat_anthropic(messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
+                self.chat_anthropic(enhanced_messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
             }
             Provider::Kimi => {
-                self.chat_kimi(messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
+                self.chat_kimi(enhanced_messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
+            }
+            Provider::Opencode => {
+                let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/v1/chat/completions".to_string());
+                if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" {
+                    url = "https://opencode.ai/zen/v1/chat/completions".to_string();
+                } else if !url.ends_with("/chat/completions") {
+                    url = format!("{}/chat/completions", url.trim_end_matches('/'));
+                }
+                let actual_model = model.strip_prefix("opencode/").unwrap_or(&model);
+                self.chat_openai(enhanced_messages, actual_model, api_key, Some(&url), temperature, max_tokens).await
             }
             Provider::Local => {
-                self.chat_local(messages, &model, api_url.as_deref(), temperature).await
+                self.chat_local(enhanced_messages, &model, api_url.as_deref(), temperature).await
             }
         };
 
@@ -189,6 +223,7 @@ impl AiBridge {
         &self,
         messages: Vec<ChatMessage>,
         model_config: Option<ModelConfig>,
+        system_prompt: String,
     ) -> Result<tokio::sync::mpsc::Receiver<String>, WeaveError> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let config = self.config.read().clone();
@@ -221,6 +256,14 @@ impl AiBridge {
                     config.kimi.temperature,
                     config.kimi.max_tokens,
                 ),
+                Provider::Opencode => (
+                    Provider::Opencode,
+                    config.opencode.model.clone(),
+                    Some(config.opencode.api_key.clone()),
+                    config.opencode.api_url.clone(),
+                    config.opencode.temperature,
+                    config.opencode.max_tokens,
+                ),
                 Provider::Local => (
                     Provider::Local,
                     config.local.model_alias.clone(),
@@ -236,30 +279,55 @@ impl AiBridge {
         let client = self.client.clone();
         let (provider, model, api_key, api_url, temperature, max_tokens) = provider_config;
 
+        let system_msg = ChatMessage {
+            id: "sys_tools".to_string(),
+            role: ChatRole::System,
+            content: system_prompt,
+            timestamp: 0,
+            metadata: None,
+        };
+        let mut enhanced_messages = vec![system_msg];
+        enhanced_messages.extend(messages);
+
+        let llama_server_clone = self.llama_server.clone();
+
         tokio::spawn(async move {
             let result = match provider {
                 Provider::Openai => {
                     Self::stream_openai_internal(
-                        client, messages, &model, api_key, api_url.as_deref(),
+                        client, enhanced_messages, &model, api_key, api_url.as_deref(),
                         temperature, max_tokens, tx.clone(),
                     ).await
                 }
                 Provider::Anthropic => {
                     Self::stream_anthropic_internal(
-                        client, messages, &model, api_key, api_url.as_deref(),
+                        client, enhanced_messages, &model, api_key, api_url.as_deref(),
                         temperature, max_tokens, tx.clone(),
                     ).await
                 }
                 Provider::Kimi => {
                     Self::stream_kimi_internal(
-                        client, messages, &model, api_key, api_url.as_deref(),
+                        client, enhanced_messages, &model, api_key, api_url.as_deref(),
+                        temperature, max_tokens, tx.clone(),
+                    ).await
+                }
+                Provider::Opencode => {
+                    let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/v1/chat/completions".to_string());
+                    if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" {
+                        url = "https://opencode.ai/zen/v1/chat/completions".to_string();
+                    } else if !url.ends_with("/chat/completions") {
+                        url = format!("{}/chat/completions", url.trim_end_matches('/'));
+                    }
+                    let actual_model = model.strip_prefix("opencode/").unwrap_or(&model);
+                    Self::stream_openai_internal(
+                        client, enhanced_messages, actual_model, api_key, Some(&url),
                         temperature, max_tokens, tx.clone(),
                     ).await
                 }
                 Provider::Local => {
                     Self::stream_local_internal(
-                        client, messages, &model, api_url.as_deref(),
-                        temperature, tx.clone(),
+                        client, llama_server_clone, enhanced_messages, &model, api_url.as_deref(),
+                        temperature, max_tokens, tx.clone(),
                     ).await
                 }
             };
@@ -441,7 +509,10 @@ impl AiBridge {
             return Err(WeaveError::ApiKeyNotConfigured("Kimi".to_string()));
         }
 
-        let url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions");
+        let mut url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions").to_string();
+        if !url.ends_with("/chat/completions") {
+            url = format!("{}/chat/completions", url.trim_end_matches('/'));
+        }
         let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
             role: match m.role {
                 ChatRole::User => "user".to_string(),
@@ -527,12 +598,16 @@ impl AiBridge {
         let mut stream = response.bytes_stream();
         use futures::StreamExt;
         
+        let mut buffer = Vec::new();
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
-            let text = String::from_utf8_lossy(&chunk);
+            buffer.extend_from_slice(&chunk);
             
-            for line in text.lines() {
-                let line = line.trim();
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                let text = String::from_utf8_lossy(&line_bytes);
+                let line = text.trim();
+                
                 if line.is_empty() || line == "data: [DONE]" {
                     continue;
                 }
@@ -598,12 +673,16 @@ impl AiBridge {
         let mut stream = response.bytes_stream();
         use futures::StreamExt;
         
+        let mut buffer = Vec::new();
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
-            let text = String::from_utf8_lossy(&chunk);
+            buffer.extend_from_slice(&chunk);
             
-            for line in text.lines() {
-                let line = line.trim();
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                let text = String::from_utf8_lossy(&line_bytes);
+                let line = text.trim();
+                
                 if line.is_empty() || !line.starts_with("data: ") {
                     continue;
                 }
@@ -625,12 +704,70 @@ impl AiBridge {
 
     async fn stream_local_internal(
         client: reqwest::Client,
+        llama_server: Arc<tokio::sync::Mutex<Option<(String, tokio::process::Child)>>>,
         messages: Vec<ChatMessage>,
         model: &str,
         api_url: Option<&str>,
         temperature: f64,
+        max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
     ) -> Result<(), WeaveError> {
+        if model.ends_with(".gguf") {
+            let mut server_guard = llama_server.lock().await;
+            
+            let needs_restart = match &mut *server_guard {
+                Some((current_model, ref mut child)) => {
+                    if current_model != model {
+                        let _ = child.kill().await;
+                        true
+                    } else {
+                        // Check if it's still running
+                        if let Ok(Some(_status)) = child.try_wait() {
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+                None => true,
+            };
+
+            if needs_restart {
+                let model_path = format!("/home/kael/Models/llama.cpp/{}", model);
+                
+                // Start new server
+                use tokio::process::Command;
+                let child = Command::new("llama-server")
+                    .arg("-m")
+                    .arg(&model_path)
+                    .arg("--port")
+                    .arg("8080")
+                    .arg("-c")
+                    .arg("8192")
+                    .kill_on_drop(true)
+                    .spawn()
+                    .map_err(|e| WeaveError::LocalLlmNotAvailable(format!("Failed to start llama-server: {}", e)))?;
+                
+                *server_guard = Some((model.to_string(), child));
+                
+                // Wait for server to start (simple 3 second sleep for now)
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+            }
+            
+            drop(server_guard);
+
+            return Self::stream_openai_internal(
+                client,
+                messages,
+                model,
+                Some("dummy_key".to_string()),
+                Some("http://localhost:8080/v1/chat/completions"),
+                temperature,
+                max_tokens,
+                tx
+            ).await;
+        }
+
         let url = api_url.unwrap_or("http://localhost:11434/api/chat");
         
         let ollama_messages: Vec<OllamaMessage> = messages.iter().map(|m| OllamaMessage {
@@ -664,12 +801,16 @@ impl AiBridge {
         let mut stream = response.bytes_stream();
         use futures::StreamExt;
         
+        let mut buffer = Vec::new();
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
-            let text = String::from_utf8_lossy(&chunk);
+            buffer.extend_from_slice(&chunk);
             
-            for line in text.lines() {
-                let line = line.trim();
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                let text = String::from_utf8_lossy(&line_bytes);
+                let line = text.trim();
+                
                 if line.is_empty() {
                     continue;
                 }
@@ -698,7 +839,10 @@ impl AiBridge {
         tx: tokio::sync::mpsc::Sender<String>,
     ) -> Result<(), WeaveError> {
         let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Kimi".to_string()))?;
-        let url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions");
+        let mut url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions").to_string();
+        if !url.ends_with("/chat/completions") {
+            url = format!("{}/chat/completions", url.trim_end_matches('/'));
+        }
 
         let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
             role: match m.role {
@@ -733,12 +877,16 @@ impl AiBridge {
         let mut stream = response.bytes_stream();
         use futures::StreamExt;
 
+        let mut buffer = Vec::new();
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
-            let text = String::from_utf8_lossy(&chunk);
+            buffer.extend_from_slice(&chunk);
 
-            for line in text.lines() {
-                let line = line.trim();
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                let text = String::from_utf8_lossy(&line_bytes);
+                let line = text.trim();
+
                 if line.is_empty() || line == "data: [DONE]" {
                     continue;
                 }
@@ -784,19 +932,40 @@ impl AiBridge {
                     .unwrap_or(&Vec::new())
                     .iter()
                     .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
-                    .filter(|id| id.starts_with("gpt-"))
+                    .filter(|id| {
+                        let id_lower = id.to_lowercase();
+                        id_lower.starts_with("gpt") || id_lower.starts_with("o1") || id_lower.starts_with("o3") || id_lower.starts_with("chatgpt")
+                    })
                     .collect();
                 Ok(models)
             }
             Provider::Anthropic => {
-                // Anthropic does not expose a public model list endpoint
-                Ok(vec![
-                    "claude-fable-5".to_string(),
-                    "claude-mythos-5".to_string(),
-                    "claude-opus-4-8".to_string(),
-                    "claude-sonnet-4-6".to_string(),
-                    "claude-haiku-4-5".to_string(),
-                ])
+                let api_key = config.anthropic.api_key.clone();
+                if api_key.is_empty() {
+                    return Err(WeaveError::ApiKeyNotConfigured("Anthropic".to_string()));
+                }
+                let url = config.anthropic.api_url.as_deref().unwrap_or("https://api.anthropic.com/v1");
+                let response = self.client
+                    .get(format!("{}/models", url))
+                    .header("x-api-key", api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .send()
+                    .await?;
+
+                if !response.status().is_success() {
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(WeaveError::AiApiError(format!("Anthropic models error: {}", error_text)));
+                }
+
+                let json: serde_json::Value = response.json().await?;
+                let models: Vec<String> = json["data"]
+                    .as_array()
+                    .unwrap_or(&Vec::new())
+                    .iter()
+                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                    .filter(|id| id.starts_with("claude-"))
+                    .collect();
+                Ok(models)
             }
             Provider::Kimi => {
                 let api_key = config.kimi.api_key.clone();
@@ -825,24 +994,67 @@ impl AiBridge {
                     .collect();
                 Ok(models)
             }
+            Provider::Opencode => {
+                let api_key = config.opencode.api_key.clone();
+                if api_key.is_empty() {
+                    return Err(WeaveError::ApiKeyNotConfigured("Opencode".to_string()));
+                }
+                let output = std::process::Command::new("opencode")
+                    .arg("models")
+                    .output();
+                
+                if let Ok(output) = output {
+                    if output.status.success() {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        let models: Vec<String> = stdout
+                            .lines()
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                        if !models.is_empty() {
+                            return Ok(models);
+                        }
+                    }
+                }
+                
+                Err(WeaveError::AiApiError("Failed to fetch models from opencode CLI".to_string()))
+            }
             Provider::Local => {
                 let url = config.local.api_url.as_deref().unwrap_or("http://localhost:11434");
-                let response = self.client
-                    .get(format!("{}/api/tags", url))
-                    .send()
-                    .await?;
-
-                if !response.status().is_success() {
-                    return Err(WeaveError::LocalLlmNotAvailable("Ollama not reachable".to_string()));
+                let mut models = Vec::new();
+                
+                // 1. Check Ollama models
+                if let Ok(response) = self.client.get(format!("{}/api/tags", url)).send().await {
+                    if response.status().is_success() {
+                        if let Ok(json) = response.json::<serde_json::Value>().await {
+                            if let Some(arr) = json["models"].as_array() {
+                                for m in arr {
+                                    if let Some(name) = m["name"].as_str() {
+                                        models.push(name.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
-                let json: serde_json::Value = response.json().await?;
-                let models: Vec<String> = json["models"]
-                    .as_array()
-                    .unwrap_or(&Vec::new())
-                    .iter()
-                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                    .collect();
+                // 2. Scan /home/kael/Models/llama.cpp for .gguf files
+                if let Ok(entries) = std::fs::read_dir("/home/kael/Models/llama.cpp") {
+                    for entry in entries.filter_map(Result::ok) {
+                        if let Some(ext) = entry.path().extension() {
+                            if ext == "gguf" {
+                                if let Some(name) = entry.file_name().to_str() {
+                                    models.push(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if models.is_empty() {
+                    return Err(WeaveError::LocalLlmNotAvailable("No local models found (checked Ollama and /home/kael/Models/llama.cpp)".to_string()));
+                }
+
                 Ok(models)
             }
         }
@@ -853,4 +1065,6 @@ impl AiBridge {
         *config = new_config;
         info!("AI configuration updated");
     }
+
+
 }

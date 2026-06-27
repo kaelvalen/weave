@@ -17,6 +17,7 @@ struct StreamChunk {
 pub async fn chat_send_message(
     message: String,
     model: Option<String>,
+    provider: Option<String>,
     app_handle: tauri::AppHandle,
     app_state: State<'_, AppState>,
 ) -> Result<String, WeaveError> {
@@ -30,17 +31,12 @@ pub async fn chat_send_message(
         history.push(user_msg);
     }
 
-    let intent = {
-        let intent_engine = &app_state.intent_engine;
-        intent_engine.recognize(&message)
-    };
-
     let mut assistant_msg = ChatMessage::new_assistant(String::new());
     assistant_msg.metadata = Some(crate::models::chat::MessageMetadata {
         model: model.clone(),
         tokens_used: None,
         plugin_calls: Vec::new(),
-        intent: intent.clone(),
+        intent: None,
     });
     let assistant_id = assistant_msg.id.clone();
 
@@ -49,26 +45,30 @@ pub async fn chat_send_message(
         history.push(assistant_msg);
     }
 
-    if let Some(ref intent_result) = intent {
-        if intent_result.confidence > 0.5 {
-            for _plugin_id in &intent_result.plugins {
-                for _cap in &intent_result.plugins {
-                }
-            }
-        }
-    }
 
     let model_config = {
         let ai_config = app_state.ai_bridge.config.read().clone();
         model.map(|m| {
-            let provider = if m.starts_with("claude") {
-                crate::models::chat::Provider::Anthropic
-            } else if m.starts_with("kimi") {
-                crate::models::chat::Provider::Kimi
-            } else if m.starts_with("llama") || m.starts_with("mistral") {
-                crate::models::chat::Provider::Local
+            let provider = if let Some(ref prov) = provider {
+                match prov.as_str() {
+                    "anthropic" => crate::models::chat::Provider::Anthropic,
+                    "kimi" => crate::models::chat::Provider::Kimi,
+                    "opencode" => crate::models::chat::Provider::Opencode,
+                    "local" => crate::models::chat::Provider::Local,
+                    _ => crate::models::chat::Provider::Openai,
+                }
             } else {
-                crate::models::chat::Provider::Openai
+                if m.starts_with("claude") {
+                    crate::models::chat::Provider::Anthropic
+                } else if m.starts_with("kimi") {
+                    crate::models::chat::Provider::Kimi
+                } else if m.starts_with("opencode") {
+                    crate::models::chat::Provider::Opencode
+                } else if m.starts_with("llama") || m.starts_with("mistral") || m.ends_with(".gguf") {
+                    crate::models::chat::Provider::Local
+                } else {
+                    crate::models::chat::Provider::Openai
+                }
             };
 
             let (api_key, api_url, temperature, max_tokens) = match provider {
@@ -83,6 +83,12 @@ pub async fn chat_send_message(
                     ai_config.kimi.api_url.clone(),
                     ai_config.kimi.temperature,
                     ai_config.kimi.max_tokens,
+                ),
+                crate::models::chat::Provider::Opencode => (
+                    Some(ai_config.opencode.api_key.clone()),
+                    ai_config.opencode.api_url.clone(),
+                    ai_config.opencode.temperature,
+                    ai_config.opencode.max_tokens,
                 ),
                 crate::models::chat::Provider::Local => (
                     None,
@@ -112,8 +118,10 @@ pub async fn chat_send_message(
     let history = {
         app_state.chat_history.read().clone()
     };
+    
+    let system_prompt = app_state.plugin_manager.get_system_prompt();
 
-    let stream_result = app_state.ai_bridge.chat_stream(history, model_config).await;
+    let stream_result = app_state.ai_bridge.chat_stream(history, model_config, system_prompt).await;
     
     match stream_result {
         Ok(mut rx) => {
