@@ -70,11 +70,18 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    appendChunk: (chunk: string, _messageId: string) => {
+    appendChunk: (chunk: string, messageId: string) => {
       set((state) => {
-        const lastMsg = state.messages[state.messages.length - 1];
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content += chunk;
+        const existing = state.messages.find((m) => m.id === messageId);
+        if (existing) {
+          existing.content += chunk;
+        } else {
+          state.messages.push({
+            id: messageId,
+            role: 'assistant',
+            content: chunk,
+            timestamp: Date.now(),
+          });
         }
       });
     },

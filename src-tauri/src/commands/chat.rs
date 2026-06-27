@@ -1,14 +1,23 @@
-use tauri::State;
+use tauri::{Emitter, State};
 use tracing::{error, info};
+use serde::Serialize;
 
 use crate::models::chat::ChatMessage;
 use crate::AppState;
 use crate::utils::errors::WeaveError;
 
+#[derive(Debug, Clone, Serialize)]
+struct StreamChunk {
+    chunk: String,
+    message_id: String,
+    done: bool,
+}
+
 #[tauri::command]
 pub async fn chat_send_message(
     message: String,
     model: Option<String>,
+    app_handle: tauri::AppHandle,
     app_state: State<'_, AppState>,
 ) -> Result<String, WeaveError> {
     info!("Chat message received: {} (model: {:?})", message, model);
@@ -115,7 +124,18 @@ pub async fn chat_send_message(
                         last.content.push_str(&chunk);
                     }
                 }
+                let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
+                    chunk: chunk.clone(),
+                    message_id: assistant_id.clone(),
+                    done: false,
+                });
             }
+            // Signal stream end
+            let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
+                chunk: String::new(),
+                message_id: assistant_id.clone(),
+                done: true,
+            });
         }
         Err(e) => {
             error!("Streaming error: {}", e);
@@ -125,6 +145,11 @@ pub async fn chat_send_message(
                     last.content = format!("Error: {}", e);
                 }
             }
+            let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
+                chunk: format!("Error: {}", e),
+                message_id: assistant_id.clone(),
+                done: true,
+            });
             return Err(e);
         }
     }
