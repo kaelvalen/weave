@@ -8,21 +8,24 @@ interface AppState {
   isReady: boolean;
   appVersion: string;
   lastConfigUpdate: number;
+  isChatExpanded: boolean;
 
   setActiveView: (view: View) => void;
   setTheme: (theme: ThemeMode) => void;
   setReady: (ready: boolean) => void;
   setVersion: (v: string) => void;
   refreshConfig: () => void;
+  toggleChat: (expanded?: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
   immer((set) => ({
-    activeView: 'chat',
+    activeView: 'files',
     theme: 'system',
     isReady: false,
     appVersion: '0.2.0',
     lastConfigUpdate: 0,
+    isChatExpanded: false,
 
     setActiveView: (view: View) => {
       set((state) => { state.activeView = view; });
@@ -47,6 +50,12 @@ export const useAppStore = create<AppState>()(
 
     refreshConfig: () => {
       set((state) => { state.lastConfigUpdate = Date.now(); });
+    },
+
+    toggleChat: (expanded?: boolean) => {
+      set((state) => {
+        state.isChatExpanded = expanded !== undefined ? expanded : !state.isChatExpanded;
+      });
     },
   }))
 );

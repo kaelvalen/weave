@@ -11,6 +11,9 @@ pub struct SessionMeta {
     pub id: String,
     pub title: String,
     pub updated_at: u64,
+    #[serde(default)]
+    pub pinned: bool,
+    pub folder: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +21,9 @@ pub struct ChatSession {
     pub id: String,
     pub title: String,
     pub updated_at: u64,
+    #[serde(default)]
+    pub pinned: bool,
+    pub folder: Option<String>,
     pub messages: Vec<ChatMessage>,
 }
 
@@ -43,6 +49,8 @@ pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
                             id: session.id,
                             title: session.title,
                             updated_at: session.updated_at,
+                            pinned: session.pinned,
+                            folder: session.folder,
                         });
                     }
                 }
@@ -80,10 +88,25 @@ pub fn chat_save_session(id: String, title: String, messages: Vec<ChatMessage>) 
         .unwrap_or_default()
         .as_millis() as u64;
         
+    let mut pinned = false;
+    let mut folder = None;
+    
+    // Preserve existing metadata if session exists
+    if path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(existing) = serde_json::from_str::<ChatSession>(&content) {
+                pinned = existing.pinned;
+                folder = existing.folder;
+            }
+        }
+    }
+        
     let session = ChatSession {
         id,
         title,
         updated_at,
+        pinned,
+        folder,
         messages,
     };
     
@@ -91,6 +114,49 @@ pub fn chat_save_session(id: String, title: String, messages: Vec<ChatMessage>) 
         .map_err(|e| WeaveError::Serialization(e.to_string()))?;
         
     std::fs::write(path, content)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn chat_update_session_meta(
+    id: String,
+    title: Option<String>,
+    pinned: Option<bool>,
+    folder: Option<String>,
+) -> Result<(), WeaveError> {
+    let dir = get_sessions_dir()?;
+    let path = dir.join(format!("{}.json", id));
+    
+    if !path.exists() {
+        return Err(WeaveError::PluginError(format!("Session {} not found", id)));
+    }
+    
+    let content = std::fs::read_to_string(&path)?;
+    let mut session: ChatSession = serde_json::from_str(&content)
+        .map_err(|e| WeaveError::Serialization(format!("Failed to parse session: {}", e)))?;
+        
+    if let Some(t) = title { session.title = t; }
+    if let Some(p) = pinned { session.pinned = p; }
+    // If we want to clear the folder, we should maybe pass an empty string? 
+    // To distinguish between "do not update folder" and "clear folder", 
+    // we assume folder = Some("") means clear it.
+    if let Some(f) = folder {
+        if f.is_empty() {
+            session.folder = None;
+        } else {
+            session.folder = Some(f);
+        }
+    }
+    
+    session.updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+        
+    let new_content = serde_json::to_string_pretty(&session)
+        .map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        
+    std::fs::write(path, new_content)?;
     Ok(())
 }
 

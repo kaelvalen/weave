@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { invoke } from '@tauri-apps/api/core';
 import type { ChatMessage } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
+import { useAppStore } from './useAppStore';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -12,7 +13,7 @@ interface ChatState {
   error: string | null;
   conversationId: string;
   conversationTitle: string;
-  sessions: { id: string; title: string; updated_at: number }[];
+  sessions: { id: string; title: string; updated_at: number; pinned?: boolean; folder?: string }[];
 
   sendMessage: (content: string) => Promise<void>;
   appendChunk: (chunk: string, messageId: string) => void;
@@ -27,6 +28,7 @@ interface ChatState {
   loadSession: (id: string) => Promise<void>;
   startNewSession: () => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
+  updateSessionMeta: (id: string, updates: { title?: string, pinned?: boolean, folder?: string }) => Promise<void>;
 }
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -59,11 +61,18 @@ export const useChatStore = create<ChatState>()(
         state.error = null;
       });
 
+      let uiContext = useAppStore.getState().activeView as string;
+      if (uiContext === 'files') {
+        const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
+        uiContext = `Files View (Directory: ${rootDir})`;
+      }
+
       try {
         await invoke('chat_send_message', {
           message: content.trim(),
           model: get().selectedModel,
           provider: get().selectedProvider,
+          ui_context: uiContext,
         });
 
         // Auto-save session
@@ -365,8 +374,7 @@ export const useChatStore = create<ChatState>()(
           state.error = null;
         });
         // Restore backend history to match session
-        await invoke('chat_clear_history');
-        // A smarter backend would accept history replacement, but for now we just use the store
+        await invoke('chat_set_history', { history: session.messages });
       } catch (err) {
         console.error('Failed to load session', err);
         set((state) => { state.error = `Failed to load session: ${err}`; });
@@ -392,6 +400,26 @@ export const useChatStore = create<ChatState>()(
         }
       } catch (err) {
         console.error('Failed to delete session', err);
+      }
+    },
+    
+    updateSessionMeta: async (id: string, updates: { title?: string, pinned?: boolean, folder?: string }) => {
+      try {
+        await invoke('chat_update_session_meta', { 
+          id, 
+          title: updates.title, 
+          pinned: updates.pinned, 
+          folder: updates.folder 
+        });
+        
+        // Optimistically update current session title if it's the active one
+        if (get().conversationId === id && updates.title !== undefined) {
+          set((state) => { state.conversationTitle = updates.title!; });
+        }
+        
+        await get().listSessions();
+      } catch (err) {
+        console.error('Failed to update session metadata:', err);
       }
     },
   }))

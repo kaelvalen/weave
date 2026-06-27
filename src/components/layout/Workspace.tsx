@@ -5,14 +5,13 @@ import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { NotesManager } from '@/components/notes/NotesManager';
 import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
+import { useEffect } from 'react';
 
 export function Workspace() {
   const { activeView } = useAppStore();
 
   const renderView = () => {
     switch (activeView) {
-      case 'chat':
-        return <ChatPanel />;
       case 'plugins':
         return <PluginMarket />;
       case 'settings':
@@ -22,15 +21,42 @@ export function Workspace() {
       case 'notes':
         return <NotesManager />;
       default:
-        return <ChatPanel />;
+        return <FileManager />;
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        useAppStore.getState().toggleChat();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative pt-16">
       {/* Dynamic View Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative view-transition">
         {renderView()}
+      </div>
+
+      {/* Floating AI Chat Container */}
+      <div 
+        className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col pointer-events-none ${
+          useAppStore((s) => s.isChatExpanded) 
+            ? 'w-[768px] max-w-[95vw] h-[80vh] bottom-6 opacity-100 shadow-2xl' 
+            : 'w-[540px] max-w-[90vw] h-14 bottom-10 opacity-95 hover:opacity-100 shadow-xl translate-y-0'
+        }`}
+      >
+        <div 
+          className="w-full h-full overflow-hidden pointer-events-auto border border-border/40 bg-card/95 backdrop-blur-2xl flex flex-col rounded-[20px] shadow-inner"
+        >
+          <ChatPanel isFloating={true} />
+        </div>
       </div>
       
       {/* StatusBar sits at the bottom of the workspace area */}

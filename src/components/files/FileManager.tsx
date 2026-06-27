@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { FileEditor } from './FileEditor';
 
 // Helper to pick icon
@@ -116,6 +117,13 @@ export function FileManager() {
       setIsLoading(false);
     });
   }, [loadDirectory, currentRoot]);
+
+  // Synchronize backend agent's working directory with UI
+  useEffect(() => {
+    if (currentRoot) {
+      invoke('system_set_cwd', { path: currentRoot }).catch(console.error);
+    }
+  }, [currentRoot]);
 
   const handleOpenFolder = async () => {
     try {

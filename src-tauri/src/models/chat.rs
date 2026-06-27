@@ -28,6 +28,8 @@ pub struct MessageMetadata {
     pub plugin_calls: Vec<PluginCall>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub intent: Option<IntentResult>,
+    #[serde(rename = "isHidden", skip_serializing_if = "Option::is_none")]
+    pub is_hidden: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +94,7 @@ impl ChatMessage {
                 tokens_used: None,
                 plugin_calls: Vec::new(),
                 intent: None,
+                is_hidden: None,
             }),
         }
     }

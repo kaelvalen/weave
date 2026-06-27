@@ -7,6 +7,8 @@ import { useChatStream } from '@/hooks/useChatStream';
 import { Bot, Trash2, History } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
+import { useAppStore } from '@/stores/useAppStore';
+
 const SUGGESTED_PROMPTS = [
   { text: 'List files in current directory', icon: '📁', desc: 'Browse filesystem' },
   { text: 'Calculate 42 * 18 + 7', icon: '🔢', desc: 'Math & conversions' },
@@ -15,8 +17,9 @@ const SUGGESTED_PROMPTS = [
   { text: 'What is sqrt(144) + 25?', icon: '🧮', desc: 'Calculation' },
 ];
 
-export function ChatPanel() {
+export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   const { messages, isStreaming, clearChat } = useChatStore();
+  const isChatExpanded = useAppStore(s => s.isChatExpanded);
   const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -35,6 +38,27 @@ export function ChatPanel() {
 
   const hasMessages = messages.length > 0;
 
+  const toggleChat = useAppStore(s => s.toggleChat);
+
+  if (isFloating && !isChatExpanded) {
+    return (
+      <div 
+        className="w-full h-full flex items-center px-4 cursor-pointer bg-card/50 hover:bg-muted/50 transition-colors group"
+        onClick={() => toggleChat(true)}
+      >
+        <div className="flex items-center gap-3 w-full">
+          <Bot className="w-5 h-5 text-primary/80 group-hover:text-primary transition-colors" />
+          <span className="text-muted-foreground/70 group-hover:text-muted-foreground text-sm flex-1 font-medium transition-colors">
+            Ask Weave anything...
+          </span>
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-background/50 px-2 py-1 rounded border border-border/50 shadow-sm opacity-60 group-hover:opacity-100 transition-opacity">
+            <kbd className="font-sans">Ctrl</kbd>+<kbd className="font-sans">J</kbd>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Sidebar ── */}
@@ -44,8 +68,9 @@ export function ChatPanel() {
       
       {/* ── Main Chat Area ── */}
       <div className="flex flex-col flex-1 min-w-0">
-        {/* ── Toolbar ── */}
-        <div className="flex items-center justify-between h-10 px-4 flex-shrink-0 gap-2 border-b border-transparent">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300">
+          {/* ── Toolbar ── */}
+          <div className="flex items-center justify-between h-10 px-4 flex-shrink-0 gap-2 border-b border-transparent">
           <div>
             <button
               type="button"
@@ -104,11 +129,14 @@ export function ChatPanel() {
             </div>
           )}
         </div>
-      </ScrollArea>
+        </ScrollArea>
+        </div>
 
-      {/* ── Input ── */}
-      <ChatInput />
-    </div>
+        {/* ── Input ── */}
+        <div className="flex-shrink-0 bg-transparent">
+          <ChatInput />
+        </div>
+      </div>
   </div>
   );
 }

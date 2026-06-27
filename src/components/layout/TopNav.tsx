@@ -13,6 +13,8 @@ const navItems: { view: View; label: string; icon: typeof MessageCircle }[] = [
 export function TopNav() {
   const activeView   = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const isChatExpanded = useAppStore((s) => s.isChatExpanded);
+  const toggleChat = useAppStore((s) => s.toggleChat);
 
   return (
     <header
@@ -32,14 +34,15 @@ export function TopNav() {
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         {navItems.map((item) => {
-          const isActive = activeView === item.view;
+          const isChatButton = item.view === 'chat';
+          const isActive = isChatButton ? isChatExpanded : activeView === item.view;
           const Icon = item.icon;
           return (
             <Tooltip key={item.view}>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => setActiveView(item.view)}
+                  onClick={() => isChatButton ? toggleChat() : setActiveView(item.view)}
                   className={[
                     'relative flex items-center justify-center w-8 h-8 rounded-full',
                     'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

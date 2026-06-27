@@ -60,7 +60,7 @@ export function ChatInput() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { sendMessage, isStreaming, selectedModel, setModel } = useChatStore();
-  const { lastConfigUpdate } = useAppStore();
+  const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
   const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } = useModelPreferenceStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -267,6 +267,9 @@ export function ChatInput() {
             value={input}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onFocus={() => {
+              if (!isChatExpanded) toggleChat(true);
+            }}
             placeholder="Ask anything..."
             disabled={isStreaming}
             rows={1}

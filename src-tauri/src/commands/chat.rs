@@ -18,6 +18,7 @@ pub async fn chat_send_message(
     message: String,
     model: Option<String>,
     provider: Option<String>,
+    ui_context: Option<String>,
     app_handle: tauri::AppHandle,
     app_state: State<'_, AppState>,
 ) -> Result<String, WeaveError> {
@@ -37,6 +38,7 @@ pub async fn chat_send_message(
         tokens_used: None,
         plugin_calls: Vec::new(),
         intent: None,
+        is_hidden: None,
     });
     let assistant_id = assistant_msg.id.clone();
 
@@ -119,7 +121,11 @@ pub async fn chat_send_message(
         app_state.chat_history.read().clone()
     };
     
-    let system_prompt = app_state.plugin_manager.get_system_prompt();
+    let mut system_prompt = app_state.plugin_manager.get_system_prompt();
+    
+    if let Some(ctx) = ui_context {
+        system_prompt.push_str(&format!("\n\n[SYSTEM CONTEXT: The user is currently viewing the '{}' screen in the application. Tailor your context-aware suggestions accordingly.]", ctx));
+    }
 
     let stream_result = app_state.ai_bridge.chat_stream(history, model_config, system_prompt).await;
     
@@ -171,6 +177,16 @@ pub fn chat_get_history(
 ) -> Result<Vec<ChatMessage>, WeaveError> {
     let history = app_state.chat_history.read().clone();
     Ok(history)
+}
+
+#[tauri::command]
+pub fn chat_set_history(
+    history: Vec<ChatMessage>,
+    app_state: State<'_, AppState>,
+) -> Result<(), WeaveError> {
+    let mut state_history = app_state.chat_history.write();
+    *state_history = history;
+    Ok(())
 }
 
 #[tauri::command]
