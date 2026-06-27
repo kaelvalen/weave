@@ -21,7 +21,7 @@ export const useAppStore = create<AppState>()(
     activeView: 'chat',
     theme: 'system',
     isReady: false,
-    appVersion: '0.1.0',
+    appVersion: '0.2.0',
     lastConfigUpdate: 0,
 
     setActiveView: (view: View) => {

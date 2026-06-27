@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "Weave",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.weave.app",
   "build": {
     "frontendDist": "../dist",
@@ -26,13 +26,19 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "scope": ["**"]
+      },
       "csp": {
         "default-src": "'self'",
         "connect-src": "'self' ipc://localhost http://localhost:* https://api.openai.com https://api.anthropic.com",
-        "img-src": "'self' data:",
+        "img-src": "'self' data: asset: http://tauri.localhost",
+        "media-src": "'self' data: asset: http://tauri.localhost",
         "style-src": "'self' 'unsafe-inline'"
       },
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "bundle": {

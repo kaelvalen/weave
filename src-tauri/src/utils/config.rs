@@ -86,7 +86,7 @@ pub enum ThemeMode {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "0.1.0".to_string(),
+            version: "0.2.0".to_string(),
             ai: AiConfig {
                 default_provider: Provider::Openai,
                 openai: ProviderConfig {

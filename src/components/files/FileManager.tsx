@@ -1,19 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   FolderOpen, FileText, ChevronRight, ChevronDown, 
-  Search, Plus, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2
+  Search, Plus, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { usePluginStore } from '@/stores/usePluginStore';
+import { open } from '@tauri-apps/plugin-dialog';
 import { FileEditor } from './FileEditor';
 
 // Helper to pick icon
 function getFileIcon(name: string) {
-  if (name.endsWith('.ts') || name.endsWith('.tsx') || name.endsWith('.js') || name.endsWith('.rs') || name.endsWith('.css')) return FileCode;
-  if (name.endsWith('.svg') || name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.ico')) return FileImage;
-  if (name.endsWith('.json')) return FileJson;
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.ts') || lower.endsWith('.tsx') || lower.endsWith('.js') || lower.endsWith('.rs') || lower.endsWith('.css') || lower.endsWith('.html')) return FileCode;
+  if (lower.endsWith('.svg') || lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.ico')) return FileImage;
+  if (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg') || lower.endsWith('.mov') || lower.endsWith('.avi') || lower.endsWith('.mkv')) return FileVideo;
+  if (lower.endsWith('.json')) return FileJson;
   return FileText;
 }
 
@@ -79,6 +82,9 @@ function FileTreeItem({ item, depth = 0, selectedPath, onSelect, onToggle }: any
 
 export function FileManager() {
   const [rootNodes, setRootNodes] = useState<FSNode[]>([]);
+  const [currentRoot, setCurrentRoot] = useState<string>(() => {
+    return localStorage.getItem('weave_file_manager_root') || '.';
+  });
   const [selectedFile, setSelectedFile] = useState<FSNode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { executeCapability } = usePluginStore();
@@ -105,11 +111,24 @@ export function FileManager() {
 
   // Load root on mount
   useEffect(() => {
-    loadDirectory('.').then(nodes => {
+    loadDirectory(currentRoot).then(nodes => {
       setRootNodes(nodes);
       setIsLoading(false);
     });
-  }, [loadDirectory]);
+  }, [loadDirectory, currentRoot]);
+
+  const handleOpenFolder = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (selected && typeof selected === 'string') {
+        setIsLoading(true);
+        setCurrentRoot(selected);
+        localStorage.setItem('weave_file_manager_root', selected);
+      }
+    } catch (err) {
+      console.error('Failed to open folder dialog:', err);
+    }
+  };
 
   // Handle nested toggle
   const handleToggle = async (node: FSNode) => {
@@ -154,13 +173,15 @@ export function FileManager() {
       {/* ── Sidebar: File Tree ── */}
       <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card">
         <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-muted-foreground" />
-            <h3 className="text-xs font-semibold tracking-wide uppercase">Local Files</h3>
+          <div className="flex items-center gap-2 overflow-hidden mr-2">
+            <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <h3 className="text-xs font-semibold tracking-wide truncate" title={currentRoot === '.' ? 'Local Files' : currentRoot}>
+              {currentRoot === '.' ? 'Local Files' : currentRoot.split('/').pop() || currentRoot}
+            </h3>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={() => loadDirectory('.').then(setRootNodes)}>
-              <Plus className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleOpenFolder} title="Open Folder">
+              <FolderOpen className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
