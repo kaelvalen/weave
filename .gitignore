@@ -31,5 +31,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Nix
+result/
+
 # Misc
 *.local

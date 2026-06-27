@@ -69,7 +69,7 @@ impl AppState {
     }
 }
 
-pub fn tauri_commands() -> impl Fn(tauri::generate_handler![]) {
+pub fn tauri_commands() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) + Send + Sync + 'static {
     tauri::generate_handler![
         commands::chat::chat_send_message,
         commands::chat::chat_get_history,

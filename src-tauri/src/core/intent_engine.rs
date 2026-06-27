@@ -266,14 +266,14 @@ impl IntentEngine {
     fn extract_params(&self, message: &str, intent: &str) -> serde_json::Value {
         match intent {
             "file.read" | "file.write" | "file.search" => {
-                let file_pattern = Regex::new(r"(?:file|path)\s+(?:named\s+)?[`\"']?([^`'\"\s\n]+)[`\"']?").unwrap();
+                let file_pattern = Regex::new(r#"(?:file|path)\s+(?:named\s+)?[`"']?([^`'"\s\n]+)[`"']?"#).unwrap();
                 if let Some(caps) = file_pattern.captures(message) {
                     if let Some(matched) = caps.get(1) {
                         return json!({ "path": matched.as_str() });
                     }
                 }
                 
-                let general_pattern = Regex::new(r"[`\"']([^`'\"]+)[`\"']").unwrap();
+                let general_pattern = Regex::new(r#"[`"']([^`'"]+)[`"']"#).unwrap();
                 if let Some(caps) = general_pattern.captures(message) {
                     if let Some(matched) = caps.get(1) {
                         return json!({ "path": matched.as_str() });
@@ -282,7 +282,7 @@ impl IntentEngine {
                 json!({})
             }
             "file.list" => {
-                let dir_pattern = Regex::new(r"(?:in|from|under)\s+[`\"']?([^`'\"\s]+)[`\"']?").unwrap();
+                let dir_pattern = Regex::new(r#"(?:in|from|under)\s+[`"']?([^`'"\s]+)[`"']?"#).unwrap();
                 if let Some(caps) = dir_pattern.captures(message) {
                     if let Some(matched) = caps.get(1) {
                         return json!({ "directory": matched.as_str() });
@@ -314,7 +314,7 @@ impl IntentEngine {
                 json!({})
             }
             "note.create" => {
-                let title_pattern = Regex::new(r"(?:titled|named|called)\s+[`\"']([^`'\"]+)[`\"']").unwrap();
+                let title_pattern = Regex::new(r#"(?:titled|named|called)\s+[`"']([^`'"]+)[`"']"#).unwrap();
                 let title = if let Some(caps) = title_pattern.captures(message) {
                     caps.get(1).map(|m| m.as_str().to_string())
                 } else {
