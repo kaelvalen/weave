@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use crate::core::plugin_manager::PluginManager;
 use crate::utils::errors::WeaveError;
@@ -79,7 +78,7 @@ impl WorkflowEngine {
 
             let result = tokio::time::timeout(
                 tokio::time::Duration::from_millis(step.timeout_ms),
-                self.plugin_manager.execute_capability(&step.plugin_id, &step.capability, params.clone()),
+                async { self.plugin_manager.execute_capability(&step.plugin_id, &step.capability, params.clone()) },
             ).await;
 
             let execution_time = step_start.elapsed().as_millis() as u64;
@@ -161,8 +160,7 @@ impl WorkflowEngine {
         let start_time = std::time::Instant::now();
 
         let result = self.plugin_manager
-            .execute_capability(&plugin_id, &capability, params)
-            .await;
+            .execute_capability(&plugin_id, &capability, params);
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 

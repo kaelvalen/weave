@@ -69,23 +69,4 @@ impl AppState {
     }
 }
 
-pub fn tauri_commands() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) + Send + Sync + 'static {
-    tauri::generate_handler![
-        commands::chat::chat_send_message,
-        commands::chat::chat_get_history,
-        commands::chat::chat_clear_history,
-        commands::chat::chat_get_message,
-        commands::plugin::plugin_discover,
-        commands::plugin::plugin_load,
-        commands::plugin::plugin_unload,
-        commands::plugin::plugin_execute,
-        commands::plugin::plugin_get_all,
-        commands::plugin::plugin_get_loaded,
-        commands::plugin::plugin_get_by_id,
-        commands::system::system_get_config,
-        commands::system::system_set_config,
-        commands::system::system_get_plugin_dir,
-        commands::system::system_get_version,
-        commands::system::system_open_plugin_dir,
-    ]
-}
+// Tauri commands defined in main.rs via generate_handler!

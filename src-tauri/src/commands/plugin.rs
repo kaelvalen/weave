@@ -1,5 +1,5 @@
 use tauri::State;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::models::plugin::Plugin;
 use crate::AppState;
@@ -40,7 +40,7 @@ pub async fn plugin_execute(
     app_state: State<'_, AppState>,
 ) -> Result<serde_json::Value, WeaveError> {
     debug!("Executing: {}::{} with params: {:?}", plugin_id, capability, params);
-    app_state.plugin_manager.execute_capability(&plugin_id, &capability, params).await
+    app_state.plugin_manager.execute_capability(&plugin_id, &capability, params)
 }
 
 #[tauri::command]

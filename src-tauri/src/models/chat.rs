@@ -68,13 +68,7 @@ pub struct ModelConfig {
     pub max_tokens: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Provider {
-    Openai,
-    Anthropic,
-    Local,
-}
+pub use crate::utils::config::Provider;
 
 impl ChatMessage {
     pub fn new_user(content: String) -> Self {
@@ -109,7 +103,7 @@ impl ChatMessage {
 
 impl MessageMetadata {
     pub fn add_plugin_call(&mut self, call: PluginCall) {
-        if let Some(ref mut meta) = self.plugin_calls.first() {
+        if let Some(ref mut _meta) = self.plugin_calls.first() {
         }
         self.plugin_calls.push(call);
     }

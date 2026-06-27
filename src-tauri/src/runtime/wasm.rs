@@ -1,4 +1,6 @@
-use tracing::{debug, error, info, warn};
+#![cfg(feature = "wasm-runtime")]
+
+use tracing::{info, warn};
 
 use crate::utils::errors::WeaveError;
 

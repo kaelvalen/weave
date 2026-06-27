@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;

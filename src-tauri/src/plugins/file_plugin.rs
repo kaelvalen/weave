@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use crate::utils::errors::WeaveError;
 
@@ -161,7 +161,7 @@ impl FilePlugin {
             ));
         }
         
-        let glob_pattern = format!("{}/**/*{}*", resolved_path.to_string_lossy(), pattern);
+        let _glob_pattern = format!("{}/**/*{}*", resolved_path.to_string_lossy(), pattern);
         let mut matches = Vec::new();
         
         Self::search_recursive(&resolved_path, pattern, &mut matches)?;
@@ -220,11 +220,11 @@ impl FilePlugin {
         }
     }
 
-    fn validate_read_access(path: &Path) -> Result<(), WeaveError> {
+    fn validate_read_access(_path: &Path) -> Result<(), WeaveError> {
         Ok(())
     }
 
-    fn validate_write_access(path: &Path) -> Result<(), WeaveError> {
+    fn validate_write_access(_path: &Path) -> Result<(), WeaveError> {
         Ok(())
     }
 }

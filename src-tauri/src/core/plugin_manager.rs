@@ -2,7 +2,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use crate::models::manifest::Manifest;
 use crate::models::plugin::*;
@@ -25,8 +25,10 @@ impl PluginManager {
         for plugin in &builtin {
             let mut p = plugin.clone();
             p.state = PluginState::Active;
-            plugins.insert(p.id.clone(), p);
-            info!("Registered built-in plugin: {} ({})", p.name, p.id);
+            let id = p.id.clone();
+            let name = p.name.clone();
+            plugins.insert(id.clone(), p);
+            info!("Registered built-in plugin: {} ({})", name, id);
         }
 
         let manager = Self {

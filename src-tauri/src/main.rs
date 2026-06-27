@@ -18,7 +18,24 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
-        .invoke_handler(weave::tauri_commands())
+        .invoke_handler(tauri::generate_handler![
+            weave::commands::chat::chat_send_message,
+            weave::commands::chat::chat_get_history,
+            weave::commands::chat::chat_clear_history,
+            weave::commands::chat::chat_get_message,
+            weave::commands::plugin::plugin_discover,
+            weave::commands::plugin::plugin_load,
+            weave::commands::plugin::plugin_unload,
+            weave::commands::plugin::plugin_execute,
+            weave::commands::plugin::plugin_get_all,
+            weave::commands::plugin::plugin_get_loaded,
+            weave::commands::plugin::plugin_get_by_id,
+            weave::commands::system::system_get_config,
+            weave::commands::system::system_set_config,
+            weave::commands::system::system_get_plugin_dir,
+            weave::commands::system::system_get_version,
+            weave::commands::system::system_open_plugin_dir,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

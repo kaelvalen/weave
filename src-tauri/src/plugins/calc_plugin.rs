@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 use crate::utils::errors::WeaveError;
 
@@ -94,7 +94,7 @@ impl CalcPlugin {
     }
 
     fn get_conversion_factor(from: &str, to: &str) -> Option<f64> {
-        match (from.as_str(), to.as_str()) {
+        match (from, to) {
             (f, t) if f == t => Some(1.0),
             
             // Length
@@ -124,9 +124,6 @@ impl CalcPlugin {
             ("lb", "g") | ("pound", "g") => Some(453.592),
             ("oz", "g") | ("ounce", "g") | ("ounces", "g") => Some(28.3495),
             ("g", "oz") | ("g", "ounce") | ("g", "ounces") => Some(0.035274),
-            ("kg", "g") => Some(1000.0),
-            ("g", "kg") => Some(0.001),
-            
             // Volume
             ("l", "ml") | ("liter", "ml") | ("liters", "ml") => Some(1000.0),
             ("ml", "l") | ("ml", "liter") | ("ml", "liters") => Some(0.001),

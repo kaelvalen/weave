@@ -10,8 +10,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  W,
   Zap,
+  Waves,
 } from 'lucide-react';
 import type { View } from '@/types/app';
 import { useEffect } from 'react';
@@ -43,7 +43,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between p-3 h-14 border-b border-border">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <W className="w-5 h-5 text-primary-foreground" />
+              <Waves className="w-5 h-5 text-primary-foreground" />
             </div>
             {!sidebarCollapsed && (
               <span className="font-semibold text-lg truncate text-foreground">Weave</span>

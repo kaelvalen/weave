@@ -3,8 +3,6 @@ use serde_json::json;
 use tracing::debug;
 
 use crate::models::chat::IntentResult;
-use crate::utils::errors::WeaveError;
-
 pub struct IntentEngine {
     patterns: Vec<IntentPattern>,
 }
@@ -241,7 +239,7 @@ impl IntentEngine {
             }
         }
 
-        if let Some((intent, confidence, plugins, capabilities)) = best_match {
+        if let Some((intent, confidence, plugins, _capabilities)) = best_match {
             if confidence >= 0.3 {
                 let params = self.extract_params(message, &intent);
                 

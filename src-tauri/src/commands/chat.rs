@@ -1,7 +1,7 @@
 use tauri::State;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
-use crate::models::chat::{ChatMessage, ChatRole};
+use crate::models::chat::ChatMessage;
 use crate::AppState;
 use crate::utils::errors::WeaveError;
 
@@ -14,7 +14,7 @@ pub async fn chat_send_message(
     info!("Chat message received: {} (model: {:?})", message, model);
 
     let user_msg = ChatMessage::new_user(message.clone());
-    let msg_id = user_msg.id.clone();
+    let _msg_id = user_msg.id.clone();
     
     {
         let mut history = app_state.chat_history.write();
@@ -42,8 +42,8 @@ pub async fn chat_send_message(
 
     if let Some(ref intent_result) = intent {
         if intent_result.confidence > 0.5 {
-            for plugin_id in &intent_result.plugins {
-                for cap in &intent_result.plugins {
+            for _plugin_id in &intent_result.plugins {
+                for _cap in &intent_result.plugins {
                 }
             }
         }

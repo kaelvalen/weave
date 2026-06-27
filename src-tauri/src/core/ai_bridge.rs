@@ -1,11 +1,10 @@
 use std::sync::Arc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
-use crate::models::chat::{ChatMessage, ChatRole, MessageMetadata, ModelConfig, Provider};
-use crate::utils::config::{AiConfig, ProviderConfig};
+use crate::models::chat::{ChatMessage, ChatRole, ModelConfig, Provider};
+use crate::utils::config::AiConfig;
 use crate::utils::errors::WeaveError;
 
 pub struct AiBridge {
@@ -61,8 +60,10 @@ struct AnthropicMessage {
 #[derive(Debug, Clone, Deserialize)]
 struct AnthropicStreamResponse {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     response_type: String,
     delta: Option<AnthropicDelta>,
+    #[allow(dead_code)]
     content_block: Option<AnthropicContentBlock>,
 }
 
@@ -73,6 +74,7 @@ struct AnthropicDelta {
 
 #[derive(Debug, Clone, Deserialize)]
 struct AnthropicContentBlock {
+    #[allow(dead_code)]
     text: Option<String>,
 }
 

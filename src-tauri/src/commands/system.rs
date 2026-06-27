@@ -1,8 +1,5 @@
-use tauri::State;
 use tracing::info;
 
-use crate::models::plugin::Plugin;
-use crate::AppState;
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
 
