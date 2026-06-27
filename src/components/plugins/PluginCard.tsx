@@ -11,11 +11,9 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
-  Zap,
   Shield,
   ShieldCheck,
   Box,
-  Cpu,
   Brain,
   Code2,
   Puzzle,

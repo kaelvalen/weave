@@ -49,24 +49,56 @@ pub async fn chat_send_message(
         }
     }
 
-    let model_config = model.map(|m| {
-        let provider = if m.starts_with("claude") {
-            crate::models::chat::Provider::Anthropic
-        } else if m.starts_with("llama") || m.starts_with("mistral") {
-            crate::models::chat::Provider::Local
-        } else {
-            crate::models::chat::Provider::Openai
-        };
-        
-        crate::models::chat::ModelConfig {
-            provider,
-            model: m,
-            api_key: None,
-            api_url: None,
-            temperature: 0.7,
-            max_tokens: 4096,
-        }
-    });
+    let model_config = {
+        let ai_config = app_state.ai_bridge.config.read().clone();
+        model.map(|m| {
+            let provider = if m.starts_with("claude") {
+                crate::models::chat::Provider::Anthropic
+            } else if m.starts_with("kimi") {
+                crate::models::chat::Provider::Kimi
+            } else if m.starts_with("llama") || m.starts_with("mistral") {
+                crate::models::chat::Provider::Local
+            } else {
+                crate::models::chat::Provider::Openai
+            };
+
+            let (api_key, api_url, temperature, max_tokens) = match provider {
+                crate::models::chat::Provider::Anthropic => (
+                    Some(ai_config.anthropic.api_key.clone()),
+                    ai_config.anthropic.api_url.clone(),
+                    ai_config.anthropic.temperature,
+                    ai_config.anthropic.max_tokens,
+                ),
+                crate::models::chat::Provider::Kimi => (
+                    Some(ai_config.kimi.api_key.clone()),
+                    ai_config.kimi.api_url.clone(),
+                    ai_config.kimi.temperature,
+                    ai_config.kimi.max_tokens,
+                ),
+                crate::models::chat::Provider::Local => (
+                    None,
+                    ai_config.local.api_url.clone(),
+                    ai_config.local.temperature,
+                    ai_config.local.context_length,
+                ),
+                crate::models::chat::Provider::Openai => (
+                    Some(ai_config.openai.api_key.clone()),
+                    ai_config.openai.api_url.clone(),
+                    ai_config.openai.temperature,
+                    ai_config.openai.max_tokens,
+                ),
+            };
+
+            crate::models::chat::ModelConfig {
+                provider,
+                model: m,
+                api_key,
+                api_url,
+                temperature,
+                max_tokens,
+            }
+        })
+    };
 
     let history = {
         app_state.chat_history.read().clone()

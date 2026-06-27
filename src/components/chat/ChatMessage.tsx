@@ -32,7 +32,7 @@ function renderMarkdown(text: string): string {
   return html;
 }
 
-export function ChatMessage({ message, isLast }: ChatMessageProps) {
+export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';

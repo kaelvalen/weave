@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { ChatMessage, ModelConfig } from '@/types/chat';
-import type { Plugin, WorkflowStep, WorkflowResult } from '@/types/plugin';
+import type { ChatMessage } from '@/types/chat';
+import type { Plugin } from '@/types/plugin';
 import type { AppConfig } from '@/types/app';
 
 // Chat Commands

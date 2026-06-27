@@ -32,6 +32,7 @@ fn main() {
             weave::commands::plugin::plugin_get_by_id,
             weave::commands::system::system_get_config,
             weave::commands::system::system_set_config,
+            weave::commands::system::list_provider_models,
             weave::commands::system::system_get_plugin_dir,
             weave::commands::system::system_get_version,
             weave::commands::system::system_open_plugin_dir,

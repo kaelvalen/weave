@@ -20,9 +20,10 @@ export interface LocalConfig {
 }
 
 export interface AiConfig {
-  default_provider: 'openai' | 'anthropic' | 'local';
+  default_provider: 'openai' | 'anthropic' | 'kimi' | 'local';
   openai: ProviderConfig;
   anthropic: ProviderConfig;
+  kimi: ProviderConfig;
   local: LocalConfig;
 }
 

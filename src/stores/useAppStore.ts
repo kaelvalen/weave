@@ -8,12 +8,14 @@ interface AppState {
   theme: ThemeMode;
   isReady: boolean;
   appVersion: string;
+  lastConfigUpdate: number;
 
   setActiveView: (view: View) => void;
   toggleSidebar: () => void;
   setTheme: (theme: ThemeMode) => void;
   setReady: (ready: boolean) => void;
   setVersion: (v: string) => void;
+  refreshConfig: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -23,6 +25,7 @@ export const useAppStore = create<AppState>()(
     theme: 'system',
     isReady: false,
     appVersion: '0.1.0',
+    lastConfigUpdate: 0,
 
     setActiveView: (view: View) => {
       set((state) => { state.activeView = view; });
@@ -47,6 +50,10 @@ export const useAppStore = create<AppState>()(
 
     setVersion: (v: string) => {
       set((state) => { state.appVersion = v; });
+    },
+
+    refreshConfig: () => {
+      set((state) => { state.lastConfigUpdate = Date.now(); });
     },
   }))
 );

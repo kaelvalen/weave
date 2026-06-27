@@ -16,6 +16,7 @@ pub struct AiConfig {
     pub default_provider: Provider,
     pub openai: ProviderConfig,
     pub anthropic: ProviderConfig,
+    pub kimi: ProviderConfig,
     pub local: LocalConfig,
 }
 
@@ -24,6 +25,7 @@ pub struct AiConfig {
 pub enum Provider {
     Openai,
     Anthropic,
+    Kimi,
     Local,
 }
 
@@ -99,6 +101,13 @@ impl Default for AppConfig {
                     temperature: 0.7,
                     max_tokens: 4096,
                 },
+                kimi: ProviderConfig {
+                    api_key: String::new(),
+                    model: "kimi-k2-0711-preview".to_string(),
+                    api_url: Some("https://api.moonshot.cn/v1".to_string()),
+                    temperature: 0.7,
+                    max_tokens: 4096,
+                },
                 local: LocalConfig {
                     enabled: false,
                     model_path: String::new(),
@@ -127,13 +136,42 @@ impl AppConfig {
         let config_path = Self::config_path()?;
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let config: AppConfig = serde_json::from_str(&content)
-                .map_err(|e| WeaveError::ConfigError(format!("Failed to parse config: {}", e)))?;
-            Ok(config)
+
+            // Try normal deserialization first
+            match serde_json::from_str::<AppConfig>(&content) {
+                Ok(config) => Ok(config),
+                Err(_) => {
+                    // Migrate older config: parse as generic JSON and merge missing fields with defaults
+                    let mut value: serde_json::Value = serde_json::from_str(&content)
+                        .map_err(|e| WeaveError::ConfigError(format!("Failed to parse config: {}", e)))?;
+                    let default = serde_json::to_value(AppConfig::default())
+                        .map_err(|e| WeaveError::Serialization(e.to_string()))?;
+
+                    Self::merge_missing(&mut value, &default);
+
+                    let config: AppConfig = serde_json::from_value(value)
+                        .map_err(|e| WeaveError::ConfigError(format!("Failed to migrate config: {}", e)))?;
+                    config.save()?;
+                    Ok(config)
+                }
+            }
         } else {
             let config = AppConfig::default();
             config.save()?;
             Ok(config)
+        }
+    }
+
+    fn merge_missing(target: &mut serde_json::Value, source: &serde_json::Value) {
+        if let (Some(target_map), Some(source_map)) = (target.as_object_mut(), source.as_object()) {
+            for (key, source_value) in source_map {
+                match target_map.get_mut(key) {
+                    Some(target_value) => Self::merge_missing(target_value, source_value),
+                    None => {
+                        target_map.insert(key.clone(), source_value.clone());
+                    }
+                }
+            }
         }
     }
 
@@ -171,7 +209,11 @@ impl AppConfig {
     }
 
     pub fn validate(&self) -> Result<(), WeaveError> {
-        if self.ai.openai.api_key.is_empty() && self.ai.anthropic.api_key.is_empty() && !self.ai.local.enabled {
+        if self.ai.openai.api_key.is_empty()
+            && self.ai.anthropic.api_key.is_empty()
+            && self.ai.kimi.api_key.is_empty()
+            && !self.ai.local.enabled
+        {
             return Err(WeaveError::ConfigError(
                 "At least one AI provider must be configured".to_string()
             ));

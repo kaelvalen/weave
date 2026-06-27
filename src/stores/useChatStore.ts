@@ -47,7 +47,7 @@ export const useChatStore = create<ChatState>()(
       });
 
       try {
-        const assistantId: string = await invoke('chat_send_message', {
+        await invoke('chat_send_message', {
           message: content.trim(),
           model: get().selectedModel,
         });
@@ -70,7 +70,7 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    appendChunk: (chunk: string, messageId: string) => {
+    appendChunk: (chunk: string, _messageId: string) => {
       set((state) => {
         const lastMsg = state.messages[state.messages.length - 1];
         if (lastMsg && lastMsg.role === 'assistant') {
@@ -79,7 +79,7 @@ export const useChatStore = create<ChatState>()(
       });
     },
 
-    finalizeMessage: (messageId: string) => {
+    finalizeMessage: (_messageId: string) => {
       set((state) => {
         state.isStreaming = false;
       });

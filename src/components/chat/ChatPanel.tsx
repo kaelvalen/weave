@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { useChatStream } from '@/hooks/useChatStream';
 import { Bot, Trash2, Sparkles } from 'lucide-react';
 
 const SUGGESTED_PROMPTS = [
@@ -19,6 +20,8 @@ export function ChatPanel() {
   const { messages, isStreaming, clearChat } = useChatStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useChatStream();
 
   useEffect(() => {
     if (bottomRef.current) {

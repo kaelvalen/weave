@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useChatStore } from '@/stores/useChatStore';
 

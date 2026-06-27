@@ -9,7 +9,7 @@ use crate::utils::errors::WeaveError;
 
 pub struct AiBridge {
     client: reqwest::Client,
-    config: Arc<RwLock<AiConfig>>,
+    pub config: Arc<RwLock<AiConfig>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +144,14 @@ impl AiBridge {
                     config.anthropic.temperature,
                     config.anthropic.max_tokens,
                 ),
+                Provider::Kimi => (
+                    Provider::Kimi,
+                    config.kimi.model.clone(),
+                    Some(config.kimi.api_key.clone()),
+                    config.kimi.api_url.clone(),
+                    config.kimi.temperature,
+                    config.kimi.max_tokens,
+                ),
                 Provider::Local => (
                     Provider::Local,
                     config.local.model_alias.clone(),
@@ -164,6 +172,9 @@ impl AiBridge {
             }
             Provider::Anthropic => {
                 self.chat_anthropic(messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
+            }
+            Provider::Kimi => {
+                self.chat_kimi(messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
             }
             Provider::Local => {
                 self.chat_local(messages, &model, api_url.as_deref(), temperature).await
@@ -202,6 +213,14 @@ impl AiBridge {
                     config.anthropic.temperature,
                     config.anthropic.max_tokens,
                 ),
+                Provider::Kimi => (
+                    Provider::Kimi,
+                    config.kimi.model.clone(),
+                    Some(config.kimi.api_key.clone()),
+                    config.kimi.api_url.clone(),
+                    config.kimi.temperature,
+                    config.kimi.max_tokens,
+                ),
                 Provider::Local => (
                     Provider::Local,
                     config.local.model_alias.clone(),
@@ -227,6 +246,12 @@ impl AiBridge {
                 }
                 Provider::Anthropic => {
                     Self::stream_anthropic_internal(
+                        client, messages, &model, api_key, api_url.as_deref(),
+                        temperature, max_tokens, tx.clone(),
+                    ).await
+                }
+                Provider::Kimi => {
+                    Self::stream_kimi_internal(
                         client, messages, &model, api_key, api_url.as_deref(),
                         temperature, max_tokens, tx.clone(),
                     ).await
@@ -398,6 +423,60 @@ impl AiBridge {
             .as_str()
             .unwrap_or("")
  .to_string();
+
+        Ok(content)
+    }
+
+    async fn chat_kimi(
+        &self,
+        messages: Vec<ChatMessage>,
+        model: &str,
+        api_key: Option<String>,
+        api_url: Option<&str>,
+        temperature: f64,
+        max_tokens: u32,
+    ) -> Result<String, WeaveError> {
+        let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Kimi".to_string()))?;
+        if api_key.is_empty() {
+            return Err(WeaveError::ApiKeyNotConfigured("Kimi".to_string()));
+        }
+
+        let url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions");
+        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
+            role: match m.role {
+                ChatRole::User => "user".to_string(),
+                ChatRole::Assistant => "assistant".to_string(),
+                ChatRole::System => "system".to_string(),
+            },
+            content: m.content.clone(),
+        }).collect();
+
+        let request = OpenAiRequest {
+            model: model.to_string(),
+            messages: kimi_messages,
+            temperature,
+            max_tokens,
+            stream: false,
+        };
+
+        let response = self.client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(WeaveError::AiApiError(format!("Kimi API error: {}", error_text)));
+        }
+
+        let response_json: serde_json::Value = response.json().await?;
+        let content = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
 
         Ok(content)
     }
@@ -606,6 +685,167 @@ impl AiBridge {
         }
 
         Ok(())
+    }
+
+    async fn stream_kimi_internal(
+        client: reqwest::Client,
+        messages: Vec<ChatMessage>,
+        model: &str,
+        api_key: Option<String>,
+        api_url: Option<&str>,
+        temperature: f64,
+        max_tokens: u32,
+        tx: tokio::sync::mpsc::Sender<String>,
+    ) -> Result<(), WeaveError> {
+        let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Kimi".to_string()))?;
+        let url = api_url.unwrap_or("https://api.moonshot.cn/v1/chat/completions");
+
+        let kimi_messages: Vec<OpenAiMessage> = messages.iter().map(|m| OpenAiMessage {
+            role: match m.role {
+                ChatRole::User => "user".to_string(),
+                ChatRole::Assistant => "assistant".to_string(),
+                ChatRole::System => "system".to_string(),
+            },
+            content: m.content.clone(),
+        }).collect();
+
+        let request = OpenAiRequest {
+            model: model.to_string(),
+            messages: kimi_messages,
+            temperature,
+            max_tokens,
+            stream: true,
+        };
+
+        let response = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(WeaveError::AiApiError(format!("Kimi streaming error: {}", error_text)));
+        }
+
+        let mut stream = response.bytes_stream();
+        use futures::StreamExt;
+
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result?;
+            let text = String::from_utf8_lossy(&chunk);
+
+            for line in text.lines() {
+                let line = line.trim();
+                if line.is_empty() || line == "data: [DONE]" {
+                    continue;
+                }
+
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
+                        if let Some(content) = json.choices.get(0)
+                            .and_then(|c| c.delta.content.clone()) {
+                            let _ = tx.send(content).await;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn list_models(&self, provider: Provider) -> Result<Vec<String>, WeaveError> {
+        let config = self.config.read().clone();
+
+        match provider {
+            Provider::Openai => {
+                let api_key = config.openai.api_key.clone();
+                if api_key.is_empty() {
+                    return Err(WeaveError::ApiKeyNotConfigured("OpenAI".to_string()));
+                }
+                let url = config.openai.api_url.as_deref().unwrap_or("https://api.openai.com/v1");
+                let response = self.client
+                    .get(format!("{}/models", url))
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .send()
+                    .await?;
+
+                if !response.status().is_success() {
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(WeaveError::AiApiError(format!("OpenAI models error: {}", error_text)));
+                }
+
+                let json: serde_json::Value = response.json().await?;
+                let models: Vec<String> = json["data"]
+                    .as_array()
+                    .unwrap_or(&Vec::new())
+                    .iter()
+                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                    .filter(|id| id.starts_with("gpt-"))
+                    .collect();
+                Ok(models)
+            }
+            Provider::Anthropic => {
+                // Anthropic does not expose a public model list endpoint
+                Ok(vec![
+                    "claude-fable-5".to_string(),
+                    "claude-mythos-5".to_string(),
+                    "claude-opus-4-8".to_string(),
+                    "claude-sonnet-4-6".to_string(),
+                    "claude-haiku-4-5".to_string(),
+                ])
+            }
+            Provider::Kimi => {
+                let api_key = config.kimi.api_key.clone();
+                if api_key.is_empty() {
+                    return Err(WeaveError::ApiKeyNotConfigured("Kimi".to_string()));
+                }
+                let url = config.kimi.api_url.as_deref().unwrap_or("https://api.moonshot.cn/v1");
+                let response = self.client
+                    .get(format!("{}/models", url))
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .send()
+                    .await?;
+
+                if !response.status().is_success() {
+                    let error_text = response.text().await.unwrap_or_default();
+                    return Err(WeaveError::AiApiError(format!("Kimi models error: {}", error_text)));
+                }
+
+                let json: serde_json::Value = response.json().await?;
+                let models: Vec<String> = json["data"]
+                    .as_array()
+                    .unwrap_or(&Vec::new())
+                    .iter()
+                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                    .filter(|id| id.starts_with("kimi"))
+                    .collect();
+                Ok(models)
+            }
+            Provider::Local => {
+                let url = config.local.api_url.as_deref().unwrap_or("http://localhost:11434");
+                let response = self.client
+                    .get(format!("{}/api/tags", url))
+                    .send()
+                    .await?;
+
+                if !response.status().is_success() {
+                    return Err(WeaveError::LocalLlmNotAvailable("Ollama not reachable".to_string()));
+                }
+
+                let json: serde_json::Value = response.json().await?;
+                let models: Vec<String> = json["models"]
+                    .as_array()
+                    .unwrap_or(&Vec::new())
+                    .iter()
+                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                    .collect();
+                Ok(models)
+            }
+        }
     }
 
     pub fn update_config(&self, new_config: AiConfig) {

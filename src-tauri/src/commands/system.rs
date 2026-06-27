@@ -1,5 +1,6 @@
 use tracing::info;
 
+use crate::AppState;
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
 
@@ -11,11 +12,33 @@ pub fn system_get_config() -> Result<AppConfig, WeaveError> {
 }
 
 #[tauri::command]
-pub fn system_set_config(config: AppConfig) -> Result<(), WeaveError> {
+pub fn system_set_config(
+    config: AppConfig,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<(), WeaveError> {
     config.validate()?;
     config.save()?;
-    info!("Configuration updated");
+    app_state.ai_bridge.update_config(config.ai.clone());
+    info!("Configuration updated and AI bridge refreshed");
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_provider_models(
+    provider: String,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, WeaveError> {
+    use crate::utils::config::Provider;
+
+    let provider = match provider.as_str() {
+        "openai" => Provider::Openai,
+        "anthropic" => Provider::Anthropic,
+        "kimi" => Provider::Kimi,
+        "local" => Provider::Local,
+        _ => return Err(WeaveError::ConfigError(format!("Unknown provider: {}", provider))),
+    };
+
+    app_state.ai_bridge.list_models(provider).await
 }
 
 #[tauri::command]

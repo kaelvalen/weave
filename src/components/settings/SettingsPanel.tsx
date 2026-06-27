@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export function SettingsPanel() {
-  const { theme, setTheme, setVersion } = useAppStore();
+  const { theme, setTheme, setVersion, refreshConfig } = useAppStore();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -40,6 +40,7 @@ export function SettingsPanel() {
     if (!config) return;
     try {
       await invoke('system_set_config', { config });
+      refreshConfig();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -47,7 +48,7 @@ export function SettingsPanel() {
     }
   };
 
-  const updateAi = (provider: 'openai' | 'anthropic', field: string, value: string | number) => {
+  const updateAi = (provider: 'openai' | 'anthropic' | 'kimi', field: string, value: string | number) => {
     setConfig((prev) => {
       if (!prev) return prev;
       return {
@@ -184,6 +185,39 @@ export function SettingsPanel() {
                     value={config.ai.anthropic.model}
                     onChange={(e) => updateAi('anthropic', 'model', e.target.value)}
                     placeholder="claude-sonnet-4-20250514"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Kimi */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 bg-purple-500/5 text-purple-600 border-purple-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                  Kimi
+                </Badge>
+              </div>
+              <div className="grid gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">API Key</Label>
+                  <Input
+                    type="password"
+                    value={config.ai.kimi.api_key}
+                    onChange={(e) => updateAi('kimi', 'api_key', e.target.value)}
+                    placeholder="sk-..."
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Model</Label>
+                  <Input
+                    value={config.ai.kimi.model}
+                    onChange={(e) => updateAi('kimi', 'model', e.target.value)}
+                    placeholder="kimi-k2-0711-preview"
                     className="text-sm"
                   />
                 </div>

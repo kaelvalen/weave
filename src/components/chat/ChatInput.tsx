@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
+import { useAppStore } from '@/stores/useAppStore';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -9,17 +10,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
+import { invoke } from '@tauri-apps/api/core';
+import type { AppConfig } from '@/types/app';
 import { Send, Loader2, FileText, Calculator, StickyNote } from 'lucide-react';
 
-const MODELS = [
+type ModelOption = {
+  value: string;
+  label: string;
+  provider: string;
+};
+
+const FALLBACK_MODELS: ModelOption[] = [
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
   { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
-  { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet', provider: 'anthropic' },
-  { value: 'claude-haiku-4-20250514', label: 'Claude Haiku', provider: 'anthropic' },
+  { value: 'claude-fable-5', label: 'Claude Fable 5', provider: 'anthropic' },
+  { value: 'claude-mythos-5', label: 'Claude Mythos 5', provider: 'anthropic' },
+  { value: 'claude-opus-4-8', label: 'Claude Opus 4.8', provider: 'anthropic' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'anthropic' },
+  { value: 'kimi-k2-0711-preview', label: 'Kimi K2', provider: 'kimi' },
+  { value: 'kimi-1.5-long', label: 'Kimi 1.5 Long', provider: 'kimi' },
   { value: 'llama3', label: 'Llama 3 (Local)', provider: 'local' },
   { value: 'mistral', label: 'Mistral (Local)', provider: 'local' },
 ];
+
+const PROVIDER_META: Record<string, { label: string; color: string }> = {
+  openai: { label: 'OpenAI', color: 'bg-emerald-500' },
+  anthropic: { label: 'Anthropic', color: 'bg-amber-500' },
+  kimi: { label: 'Kimi', color: 'bg-purple-500' },
+  local: { label: 'Local', color: 'bg-blue-500' },
+};
 
 const PLUGIN_SUGGESTIONS = [
   { keyword: 'file', icon: FileText, label: 'File' },
@@ -33,8 +53,74 @@ const PLUGIN_SUGGESTIONS = [
 
 export function ChatInput() {
   const [input, setInput] = useState('');
+  const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const { sendMessage, isStreaming, selectedModel, setModel } = useChatStore();
+  const { lastConfigUpdate } = useAppStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setModelsLoading(true);
+
+    invoke<AppConfig>('system_get_config')
+      .then(async (config) => {
+        const providers = Object.entries(PROVIDER_META).filter(([key]) => {
+          if (key === 'local') return config.ai.local.enabled;
+          const cfg = config.ai[key as keyof typeof config.ai] as { api_key?: string } | undefined;
+          return cfg && typeof cfg === 'object' && 'api_key' in cfg && cfg.api_key && cfg.api_key.length > 0;
+        });
+
+        if (providers.length === 0) {
+          if (!cancelled) setModels(FALLBACK_MODELS);
+          return;
+        }
+
+        const results = await Promise.allSettled(
+          providers.map(([key]) =>
+            invoke<string[]>('list_provider_models', { provider: key })
+          )
+        );
+
+        const merged: ModelOption[] = [];
+        results.forEach((res, idx) => {
+          const [key] = providers[idx];
+          if (res.status === 'fulfilled' && res.value.length > 0) {
+            res.value.forEach((modelId) => {
+              merged.push({
+                value: modelId,
+                label: modelId,
+                provider: key,
+              });
+            });
+          } else {
+            if (res.status === 'rejected') {
+              console.warn(`Failed to load models for ${key}:`, res.reason);
+            }
+            FALLBACK_MODELS.filter((m) => m.provider === key).forEach((m) => merged.push(m));
+          }
+        });
+
+        if (!cancelled) {
+          setModels(merged.length > 0 ? merged : FALLBACK_MODELS);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load available models:', err);
+        if (!cancelled) setModels(FALLBACK_MODELS);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [lastConfigUpdate]);
+
+  useEffect(() => {
+    if (models.length > 0 && !models.find((m) => m.value === selectedModel)) {
+      setModel(models[0].value);
+    }
+  }, [models, selectedModel, setModel]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -93,27 +179,24 @@ export function ChatInput() {
 
       <div className="flex items-end gap-2">
         {/* Model Selector */}
-        <Select value={selectedModel} onValueChange={setModel}>
-          <SelectTrigger className="w-[140px] h-9 text-xs flex-shrink-0">
-            <SelectValue />
+        <Select value={selectedModel} onValueChange={setModel} disabled={modelsLoading || isStreaming}>
+          <SelectTrigger className="w-[180px] h-9 text-xs flex-shrink-0">
+            <SelectValue placeholder={modelsLoading ? 'Loading...' : 'Select model'} />
           </SelectTrigger>
           <SelectContent>
-            {MODELS.map((m) => (
-              <SelectItem key={m.value} value={m.value} className="text-xs">
-                <span className="flex items-center gap-2">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      m.provider === 'openai'
-                        ? 'bg-emerald-500'
-                        : m.provider === 'anthropic'
-                        ? 'bg-amber-500'
-                        : 'bg-blue-500'
-                    }`}
-                  />
-                  {m.label}
-                </span>
-              </SelectItem>
-            ))}
+            {models.map((m) => {
+              const meta = PROVIDER_META[m.provider] || { label: m.provider, color: 'bg-gray-500' };
+              return (
+                <SelectItem key={m.value} value={m.value} className="text-xs">
+                  <span className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${meta.color}`} />
+                    <span className="truncate max-w-[120px]" title={m.value}>
+                      {m.label}
+                    </span>
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
 
