@@ -300,6 +300,12 @@ impl PluginManager {
 
         info!("Executing capability: {}::{}", plugin_id, capability);
 
+        // Route to PythonRuntime if it's a python plugin
+        if plugin.runtime.runtime_type == crate::models::plugin::RuntimeType::Python {
+            let python_runtime = crate::runtime::python::PythonRuntime::new()?;
+            return python_runtime.execute(&plugin, capability, params);
+        }
+
         // Use executor registry instead of hardcoded match
         let executors = self.executors.read();
         if let Some(executor) = executors.get(plugin_id) {

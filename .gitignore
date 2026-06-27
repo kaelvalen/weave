@@ -36,3 +36,7 @@ result/
 
 # Misc
 *.local
+
+# External Weave Plugins
+/external_plugins/
+.worktrees/

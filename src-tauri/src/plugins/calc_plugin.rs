@@ -135,7 +135,40 @@ impl CalcPlugin {
             .filter(|c| !c.is_whitespace())
             .collect();
         
-        let result = meval::eval_str(&sanitized)
+        let mut ctx = meval::Context::new();
+        
+        // Extended mathematical functions
+        ctx.func("log", |x| x.log10());
+        ctx.func("log10", |x| x.log10());
+        ctx.func("log2", |x| x.log2());
+        ctx.func("ln", |x| x.ln());
+        ctx.func("exp", |x| x.exp());
+        ctx.func("abs", |x| x.abs());
+        ctx.func("ceil", |x| x.ceil());
+        ctx.func("floor", |x| x.floor());
+        ctx.func("round", |x| x.round());
+        ctx.func("signum", |x| x.signum());
+        ctx.func("rad", |x| x * std::f64::consts::PI / 180.0);
+        ctx.func("deg", |x| x * 180.0 / std::f64::consts::PI);
+        
+        // Physical Constants
+        ctx.var("c", 299792458.0); // Speed of light in m/s
+        ctx.var("G", 6.67430e-11); // Gravitational constant
+        ctx.var("h", 6.62607015e-34); // Planck constant
+        ctx.var("hbar", 1.054571817e-34); // Reduced Planck constant
+        ctx.var("k", 1.380649e-23); // Boltzmann constant
+        ctx.var("N_A", 6.02214076e23); // Avogadro constant
+        ctx.var("e_charge", 1.602176634e-19); // Elementary charge
+        ctx.var("m_e", 9.1093837015e-31); // Electron mass
+        ctx.var("m_p", 1.67262192369e-27); // Proton mass
+        ctx.var("mu_0", 1.25663706212e-6); // Vacuum magnetic permeability
+        ctx.var("eps_0", 8.8541878128e-12); // Vacuum electric permittivity
+        ctx.var("R", 8.314462618); // Gas constant
+        ctx.var("g", 9.80665); // Standard acceleration of gravity
+        ctx.var("atm", 101325.0); // Standard atmosphere in Pa
+        ctx.var("phi", 1.618033988749895); // Golden ratio
+
+        let result = meval::eval_str_with_context(&sanitized, ctx)
             .map_err(|e| WeaveError::ParseError(format!("Expression evaluation error: {}", e)))?;
         
         if result.is_nan() {
