@@ -104,13 +104,14 @@ export function ChatPanel() {
               {messages.map((msg, index) => (
                 <ChatMessage key={msg.id} message={msg} isLast={index === messages.length - 1} />
               ))}
-              {isStreaming && messages[messages.length - 1]?.role === 'assistant' && (
-                <div className="px-4 py-2">
-                  <span className="inline-flex gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </span>
+              {isStreaming && messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.content === '' && (
+                <div className="flex items-center gap-1.5 px-4 py-2 text-xs text-muted-foreground">
+                  <span>Thinking</span>
+                  <div className="flex items-center gap-1">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
                 </div>
               )}
               <div ref={bottomRef} className="h-4" />

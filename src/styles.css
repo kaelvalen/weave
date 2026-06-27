@@ -143,4 +143,53 @@
       transform: translateY(-3px);
     }
   }
+
+  /* Streaming indicator - typing dots */
+  .typing-dot {
+    @apply w-2 h-2 rounded-full bg-primary/60;
+    animation: typingDot 1.4s infinite ease-in-out;
+  }
+
+  .typing-dot:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typingDot {
+    0%, 60%, 100% {
+      transform: scale(0.6);
+      opacity: 0.4;
+    }
+    30% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* Blinking cursor */
+  .streaming-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: hsl(var(--primary));
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0;
+    }
+  }
 }

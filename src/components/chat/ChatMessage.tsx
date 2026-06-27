@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useChatStore } from '@/stores/useChatStore';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -34,8 +35,10 @@ function renderMarkdown(text: string): string {
 
 export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
+  const isStreaming = useChatStore((s) => s.isStreaming);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const showCursor = _isLast && isStreaming && isAssistant;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -168,6 +171,7 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
             className="text-sm leading-relaxed text-foreground break-words prose prose-sm dark:prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
           />
+          {showCursor && <span className="streaming-cursor" />}
         </div>
       </div>
     </TooltipProvider>
