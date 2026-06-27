@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
@@ -36,28 +35,23 @@ export function ChatPanel() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between h-12 px-4 border-b border-border bg-card/50 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-medium">AI Assistant</h2>
-          {isStreaming && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground animate-pulse">
-              <Sparkles className="w-3 h-3" />
-              Thinking...
-            </span>
-          )}
-        </div>
-        {hasMessages && (
+    <div className="flex flex-col h-full bg-gradient-chat">
+      {/* Minimal Header — clear button and streaming indicator only */}
+      <div className="flex items-center justify-end h-10 px-4 flex-shrink-0">
+        {isStreaming && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground animate-pulse">
+            <Sparkles className="w-3 h-3" />
+            Thinking...
+          </span>
+        )}
+        {hasMessages && !isStreaming && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-destructive"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
             onClick={clearChat}
           >
-            <Trash2 className="w-3 h-3" />
-            Clear
+            <Trash2 className="w-3.5 h-3.5" />
           </Button>
         )}
       </div>
@@ -78,13 +72,13 @@ export function ChatPanel() {
                 Your AI-powered workspace. I can read files, calculate, take notes,
                 and much more. Just ask me anything or try one of the suggestions below.
               </p>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
                 {SUGGESTED_PROMPTS.map((prompt, i) => (
                   <Button
                     key={i}
                     variant="outline"
-                    className="h-auto py-2.5 px-3 justify-start text-left gap-2 text-sm hover:bg-accent transition-colors"
+                    className="h-auto py-2.5 px-3 justify-start text-left gap-2 text-sm bg-background/50 backdrop-blur-sm border-border/60 hover:bg-accent transition-colors"
                     onClick={() => useChatStore.getState().sendMessage(prompt.text)}
                   >
                     <span className="text-base">{prompt.icon}</span>
@@ -119,8 +113,6 @@ export function ChatPanel() {
           )}
         </div>
       </ScrollArea>
-
-      <Separator />
 
       {/* Input */}
       <ChatInput />

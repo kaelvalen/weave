@@ -157,85 +157,87 @@ export function ChatInput() {
   );
 
   return (
-    <div className="p-3 bg-card/50 border-t border-border flex-shrink-0">
-      {/* Plugin Suggestion Chips */}
-      {suggestedPlugins.length > 0 && input.length > 3 && (
-        <div className="flex items-center gap-1.5 mb-2 px-1">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Detected:</span>
-          {suggestedPlugins.map((s, i) => {
-            const Icon = s.icon;
-            return (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground"
-              >
-                <Icon className="w-3 h-3" />
-                {s.label}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex items-end gap-2">
-        {/* Model Selector */}
-        <Select value={selectedModel} onValueChange={setModel} disabled={modelsLoading || isStreaming}>
-          <SelectTrigger className="w-[180px] h-9 text-xs flex-shrink-0">
-            <SelectValue placeholder={modelsLoading ? 'Loading...' : 'Select model'} />
-          </SelectTrigger>
-          <SelectContent>
-            {models.map((m) => {
-              const meta = PROVIDER_META[m.provider] || { label: m.provider, color: 'bg-gray-500' };
+    <div className="px-4 pb-3 pt-1 flex-shrink-0">
+      <div className="glass-input rounded-2xl p-3 shadow-lg">
+        {/* Plugin Suggestion Chips */}
+        {suggestedPlugins.length > 0 && input.length > 3 && (
+          <div className="flex items-center gap-1.5 mb-2 px-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Detected:</span>
+            {suggestedPlugins.map((s, i) => {
+              const Icon = s.icon;
               return (
-                <SelectItem key={m.value} value={m.value} className="text-xs">
-                  <span className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${meta.color}`} />
-                    <span className="truncate max-w-[120px]" title={m.value}>
-                      {m.label}
-                    </span>
-                  </span>
-                </SelectItem>
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground"
+                >
+                  <Icon className="w-3 h-3" />
+                  {s.label}
+                </span>
               );
             })}
-          </SelectContent>
-        </Select>
+          </div>
+        )}
 
-        {/* Textarea */}
-        <div className="flex-1 relative">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything... (Shift+Enter for new line)"
-            disabled={isStreaming}
-            className="min-h-[36px] max-h-[160px] py-2 px-3 text-sm resize-none bg-background border-input focus-visible:ring-1 focus-visible:ring-primary"
-            rows={1}
-          />
+        <div className="flex items-end gap-2">
+          {/* Model Selector */}
+          <Select value={selectedModel} onValueChange={setModel} disabled={modelsLoading || isStreaming}>
+            <SelectTrigger className="w-[180px] h-9 text-xs flex-shrink-0">
+              <SelectValue placeholder={modelsLoading ? 'Loading...' : 'Select model'} />
+            </SelectTrigger>
+            <SelectContent>
+              {models.map((m) => {
+                const meta = PROVIDER_META[m.provider] || { label: m.provider, color: 'bg-gray-500' };
+                return (
+                  <SelectItem key={m.value} value={m.value} className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${meta.color}`} />
+                      <span className="truncate max-w-[120px]" title={m.value}>
+                        {m.label}
+                      </span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+
+          {/* Textarea */}
+          <div className="flex-1 relative">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask anything... (Shift+Enter for new line)"
+              disabled={isStreaming}
+              className="min-h-[36px] max-h-[160px] py-2 px-3 text-sm resize-none bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
+              rows={1}
+            />
+          </div>
+
+          {/* Send Button */}
+          <Button
+            size="icon"
+            className="h-9 w-9 flex-shrink-0"
+            disabled={!input.trim() || isStreaming}
+            onClick={handleSend}
+          >
+            {isStreaming ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
         </div>
 
-        {/* Send Button */}
-        <Button
-          size="icon"
-          className="h-9 w-9 flex-shrink-0"
-          disabled={!input.trim() || isStreaming}
-          onClick={handleSend}
-        >
-          {isStreaming ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
-          )}
-        </Button>
-      </div>
-
-      <div className="flex items-center justify-between mt-1.5 px-1">
-        <p className="text-[10px] text-muted-foreground/60">
-          Plugins: file, calc, note
-        </p>
-        <p className="text-[10px] text-muted-foreground/60">
-          {input.length > 0 && `${input.length} chars`}
-        </p>
+        <div className="flex items-center justify-between mt-1.5 px-1">
+          <p className="text-[10px] text-muted-foreground/60">
+            Plugins: file, calc, note
+          </p>
+          <p className="text-[10px] text-muted-foreground/60">
+            {input.length > 0 && `${input.length} chars`}
+          </p>
+        </div>
       </div>
     </div>
   );

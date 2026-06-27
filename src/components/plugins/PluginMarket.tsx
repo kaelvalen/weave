@@ -54,7 +54,7 @@ export function PluginMarket() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between h-12 px-4 border-b border-border bg-card/50 flex-shrink-0">
+      <div className="flex items-center justify-between h-12 px-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Package className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-medium">Plugins</h2>
@@ -75,14 +75,14 @@ export function PluginMarket() {
       </div>
 
       {/* Search & Filters */}
-      <div className="p-4 space-y-3 flex-shrink-0">
+      <div className="p-4 space-y-3 flex-shrink-0 bg-gradient-subtle">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search plugins by name, ID, or capability..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 text-sm"
+            className="pl-9 text-sm glass-input"
           />
         </div>
 

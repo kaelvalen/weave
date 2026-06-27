@@ -22,7 +22,7 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="h-8 bg-card border-t border-border flex items-center px-3 text-xs text-muted-foreground select-none">
+    <footer className="h-8 bg-background/50 backdrop-blur-sm border-t border-border/30 flex items-center px-3 text-xs text-muted-foreground select-none">
       {/* Left - Connection Status */}
       <div className="flex items-center gap-1.5 min-w-0">
         {isOnline ? (

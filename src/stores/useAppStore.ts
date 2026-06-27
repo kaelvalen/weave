@@ -4,14 +4,12 @@ import type { View, ThemeMode } from '@/types/app';
 
 interface AppState {
   activeView: View;
-  sidebarCollapsed: boolean;
   theme: ThemeMode;
   isReady: boolean;
   appVersion: string;
   lastConfigUpdate: number;
 
   setActiveView: (view: View) => void;
-  toggleSidebar: () => void;
   setTheme: (theme: ThemeMode) => void;
   setReady: (ready: boolean) => void;
   setVersion: (v: string) => void;
@@ -21,7 +19,6 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   immer((set) => ({
     activeView: 'chat',
-    sidebarCollapsed: false,
     theme: 'system',
     isReady: false,
     appVersion: '0.1.0',
@@ -29,10 +26,6 @@ export const useAppStore = create<AppState>()(
 
     setActiveView: (view: View) => {
       set((state) => { state.activeView = view; });
-    },
-
-    toggleSidebar: () => {
-      set((state) => { state.sidebarCollapsed = !state.sidebarCollapsed; });
     },
 
     setTheme: (theme: ThemeMode) => {

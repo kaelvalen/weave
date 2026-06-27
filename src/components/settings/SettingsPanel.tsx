@@ -88,7 +88,7 @@ export function SettingsPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between h-12 px-4 border-b border-border bg-card/50 flex-shrink-0">
+      <div className="flex items-center justify-between h-12 px-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Settings className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-medium">Settings</h2>
@@ -104,7 +104,7 @@ export function SettingsPanel() {
       </div>
 
       {/* Settings Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 bg-gradient-subtle">
         <Tabs defaultValue="ai" className="max-w-2xl mx-auto">
           <TabsList className="mb-6">
             <TabsTrigger value="ai" className="gap-1.5">

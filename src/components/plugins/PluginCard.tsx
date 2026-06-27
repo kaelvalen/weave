@@ -62,7 +62,7 @@ export function PluginCard({ plugin }: PluginCardProps) {
   };
 
   return (
-    <Card className="group transition-all hover:shadow-md border-border/60">
+    <Card className="group transition-all hover:shadow-md border-border/60 glass">
       <CardHeader className="p-4 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">

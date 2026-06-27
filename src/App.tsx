@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { usePluginStore } from '@/stores/usePluginStore';
+import { TopNav } from '@/components/layout/TopNav';
 import { Workspace } from '@/components/layout/Workspace';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { invoke } from '@tauri-apps/api/core';
@@ -42,6 +43,9 @@ function App() {
       .then((v) => setVersion(v))
       .catch(console.error);
 
+    // Discover plugins on mount
+    usePluginStore.getState().discoverPlugins();
+
     setReady(true);
 
     return () => {
@@ -52,10 +56,8 @@ function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
-        <div className="flex flex-1 min-h-0">
-          <Sidebar />
-          <Workspace />
-        </div>
+        <TopNav />
+        <Workspace />
         <StatusBar />
         <Toaster position="bottom-right" />
       </div>
