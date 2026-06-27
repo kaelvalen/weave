@@ -1,0 +1,51 @@
+[package]
+name = "weave"
+version = "0.1.0"
+description = "Weave - AI-native plugin-based productivity system"
+authors = ["Weave Team"]
+license = "MIT"
+repository = ""
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-fs = "2.0.0"
+tauri-plugin-os = "2.0.0"
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+zip = "2"
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "5"
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+parking_lot = "0.12"
+regex = "1.10"
+meval = "0.2"
+
+[dependencies.wasmtime]
+version = "22"
+optional = true
+
+[dependencies.wasmtime-wasi]
+version = "22"
+optional = true
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+wasm-runtime = ["wasmtime", "wasmtime-wasi"]
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
