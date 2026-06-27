@@ -14,18 +14,33 @@ export function TopNav() {
   const setActiveView = useAppStore((s) => s.setActiveView);
 
   return (
-    <div className="flex justify-center pt-3 px-4">
-      <nav className="glass-strong flex items-center gap-3 rounded-2xl px-3 py-2 w-full max-w-4xl mx-auto">
+    <div
+      className="flex justify-center pt-3 px-4 pb-2 cursor-default select-none"
+      data-tauri-drag-region
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+    >
+      <nav
+        className="relative flex items-center justify-between gap-2 w-full max-w-4xl mx-auto rounded-[2rem] px-2 py-2 liquid-glass"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-2 mr-2 flex-shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+        <div
+          className="relative z-10 flex items-center gap-2 pl-2 pr-3 flex-shrink-0"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center shadow-lg shadow-primary/25">
             <Waves className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-sm text-foreground hidden sm:inline">Weave</span>
+          <span className="font-semibold text-sm text-foreground hidden sm:inline tracking-tight">
+            Weave
+          </span>
         </div>
 
-        {/* Nav Items */}
-        <div className="flex items-center gap-1 flex-1">
+        {/* Center Nav Items */}
+        <div
+          className="relative z-10 flex items-center gap-1 flex-1 justify-center"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
           {navItems.map((item) => {
             const isActive = activeView === item.view;
             const Icon = item.icon;
@@ -36,19 +51,26 @@ export function TopNav() {
                 onClick={() => setActiveView(item.view)}
                 aria-current={isActive ? 'page' : undefined}
                 className={`
-                  flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-150
+                  relative flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium
+                  transition-all duration-200 ease-out
                   ${isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    ? 'text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }
                 `}
               >
-                <Icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{item.label}</span>
+                {isActive && (
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-b from-primary to-primary/90 shadow-lg shadow-primary/30" />
+                )}
+                <Icon className="w-4 h-4 relative z-10" />
+                <span className="hidden sm:inline relative z-10">{item.label}</span>
               </button>
             );
           })}
         </div>
+
+        {/* Right spacer for balance — keeps nav centered */}
+        <div className="w-[76px] hidden sm:block flex-shrink-0" aria-hidden="true" />
       </nav>
     </div>
   );

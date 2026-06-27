@@ -51,11 +51,11 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
   const hasIntent = message.metadata?.intent;
 
   return (
-    <div className={`group flex gap-3 px-4 py-2 ${isUser ? 'justify-end' : ''}`}>
+    <div className={`group flex gap-3 px-4 py-2 ${isUser ? 'justify-end' : ''} message-enter`}>
       {/* Assistant Avatar */}
       {!isUser && (
         <div className="flex-shrink-0 mt-1">
-          <Avatar className="w-8 h-8 bg-gradient-to-br from-violet-500 to-fuchsia-500">
+          <Avatar className="w-8 h-8 bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-md shadow-violet-500/20">
             <AvatarFallback className="bg-transparent text-white text-xs">
               <Bot className="w-4 h-4" />
             </AvatarFallback>
@@ -65,9 +65,9 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
 
       {/* Glass Card */}
       <div
-        className={`flex-1 min-w-0 max-w-3xl rounded-xl p-4 transition-shadow ${
+        className={`flex-1 min-w-0 max-w-3xl rounded-2xl p-4 transition-all duration-200 hover:shadow-lg ${
           isUser
-            ? 'bg-primary/10 backdrop-blur-sm border border-primary/20'
+            ? 'bg-primary/12 backdrop-blur-md border border-primary/25 shadow-md shadow-primary/10'
             : 'glass'
         }`}
       >
@@ -168,7 +168,7 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
       {/* User Avatar */}
       {isUser && (
         <div className="flex-shrink-0 mt-1">
-          <Avatar className="w-8 h-8 bg-primary">
+          <Avatar className="w-8 h-8 bg-primary shadow-md shadow-primary/25">
             <AvatarFallback className="bg-primary text-primary-foreground text-xs">
               <User className="w-4 h-4" />
             </AvatarFallback>

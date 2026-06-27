@@ -62,10 +62,12 @@ export function ChatPanel() {
           {!hasMessages ? (
             /* Empty State */
             <div className="flex flex-col items-center justify-center min-h-[400px] px-8">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
-                <Bot className="w-8 h-8 text-primary" />
+              <div className="glass-strong rounded-3xl p-8 mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center shadow-lg shadow-primary/25">
+                  <Bot className="w-8 h-8 text-primary-foreground" />
+                </div>
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-semibold text-foreground mb-2">
                 Welcome to Weave
               </h3>
               <p className="text-sm text-muted-foreground text-center max-w-md mb-8 leading-relaxed">
@@ -73,21 +75,21 @@ export function ChatPanel() {
                 and much more. Just ask me anything or try one of the suggestions below.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
                 {SUGGESTED_PROMPTS.map((prompt, i) => (
                   <Button
                     key={i}
                     variant="outline"
-                    className="h-auto py-2.5 px-3 justify-start text-left gap-2 text-sm bg-background/50 backdrop-blur-sm border-border/60 hover:bg-accent transition-colors"
+                    className="h-auto py-3 px-4 justify-start text-left gap-3 text-sm glass hover:bg-accent/50 transition-all duration-200 hover:-translate-y-0.5"
                     onClick={() => useChatStore.getState().sendMessage(prompt.text)}
                   >
-                    <span className="text-base">{prompt.icon}</span>
+                    <span className="text-lg">{prompt.icon}</span>
                     <span className="truncate">{prompt.text}</span>
                   </Button>
                 ))}
               </div>
 
-              <div className="mt-8 text-xs text-muted-foreground/60 flex items-center gap-1">
+              <div className="mt-8 text-xs text-muted-foreground/60 flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3" />
                 Powered by AI with plugin capabilities
               </div>

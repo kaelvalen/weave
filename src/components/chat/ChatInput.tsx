@@ -181,7 +181,7 @@ export function ChatInput() {
         <div className="flex items-end gap-2">
           {/* Model Selector */}
           <Select value={selectedModel} onValueChange={setModel} disabled={modelsLoading || isStreaming}>
-            <SelectTrigger className="w-[180px] h-9 text-xs flex-shrink-0">
+            <SelectTrigger className="w-[180px] h-9 text-xs flex-shrink-0 bg-transparent border-0 hover:bg-muted/40 focus:ring-0 focus:ring-offset-0">
               <SelectValue placeholder={modelsLoading ? 'Loading...' : 'Select model'} />
             </SelectTrigger>
             <SelectContent>
@@ -218,7 +218,7 @@ export function ChatInput() {
           {/* Send Button */}
           <Button
             size="icon"
-            className="h-9 w-9 flex-shrink-0"
+            className="h-9 w-9 flex-shrink-0 rounded-xl shadow-md shadow-primary/20 transition-transform active:scale-95"
             disabled={!input.trim() || isStreaming}
             onClick={handleSend}
           >

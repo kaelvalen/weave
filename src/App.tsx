@@ -55,7 +55,7 @@ function App() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
+      <div className="h-screen w-screen flex flex-col bg-ambient text-foreground overflow-hidden">
         <TopNav />
         <Workspace />
         <StatusBar />
