@@ -15,10 +15,22 @@ fn main() {
         }
     };
 
+    let mut canvas_rx = app_state.canvas_tx.subscribe();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Emitter;
+                while let Ok(msg) = canvas_rx.recv().await {
+                    let _ = app_handle.emit("canvas-action", msg);
+                }
+            });
+            Ok(())
+        })
         .manage(app_state)
         .manage(weave::commands::models::SysinfoState::default())
         .invoke_handler(tauri::generate_handler![

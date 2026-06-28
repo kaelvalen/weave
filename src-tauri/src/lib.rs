@@ -24,6 +24,7 @@ pub struct AppState {
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
+    pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
 }
 
 impl AppState {
@@ -49,7 +50,9 @@ impl AppState {
         let config_arc = Arc::new(RwLock::new(config.clone()));
         let ai_config_arc = Arc::new(RwLock::new(config.ai.clone()));
 
-        let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone()));
+        let (canvas_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone(), canvas_tx.clone()));
         let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
         let workflow_engine = Arc::new(WorkflowEngine::new(plugin_manager.clone()));
 
@@ -64,6 +67,7 @@ impl AppState {
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),
+            canvas_tx,
         })
     }
 }

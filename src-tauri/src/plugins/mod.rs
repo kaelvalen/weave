@@ -9,3 +9,4 @@ pub mod git_plugin;
 pub mod http_plugin;
 pub mod memory_plugin;
 pub mod coder_plugin;
+pub mod canvas_plugin;

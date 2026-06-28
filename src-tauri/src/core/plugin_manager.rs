@@ -17,6 +17,7 @@ use crate::plugins::git_plugin::GitPlugin;
 use crate::plugins::http_plugin::HttpPlugin;
 use crate::plugins::memory_plugin::MemoryPlugin;
 use crate::plugins::coder_plugin::CoderPlugin;
+use crate::plugins::canvas_plugin::CanvasPlugin;
 use crate::utils::errors::WeaveError;
 
 pub struct PluginManager {
@@ -27,7 +28,7 @@ pub struct PluginManager {
 }
 
 impl PluginManager {
-    pub fn new(plugin_dir: PathBuf) -> Self {
+    pub fn new(plugin_dir: PathBuf, canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>) -> Self {
         let builtin = Self::create_builtin_plugins();
         let mut plugins = HashMap::new();
         let mut executors: HashMap<String, Box<dyn PluginExecutor>> = HashMap::new();
@@ -53,6 +54,7 @@ impl PluginManager {
         executors.insert("com.weave.builtin.http".into(), Box::new(HttpPlugin));
         executors.insert("com.weave.builtin.memory".into(), Box::new(MemoryPlugin));
         executors.insert("com.weave.builtin.coder".into(), Box::new(CoderPlugin));
+        executors.insert("com.weave.builtin.canvas".into(), Box::new(CanvasPlugin { canvas_tx }));
 
         Self {
             plugins: Arc::new(RwLock::new(plugins)),
@@ -173,6 +175,14 @@ impl PluginManager {
                 .capability("coder.run_check", r#"{"directory":"."}"#, "Auto-detect project type and run compiler/type checker")
                 .capability("coder.run_tests", r#"{"directory":".","filter":null}"#, "Auto-detect project type and run tests")
                 .capability("coder.list_dir", r#"{"path":".","depth":2,"show_hidden":false}"#, "Print directory tree structure")
+                .build(),
+
+            PluginBuilder::builtin("com.weave.builtin.canvas", "Canvas AI")
+                .description("Interact with the visual infinite canvas to create and manage diagrams, notes, and UI layouts")
+                .category(PluginCategory::Ai)
+                .capability("canvas.add_node", r##"{"type":"shapeNode","data":{"shapeType":"rectangle","backgroundColor":"#3b82f6"},"position":{"x":100,"y":100}}"##, "Add a node to the canvas. Types: shapeNode, textNode, noteNode, codeNode")
+                .capability("canvas.update_node", r#"{"id":"ai_node_123","data":{"text":"Hello"}}"#, "Update the data of an existing node")
+                .capability("canvas.clear", r#"{}"#, "Clear all nodes from the canvas")
                 .build(),
         ]
     }
