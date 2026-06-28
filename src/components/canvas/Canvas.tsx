@@ -29,8 +29,11 @@ import { ImageNode } from './nodes/ImageNode';
 import { FrameNode } from './nodes/FrameNode';
 import { DrawNode } from './nodes/DrawNode';
 import { CanvasToolbar, ToolMode } from './CanvasToolbar';
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { PropertiesPanel } from './PropertiesPanel';
 import { ProjectManager } from './ProjectManager';
+import { ContextMenu } from './ContextMenu';
 
 function CanvasInner() {
   const { mode: themeMode } = useThemeStore();
@@ -46,6 +49,18 @@ function CanvasInner() {
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{x: number, y: number}[]>([]);
+
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    targetNodeId: string | null;
+  }>({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    targetNodeId: null
+  });
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -84,7 +99,7 @@ function CanvasInner() {
 
   const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)), [setEdges]);
 
-  const onPaneClick = useCallback((event: React.MouseEvent) => {
+  const onPaneClick = useCallback(() => {
     // We handle creation in onPointerUp now.
     // Deselect if clicking on empty space while in select/pan mode.
     if (activeTool === 'select' || activeTool === 'pan') {
@@ -114,14 +129,144 @@ function CanvasInner() {
     }));
   }, [setNodes]);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    setContextMenu({
+      isOpen: true,
+      x: event.clientX,
+      y: event.clientY,
+      targetNodeId: node.id
+    });
+    
+    // Auto-select node if it isn't already selected (avoids clearing a multi-selection)
+    setNodes(nds => {
+      const isAlreadySelected = nds.find(n => n.id === node.id)?.selected;
+      if (isAlreadySelected) return nds;
+      return nds.map(n => ({...n, selected: n.id === node.id}));
+    });
+    setSelectedNodeId(node.id);
+  }, [setNodes]);
+
+  const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    event.preventDefault();
+    setContextMenu({
+      isOpen: true,
+      x: event.clientX,
+      y: event.clientY,
+      targetNodeId: null
+    });
+  }, []);
+
+
+
+  const handleExport = useCallback(async () => {
+    try {
+      const data = JSON.stringify({ nodes, edges }, null, 2);
+      if ('__TAURI__' in window) {
+        const filePath = await save({
+          filters: [{
+            name: 'Weave Canvas',
+            extensions: ['weave', 'json']
+          }],
+          defaultPath: `weave_canvas_${Date.now()}.weave`
+        });
+        if (filePath) {
+          await writeTextFile(filePath, data);
+        }
+      } else {
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `weave_canvas_${Date.now()}.weave`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Failed to export:", err);
+    }
+  }, [nodes, edges]);
+
+  const handleImport = useCallback(async () => {
+    try {
+      if ('__TAURI__' in window) {
+        const filePath = await open({
+          filters: [{
+            name: 'Weave Canvas',
+            extensions: ['weave', 'json']
+          }],
+          multiple: false
+        });
+        if (filePath && typeof filePath === 'string') {
+          const content = await readTextFile(filePath);
+          const parsed = JSON.parse(content);
+          if (parsed.nodes && parsed.edges) {
+            setNodes(parsed.nodes);
+            setEdges(parsed.edges);
+          }
+        }
+      } else {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.weave,.json';
+        input.onchange = (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const content = ev.target?.result as string;
+              const parsed = JSON.parse(content);
+              if (parsed.nodes && parsed.edges) {
+                setNodes(parsed.nodes);
+                setEdges(parsed.edges);
+              }
+            } catch (err) {
+              console.error("Failed to parse file", err);
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      }
+    } catch (err) {
+      console.error("Failed to import:", err);
+    }
+  }, [setNodes, setEdges]);
+
+  const handleBringToFront = useCallback(() => {
+    setNodes(nds => {
+      let maxZ = 0;
+      nds.forEach(n => { if ((n.zIndex || 0) > maxZ) maxZ = n.zIndex || 0; });
+      return nds.map(n => n.selected ? { ...n, zIndex: maxZ + 1 } : n);
+    });
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  }, [setNodes]);
+
+  const handleSendToBack = useCallback(() => {
+    setNodes(nds => {
+      let minZ = 0;
+      nds.forEach(n => { if ((n.zIndex || 0) < minZ) minZ = n.zIndex || 0; });
+      return nds.map(n => n.selected ? { ...n, zIndex: minZ - 1 } : n);
+    });
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  }, [setNodes]);
+
   const selectedNode = useMemo(() => nodes.find(n => n.id === selectedNodeId) || null, [nodes, selectedNodeId]);
 
   const deleteSelectedNode = useCallback(() => {
-    if (selectedNodeId) {
-      setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
-      setSelectedNodeId(null);
+    const nodesToDelete = nodes.filter(n => n.selected);
+    if (nodesToDelete.length > 0) {
+      const idsToDelete = nodesToDelete.map(n => n.id);
+      setNodes((nds) => nds.filter((n) => !idsToDelete.includes(n.id)));
+      if (selectedNodeId && idsToDelete.includes(selectedNodeId)) {
+        setSelectedNodeId(null);
+      }
     }
-  }, [selectedNodeId, setNodes]);
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  }, [nodes, selectedNodeId, setNodes]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (activeTool === 'select' || activeTool === 'pan') return;
@@ -256,6 +401,10 @@ function CanvasInner() {
       } else if (action === 'clear') {
         setNodes([]);
         setEdges([]);
+      } else if (action === 'export') {
+        handleExport();
+      } else if (action === 'import') {
+        handleImport();
       }
     });
 
@@ -301,7 +450,7 @@ function CanvasInner() {
       <ProjectManager />
       
       <div className="flex-1 h-full relative">
-        <CanvasToolbar activeTool={activeTool} setActiveTool={setActiveTool} />
+        <CanvasToolbar activeTool={activeTool} setActiveTool={setActiveTool} onExport={handleExport} onImport={handleImport} />
         
         {activeProjectId ? (
           <ReactFlow
@@ -312,9 +461,11 @@ function CanvasInner() {
             onConnect={onConnect}
             onPaneClick={onPaneClick}
             onSelectionChange={onSelectionChange}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneContextMenu={onPaneContextMenu}
             nodeTypes={nodeTypes}
             colorMode={isDark ? 'dark' : 'light'}
-            panOnDrag={activeTool === 'pan' || activeTool === 'select'}
+            panOnDrag={activeTool === 'pan'}
             selectionOnDrag={activeTool === 'select'}
             panOnScroll={true}
             zoomOnScroll={true}
@@ -388,6 +539,17 @@ function CanvasInner() {
       </div>
 
       <PropertiesPanel selectedNode={selectedNode} updateNode={updateNode} deleteNode={deleteSelectedNode} />
+      
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={{ x: contextMenu.x, y: contextMenu.y }}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+        onBringToFront={handleBringToFront}
+        onSendToBack={handleSendToBack}
+        onDelete={deleteSelectedNode}
+        targetNodeId={contextMenu.targetNodeId}
+        selectedNodesCount={nodes.filter(n => n.selected).length}
+      />
     </div>
   );
 }

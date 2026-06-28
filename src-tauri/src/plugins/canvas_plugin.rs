@@ -15,6 +15,8 @@ impl PluginExecutor for CanvasPlugin {
             "canvas.add_node" => self.add_node(params),
             "canvas.update_node" => self.update_node(params),
             "canvas.clear" => self.clear(),
+            "canvas.export" => self.export(),
+            "canvas.import" => self.import(),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
         }
     }
@@ -93,6 +95,42 @@ impl CanvasPlugin {
         Ok(json!({
             "success": true,
             "message": "Canvas cleared"
+        }))
+    }
+
+    fn export(&self) -> Result<Value, WeaveError> {
+        let payload = json!({
+            "action": "export",
+            "payload": {}
+        });
+
+        if let Err(e) = self.canvas_tx.send(payload.clone()) {
+            tracing::warn!("Failed to send canvas action: {}", e);
+        } else {
+            info!("Emitted canvas export event");
+        }
+
+        Ok(json!({
+            "success": true,
+            "message": "Export dialog opened"
+        }))
+    }
+
+    fn import(&self) -> Result<Value, WeaveError> {
+        let payload = json!({
+            "action": "import",
+            "payload": {}
+        });
+
+        if let Err(e) = self.canvas_tx.send(payload.clone()) {
+            tracing::warn!("Failed to send canvas action: {}", e);
+        } else {
+            info!("Emitted canvas import event");
+        }
+
+        Ok(json!({
+            "success": true,
+            "message": "Import dialog opened"
         }))
     }
 }

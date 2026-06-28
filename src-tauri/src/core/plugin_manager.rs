@@ -180,9 +180,11 @@ impl PluginManager {
             PluginBuilder::builtin("com.weave.builtin.canvas", "Canvas AI")
                 .description("Interact with the visual infinite canvas to create and manage diagrams, notes, and UI layouts")
                 .category(PluginCategory::Ai)
-                .capability("canvas.add_node", r##"{"type":"shapeNode","data":{"shapeType":"rectangle","backgroundColor":"#3b82f6"},"position":{"x":100,"y":100}}"##, "Add a node to the canvas. Types: shapeNode, textNode, noteNode, codeNode")
+                .capability("canvas.add_node", r##"{"type":"shapeNode","data":{"shapeType":"rectangle","backgroundColor":"#3b82f6"},"position":{"x":100,"y":100}}"##, "Add a node to the canvas. Types: shapeNode, textNode, noteNode, codeNode, imageNode")
                 .capability("canvas.update_node", r#"{"id":"ai_node_123","data":{"text":"Hello"}}"#, "Update the data of an existing node")
                 .capability("canvas.clear", r#"{}"#, "Clear all nodes from the canvas")
+                .capability("canvas.export", r#"{}"#, "Trigger a save dialog to export the canvas to a file")
+                .capability("canvas.import", r#"{}"#, "Trigger an open dialog to import a canvas from a file")
                 .build(),
         ]
     }

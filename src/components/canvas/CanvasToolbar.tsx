@@ -1,7 +1,7 @@
 import { 
   MousePointer2, Hand, Square, Circle, Diamond, Image as ImageIcon, 
   Layout, Type, StickyNote, FileCode, Pencil, ArrowUpRight, 
-  Minus, Hexagon, Star, Crop, Spline, ChevronLeft
+  Minus, Hexagon, Star, Crop, Spline, ChevronLeft, Download, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -18,9 +18,11 @@ export type ToolMode = 'select' | 'pan' | 'rectangle' | 'circle' | 'diamond' | '
 interface CanvasToolbarProps {
   activeTool: ToolMode;
   setActiveTool: (tool: ToolMode) => void;
+  onExport?: () => void;
+  onImport?: () => void;
 }
 
-export function CanvasToolbar({ activeTool, setActiveTool }: CanvasToolbarProps) {
+export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }: CanvasToolbarProps) {
   // To remember the last used tool in a category
   const [activeShape, setActiveShape] = useState<ToolMode>('rectangle');
   const [activeFrame, setActiveFrame] = useState<ToolMode>('frame');
@@ -171,6 +173,43 @@ export function CanvasToolbar({ activeTool, setActiveTool }: CanvasToolbarProps)
 
         return null;
       })}
+
+      {(onExport || onImport) && (
+        <>
+          <div className="w-6 h-[1px] bg-border mx-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl w-10 h-10 transition-all hover:bg-primary/10 hover:text-primary hover:scale-105"
+                onClick={onImport}
+              >
+                <Upload className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+              Import Canvas (.weave)
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl w-10 h-10 transition-all hover:bg-primary/10 hover:text-primary hover:scale-105"
+                onClick={onExport}
+              >
+                <Download className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+              Export Canvas (.weave)
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
     </div>
   );
 }

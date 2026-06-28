@@ -18,7 +18,7 @@ interface TextNodeProps {
 }
 
 export function TextNode({ data, selected }: TextNodeProps) {
-  const { fontSize = 16, color = 'inherit', fontWeight = 'normal', opacity = 100, borderRadius, backgroundColor, borderColor, borderWidth } = data;
+  const { opacity = 100, borderRadius, backgroundColor, borderColor, borderWidth } = data;
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text || 'Text');
   const inputRef = useRef<HTMLTextAreaElement>(null);
