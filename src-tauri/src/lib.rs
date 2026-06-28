@@ -1,6 +1,6 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use tracing::info;
 
 pub mod commands;

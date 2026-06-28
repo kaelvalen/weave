@@ -8,6 +8,8 @@ import { Bot, Trash2, History } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
+import { Button } from '@/components/ui/button';
+import { PlayCircle, XCircle } from 'lucide-react';
 
 const SUGGESTED_PROMPTS = [
   { text: 'List files in current directory', icon: '📁', desc: 'Browse filesystem' },
@@ -152,6 +154,44 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
         </div>
         </ScrollArea>
         </div>
+
+        {/* ── Approval Banner ── */}
+        {(() => {
+          const pendingApprovals = messages.flatMap(m => 
+            (m.metadata?.plugin_calls || []).filter(c => c.status === 'pending_approval').map(c => ({ messageId: m.id, call: c }))
+          );
+          if (pendingApprovals.length === 0) return null;
+
+          const handleAcceptAll = () => {
+            pendingApprovals.forEach(({ messageId, call }) => {
+              useChatStore.getState().executeToolCall(messageId, call.capability, true);
+            });
+          };
+
+          const handleRejectAll = () => {
+            pendingApprovals.forEach(({ messageId, call }) => {
+              useChatStore.getState().executeToolCall(messageId, call.capability, false);
+            });
+          };
+
+          return (
+            <div className="mx-4 mb-2 p-3 bg-card border border-border rounded-xl shadow-lg flex items-center justify-between animate-in slide-in-from-bottom-2 fade-in duration-200">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <PlayCircle className="w-4 h-4 text-orange-500 animate-pulse" />
+                <span className="font-medium">AI wants to run {pendingApprovals.length} tool{pendingApprovals.length > 1 ? 's' : ''}.</span>
+                <span className="text-muted-foreground text-xs ml-1 hidden sm:inline">(Files will be changed)</span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="default" className="h-8 bg-green-600 hover:bg-green-700 text-white shadow-sm" onClick={handleAcceptAll}>
+                  Accept
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600" onClick={handleRejectAll}>
+                  Reject
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Input ── */}
         <div className="flex-shrink-0 bg-transparent">

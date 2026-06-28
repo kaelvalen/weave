@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import type { ChatMessage as ChatMessageType, PluginCall } from '@/types/chat';
 import { Button } from '@/components/ui/button';
@@ -62,7 +62,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
           style={vscDarkPlus}
           language={lang}
           PreTag="div"
-          customStyle={{ margin: 0, padding: '1rem', background: 'transparent', fontSize: '13px' }}
+          customStyle={{ margin: 0, padding: '1rem', background: 'transparent', fontSize: '13px', overflowX: 'auto' }}
+          wrapLines={true}
         >
           {String(children).replace(/\n$/, '')}
         </SyntaxHighlighter>
@@ -71,7 +72,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
   }
 
   return (
-    <code {...props} className={`${className} bg-muted text-foreground px-1.5 py-0.5 rounded-md text-sm font-mono border border-border/50`}>
+    <code {...props} className={`${className} bg-muted text-foreground px-1.5 py-0.5 rounded-md text-sm font-mono border border-border/50 break-all whitespace-pre-wrap`}>
       {children}
     </code>
   );
@@ -98,12 +99,14 @@ function InlineBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMessageProps) {
+export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   
-  const { isStreaming, editAndResend, regenerateResponse } = useChatStore();
+  const isStreaming = useChatStore(s => s.isStreaming);
+  const editAndResend = useChatStore(s => s.editAndResend);
+  const regenerateResponse = useChatStore(s => s.regenerateResponse);
   const isAssistant = message.role === 'assistant';
   const showCursor  = _isLast && isStreaming && isAssistant;
 
@@ -151,7 +154,7 @@ export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMes
       <div className="group flex items-start gap-4 px-5 py-1">
         <div className="flex-shrink-0 w-8" />
         <div className="flex-1 min-w-0">
-          <ToolCallCard call={fakeToolCall} />
+          <ToolCallCard call={fakeToolCall} messageId={message.id} />
         </div>
       </div>
     );
@@ -229,8 +232,16 @@ export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMes
         {hasPluginCalls && (
           <div className="flex flex-col gap-2 my-3">
             {message.metadata!.plugin_calls.map((call, i) => (
-              <ToolCallCard key={i} call={call} />
+              <ToolCallCard key={i} call={call} messageId={message.id} />
             ))}
+          </div>
+        )}
+
+        {/* Incomplete Tool Call Warning */}
+        {message.content.includes('<call plugin=') && !message.content.includes('</call>') && (
+          <div className="mt-2 mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs rounded-md flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            <span>Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı. <strong>Settings</strong>'den max_tokens değerini artırabilir veya modele dosyayı parça parça yazmasını söyleyebilirsiniz.</span>
           </div>
         )}
 
@@ -261,7 +272,7 @@ export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMes
               </div>
             </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0">
+            <div className="prose prose-sm dark:prose-invert max-w-[calc(100vw-120px)] prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
@@ -280,4 +291,4 @@ export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMes
       </div>
     </div>
   );
-}
+});

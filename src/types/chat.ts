@@ -1,6 +1,6 @@
 export type ChatRole = 'user' | 'assistant' | 'system';
 
-export type CallStatus = 'pending' | 'success' | 'error';
+export type CallStatus = 'pending' | 'pending_approval' | 'success' | 'error';
 
 export type Provider = 'openai' | 'anthropic' | 'local';
 

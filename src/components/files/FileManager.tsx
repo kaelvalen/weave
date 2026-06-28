@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   FolderOpen, FileText, ChevronRight, ChevronDown, 
-  Search, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo
+  Search, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo, RefreshCw
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -125,6 +125,22 @@ export function FileManager() {
     }
   }, [currentRoot]);
 
+  // Listen for auto-refresh events (e.g. from Coder Plugin)
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadDirectory(currentRoot).then(nodes => setRootNodes(nodes));
+    };
+    window.addEventListener('weave-fs-refresh', handleRefresh);
+    return () => window.removeEventListener('weave-fs-refresh', handleRefresh);
+  }, [currentRoot, loadDirectory]);
+
+  const handleManualRefresh = async () => {
+    setIsLoading(true);
+    const nodes = await loadDirectory(currentRoot);
+    setRootNodes(nodes);
+    setIsLoading(false);
+  };
+
   const handleOpenFolder = async () => {
     try {
       const selected = await open({ directory: true, multiple: false });
@@ -188,6 +204,9 @@ export function FileManager() {
             </h3>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleManualRefresh} title="Refresh Directory">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
             <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleOpenFolder} title="Open Folder">
               <FolderOpen className="w-3.5 h-3.5" />
             </Button>

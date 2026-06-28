@@ -13,6 +13,16 @@ export function useChatStream() {
 
   useEffect(() => {
     let mounted = true;
+    let chunkBuffer = '';
+    let lastMessageId = '';
+    let flushInterval: ReturnType<typeof setInterval>;
+
+    const flush = () => {
+      if (chunkBuffer && lastMessageId) {
+        useChatStore.getState().appendChunk(chunkBuffer, lastMessageId);
+        chunkBuffer = '';
+      }
+    };
 
     const setupListener = async () => {
       try {
@@ -21,13 +31,18 @@ export function useChatStream() {
           const { chunk, message_id, done } = event.payload;
           
           if (!done) {
-            useChatStore.getState().appendChunk(chunk, message_id);
+            chunkBuffer += chunk;
+            lastMessageId = message_id;
           } else {
+            flush();
             useChatStore.getState().finalizeMessage(message_id);
           }
         });
 
         unlistenRef.current = unlisten;
+        
+        // Flush buffer every 60ms to optimize React re-renders (approx 16fps)
+        flushInterval = setInterval(flush, 60);
       } catch (err) {
         console.warn('Failed to setup stream listener:', err);
       }
@@ -37,6 +52,7 @@ export function useChatStream() {
 
     return () => {
       mounted = false;
+      clearInterval(flushInterval);
       if (unlistenRef.current) {
         unlistenRef.current();
       }

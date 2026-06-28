@@ -20,6 +20,7 @@ interface ChatState {
   regenerateResponse: (messageId: string) => Promise<void>;
   appendChunk: (chunk: string, messageId: string) => void;
   finalizeMessage: (messageId: string) => void;
+  executeToolCall: (messageId: string, capName: string, isApproved: boolean) => Promise<void>;
   clearChat: () => void;
   setModel: (model: string, provider?: string) => void;
   setError: (error: string | null) => void;
@@ -120,6 +121,19 @@ export const useChatStore = create<ChatState>()(
 
       const editedMessage = { ...state.messages[msgIndex], content: newContent.trim(), timestamp: Date.now() };
 
+      const removedMessages = state.messages.slice(msgIndex);
+      
+      // Auto-rollback coder changes
+      for (const msg of removedMessages) {
+        if (msg.role === 'assistant' && msg.metadata?.plugin_calls) {
+          for (const call of msg.metadata.plugin_calls) {
+            if (['coder.write_file', 'coder.apply_diff'].includes(call.capability) && call.status === 'success' && call.params.path) {
+              usePluginStore.getState().executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path }).catch(console.error);
+            }
+          }
+        }
+      }
+
       // Truncate history and replace the edited message
       set((s) => {
         s.messages = s.messages.slice(0, msgIndex);
@@ -204,6 +218,19 @@ export const useChatStore = create<ChatState>()(
 
       const lastUserMsg = state.messages[lastUserIndex];
 
+      const removedMessages = state.messages.slice(lastUserIndex + 1);
+      
+      // Auto-rollback coder changes
+      for (const msg of removedMessages) {
+        if (msg.role === 'assistant' && msg.metadata?.plugin_calls) {
+          for (const call of msg.metadata.plugin_calls) {
+            if (['coder.write_file', 'coder.apply_diff'].includes(call.capability) && call.status === 'success' && call.params.path) {
+              usePluginStore.getState().executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path }).catch(console.error);
+            }
+          }
+        }
+      }
+
       // Truncate history up to the last user message (inclusive)
       set((s) => {
         s.messages = s.messages.slice(0, lastUserIndex + 1);
@@ -278,6 +305,17 @@ export const useChatStore = create<ChatState>()(
       set((state) => {
         state.isStreaming = false;
       });
+      
+      const saveSession = () => {
+        const store = get();
+        if (store.messages.length > 0) {
+          invoke('chat_save_session', {
+            id: store.conversationId,
+            title: store.conversationTitle,
+            messages: store.messages,
+          }).catch(console.error);
+        }
+      };
       
       // AI Function Calling Interception
       const msg = get().messages.find(m => m.id === messageId);
@@ -356,6 +394,7 @@ export const useChatStore = create<ChatState>()(
               });
             });
             get().sendMessage(`System error: Tool ${capName} is not available. Please tell the user you cannot perform this action.`);
+            saveSession();
             return;
           }
           
@@ -380,6 +419,9 @@ export const useChatStore = create<ChatState>()(
             }
           });
           
+          // Require approval for destructive operations
+          const requiresApproval = ['coder.write_file', 'coder.apply_diff'].includes(capName);
+          
           // Attach tool call to assistant message
           set((state) => {
             const assistantMsg = state.messages.find(m => m.id === messageId);
@@ -389,10 +431,16 @@ export const useChatStore = create<ChatState>()(
                 plugin_id: pluginId,
                 capability: capName!,
                 params: params as Record<string, unknown>,
-                status: 'pending'
+                status: requiresApproval ? 'pending_approval' : 'pending'
               });
             }
           });
+          
+          saveSession();
+          
+          if (requiresApproval) {
+             return; // Stop execution, wait for user to call executeToolCall
+          }
           
           // Execute the tool
           usePluginStore.getState().executeCapability(pluginId, capName, params)
@@ -409,6 +457,8 @@ export const useChatStore = create<ChatState>()(
                   }
                 }
               });
+              
+              saveSession();
               
               // Feed it back to the AI quietly
               const quietUserMsg: ChatMessage = {
@@ -453,6 +503,8 @@ export const useChatStore = create<ChatState>()(
                 }
               });
               
+              saveSession();
+              
               const quietUserMsg: ChatMessage = {
                 id: generateId(),
                 role: 'user',
@@ -470,8 +522,140 @@ export const useChatStore = create<ChatState>()(
                 set((state) => { state.isStreaming = false; state.error = String(err); });
               });
             });
+        } else {
+          // No tool call, just save the final message
+          saveSession();
         }
+      } else {
+        saveSession();
       }
+    },
+
+    executeToolCall: async (messageId: string, capName: string, isApproved: boolean) => {
+      const state = get();
+      const assistantMsg = state.messages.find(m => m.id === messageId);
+      if (!assistantMsg || !assistantMsg.metadata) return;
+      
+      const call = assistantMsg.metadata.plugin_calls.find(c => c.capability === capName);
+      if (!call || call.status !== 'pending_approval') return;
+      
+      const saveSession = () => {
+        const store = get();
+        if (store.messages.length > 0) {
+          invoke('chat_save_session', {
+            id: store.conversationId,
+            title: store.conversationTitle,
+            messages: store.messages,
+          }).catch(console.error);
+        }
+      };
+
+      if (!isApproved) {
+        set((s) => {
+          const msg = s.messages.find(m => m.id === messageId);
+          if (msg && msg.metadata) {
+            const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+            if (c) {
+              c.status = 'error';
+              c.result = { error: 'User rejected the operation.' };
+            }
+          }
+        });
+        saveSession();
+        
+        const quietUserMsg: ChatMessage = {
+          id: generateId(),
+          role: 'user',
+          content: `Tool ${capName} was rejected by the user. Please reconsider your approach or ask the user for clarification.`,
+          timestamp: Date.now(),
+          metadata: { plugin_calls: [], isHidden: true }
+        };
+        set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+        
+        invoke('chat_send_message', {
+          message: quietUserMsg.content,
+          model: get().selectedModel,
+        }).then(() => set((s) => { s.isStreaming = false; }))
+        .catch(err => set((s) => { s.isStreaming = false; s.error = String(err); }));
+        return;
+      }
+      
+      // Approved! Set to pending and execute
+      set((s) => {
+        const msg = s.messages.find(m => m.id === messageId);
+        if (msg && msg.metadata) {
+          const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+          if (c) c.status = 'pending';
+        }
+      });
+      saveSession();
+      
+      usePluginStore.getState().executeCapability(call.plugin_id, capName, call.params)
+        .then(res => {
+          const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+          
+          set((s) => {
+            const msg = s.messages.find(m => m.id === messageId);
+            if (msg && msg.metadata) {
+              const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+              if (c) {
+                c.status = 'success';
+                c.result = typeof res === 'object' ? res as Record<string, unknown> : { value: res };
+              }
+            }
+          });
+          saveSession();
+          
+          const quietUserMsg: ChatMessage = {
+            id: generateId(),
+            role: 'user',
+            content: `Tool ${capName} returned:\n${resultStr}\n\nPlease continue your answer based on this result.`,
+            timestamp: Date.now(),
+            metadata: { plugin_calls: [], isHidden: true }
+          };
+          set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+          
+          invoke('chat_send_message', {
+            message: quietUserMsg.content,
+            model: get().selectedModel,
+            provider: get().selectedProvider,
+          }).then(() => set((s) => { s.isStreaming = false; }))
+          .catch(err => set((s) => { s.isStreaming = false; s.error = String(err); }));
+        })
+        .catch(err => {
+          let errorStr = String(err);
+          if (typeof err === 'object' && err !== null) {
+            const key = Object.keys(err)[0];
+            if (key && typeof (err as any)[key] === 'string') errorStr = `${key}: ${(err as any)[key]}`;
+            else errorStr = JSON.stringify(err);
+          }
+          set((s) => {
+            const msg = s.messages.find(m => m.id === messageId);
+            if (msg && msg.metadata) {
+              const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+              if (c) {
+                c.status = 'error';
+                c.result = { error: errorStr };
+              }
+            }
+          });
+          saveSession();
+          
+          const quietUserMsg: ChatMessage = {
+            id: generateId(),
+            role: 'user',
+            content: `Tool ${capName} failed with error:\n${errorStr}\n\nPlease apologize and continue.`,
+            timestamp: Date.now(),
+            metadata: { plugin_calls: [], isHidden: true }
+          };
+          set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+          
+          invoke('chat_send_message', {
+            message: quietUserMsg.content,
+            model: get().selectedModel,
+          }).then(() => set((s) => { s.isStreaming = false; }))
+          .catch(err => set((s) => { s.isStreaming = false; s.error = String(err); }));
+        });
     },
 
     clearChat: async () => {

@@ -16,6 +16,7 @@ use crate::plugins::sqlite_plugin::SqlitePlugin;
 use crate::plugins::git_plugin::GitPlugin;
 use crate::plugins::http_plugin::HttpPlugin;
 use crate::plugins::memory_plugin::MemoryPlugin;
+use crate::plugins::coder_plugin::CoderPlugin;
 use crate::utils::errors::WeaveError;
 
 pub struct PluginManager {
@@ -51,6 +52,7 @@ impl PluginManager {
         executors.insert("com.weave.builtin.git".into(), Box::new(GitPlugin));
         executors.insert("com.weave.builtin.http".into(), Box::new(HttpPlugin));
         executors.insert("com.weave.builtin.memory".into(), Box::new(MemoryPlugin));
+        executors.insert("com.weave.builtin.coder".into(), Box::new(CoderPlugin));
 
         Self {
             plugins: Arc::new(RwLock::new(plugins)),
@@ -157,6 +159,20 @@ impl PluginManager {
                 .capability("memory.recall", r#"{"key":"..."}"#, "Recall a value by key (omit key to get all)")
                 .capability("memory.delete", r#"{"key":"..."}"#, "Delete a stored key")
                 .capability("memory.list", r#"{}"#, "List all stored memory keys")
+                .build(),
+
+            PluginBuilder::builtin("com.weave.builtin.coder", "Coder AI")
+                .description("Advanced agentic coding capabilities for autonomous software development")
+                .category(PluginCategory::Ai)
+                .read_access(&["file://*"])
+                .write_access(&["file://*"])
+                .capability("coder.read_file", r#"{"path":"..."}"#, "Read source file with line numbers")
+                .capability("coder.write_file", r#"{"path":"...","content":"...","create_dirs":true}"#, "Write a file (backs up previous to .weave.bak)")
+                .capability("coder.apply_diff", r#"{"path":"...","old_str":"...","new_str":"..."}"#, "Replace EXACT unique string old_str with new_str")
+                .capability("coder.revert_file", r#"{"path":"..."}"#, "Revert a file to its .weave.bak backup (undo change)")
+                .capability("coder.run_check", r#"{"directory":"."}"#, "Auto-detect project type and run compiler/type checker")
+                .capability("coder.run_tests", r#"{"directory":".","filter":null}"#, "Auto-detect project type and run tests")
+                .capability("coder.list_dir", r#"{"path":".","depth":2,"show_hidden":false}"#, "Print directory tree structure")
                 .build(),
         ]
     }
@@ -389,12 +405,18 @@ impl PluginManager {
 
     pub fn get_system_prompt(&self) -> String {
         let mut prompt = String::new();
-        prompt.push_str("You are Weave, a helpful AI assistant with access to powerful tools.\n\n");
+        prompt.push_str("You are Weave, an advanced autonomous Agentic Coding Assistant.\n\n");
+        prompt.push_str("## Core Directives\n");
+        prompt.push_str("1. **Agentic Loop**: You do not just answer questions; you take autonomous action. You make tool calls, receive results, evaluate if the task is done, and if not, you take the next step. You only stop and talk to the user when the task is complete, or you are completely stuck.\n");
+        prompt.push_str("2. **Context Gathering**: Always start by understanding the environment. Use `coder.list_dir` or `coder.read_file` to analyze the project structure and existing code BEFORE writing code.\n");
+        prompt.push_str("3. **Multi-step Planning**: Break down complex requests. Think step-by-step. Implement one part, run tests/checks, then move to the next.\n");
+        prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
+        prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. Only use `coder.write_file` for new files or massive rewrites.\n\n");
         prompt.push_str("## Tool Usage Rules\n");
-        prompt.push_str("- If you need to use a tool, output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call>\n");
-        prompt.push_str("- Wait for the tool result before continuing.\n");
-        prompt.push_str("- If no tool is needed, respond normally.\n");
-        prompt.push_str("- For text with newlines in JSON parameters, use \\n.\n\n");
+        prompt.push_str("- Output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call> when using a tool.\n");
+        prompt.push_str("- You will receive the tool result in the next turn.\n");
+        prompt.push_str("- You may execute ONE tool at a time.\n");
+        prompt.push_str("- Do NOT output markdown code blocks containing the `<call>` tag. Output the `<call>` tag completely unformatted.\n\n");
         prompt.push_str("## Available Tools\n\n");
 
         for plugin in self.get_loaded() {
@@ -409,9 +431,15 @@ impl PluginManager {
             }
         }
 
-        prompt.push_str("\n## Example\n");
-        prompt.push_str("To get current time: <call plugin=\"sys.time\">{}</call>\n");
-        prompt.push_str("To read a file: <call plugin=\"file.read\">{\"path\":\"/home/user/test.txt\"}</call>\n");
+        prompt.push_str("\n## Example Flow\n");
+        prompt.push_str("User: Fix the bug in auth.ts\n");
+        prompt.push_str("You: <call plugin=\"coder.read_file\">{\"path\":\"src/auth.ts\"}</call>\n");
+        prompt.push_str("[System returns file content]\n");
+        prompt.push_str("You: <call plugin=\"coder.apply_diff\">{\"path\":\"src/auth.ts\", \"old_str\":\"if (user == null)\", \"new_str\":\"if (!user || user.locked)\"}</call>\n");
+        prompt.push_str("[System returns success]\n");
+        prompt.push_str("You: <call plugin=\"coder.run_check\">{\"directory\":\".\"}</call>\n");
+        prompt.push_str("[System returns success]\n");
+        prompt.push_str("You: I have fixed the bug and verified the build successfully.\n");
         prompt
     }
 }

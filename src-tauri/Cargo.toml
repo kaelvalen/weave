@@ -35,6 +35,7 @@ regex = "1.10"
 meval = "0.2"
 fend-core = "1.5.8"
 pyo3 = { version = "0.22", features = ["auto-initialize"] }
+wait-timeout = "0.2.1"
 
 [dependencies.wasmtime]
 version = "22"

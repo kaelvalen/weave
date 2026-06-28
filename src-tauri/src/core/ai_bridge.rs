@@ -18,7 +18,8 @@ struct OpenAiRequest {
     model: String,
     messages: Vec<OpenAiMessage>,
     temperature: f64,
-    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
     stream: bool,
 }
 
@@ -47,7 +48,8 @@ struct OpenAiDelta {
 struct AnthropicRequest {
     model: String,
     messages: Vec<AnthropicMessage>,
-    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
     temperature: f64,
     stream: bool,
 }
@@ -390,7 +392,7 @@ impl AiBridge {
             model: model.to_string(),
             messages: openai_messages,
             temperature,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
             stream: false,
         };
 
@@ -471,7 +473,7 @@ impl AiBridge {
         let request = AnthropicRequest {
             model: model.to_string(),
             messages: anthropic_messages,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { Some(8192) } else { Some(max_tokens) },
             temperature,
             stream: false,
         };
@@ -596,7 +598,7 @@ impl AiBridge {
             model: model.to_string(),
             messages: kimi_messages,
             temperature,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
             stream: false,
         };
 
@@ -668,7 +670,7 @@ impl AiBridge {
             model: model.to_string(),
             messages: openai_messages,
             temperature,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
             stream: true,
         };
 
@@ -769,7 +771,7 @@ impl AiBridge {
         let request = AnthropicRequest {
             model: model.to_string(),
             messages: anthropic_messages,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { Some(8192) } else { Some(max_tokens) },
             temperature,
             stream: true,
         };
@@ -995,7 +997,7 @@ impl AiBridge {
             model: model.to_string(),
             messages: kimi_messages,
             temperature,
-            max_tokens,
+            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
             stream: true,
         };
 

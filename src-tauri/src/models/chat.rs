@@ -56,6 +56,8 @@ pub struct IntentResult {
 #[serde(rename_all = "lowercase")]
 pub enum CallStatus {
     Pending,
+    #[serde(rename = "pending_approval")]
+    PendingApproval,
     Success,
     Error,
 }

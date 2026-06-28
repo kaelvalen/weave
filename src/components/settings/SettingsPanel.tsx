@@ -84,43 +84,83 @@ export function SettingsPanel() {
             <div className="flex-1 overflow-y-auto p-6 lg:p-10 pb-32 lg:pb-32">
               <TabsContent value="ai" className="space-y-8 mt-0 outline-none">
             <SectionCard title="OpenAI" desc="Configure your OpenAI API connection.">
-              <FieldLabel label="API Key">
-                <PasswordInput
-                  value={config.ai.openai.api_key}
-                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, openai: { ...config.ai.openai, api_key: v } } })}
-                  placeholder="sk-..."
-                />
-              </FieldLabel>
+              <div className="space-y-4">
+                <FieldLabel label="API Key">
+                  <PasswordInput
+                    value={config.ai.openai.api_key}
+                    onChange={(v) => setConfig({ ...config, ai: { ...config.ai, openai: { ...config.ai.openai, api_key: v } } })}
+                    placeholder="sk-..."
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldLabel label="Model">
+                    <Input value={config.ai.openai.model} onChange={(e) => setConfig({ ...config, ai: { ...config.ai, openai: { ...config.ai.openai, model: e.target.value } } })} />
+                  </FieldLabel>
+                  <FieldLabel label="Max Tokens">
+                    <Input type="number" value={config.ai.openai.max_tokens === 0 ? '' : config.ai.openai.max_tokens} placeholder="0 (Unlimited)" onChange={(e) => setConfig({ ...config, ai: { ...config.ai, openai: { ...config.ai.openai, max_tokens: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 } } })} />
+                  </FieldLabel>
+                </div>
+              </div>
             </SectionCard>
 
             <SectionCard title="Anthropic" desc="Configure your Anthropic API connection.">
-              <FieldLabel label="API Key">
-                <PasswordInput
-                  value={config.ai.anthropic.api_key}
-                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, anthropic: { ...config.ai.anthropic, api_key: v } } })}
-                  placeholder="sk-ant-..."
-                />
-              </FieldLabel>
+              <div className="space-y-4">
+                <FieldLabel label="API Key">
+                  <PasswordInput
+                    value={config.ai.anthropic.api_key}
+                    onChange={(v) => setConfig({ ...config, ai: { ...config.ai, anthropic: { ...config.ai.anthropic, api_key: v } } })}
+                    placeholder="sk-ant-..."
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldLabel label="Model">
+                    <Input value={config.ai.anthropic.model} onChange={(e) => setConfig({ ...config, ai: { ...config.ai, anthropic: { ...config.ai.anthropic, model: e.target.value } } })} />
+                  </FieldLabel>
+                  <FieldLabel label="Max Tokens">
+                    <Input type="number" value={config.ai.anthropic.max_tokens === 0 ? '' : config.ai.anthropic.max_tokens} placeholder="0 (Unlimited)" onChange={(e) => setConfig({ ...config, ai: { ...config.ai, anthropic: { ...config.ai.anthropic, max_tokens: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 } } })} />
+                  </FieldLabel>
+                </div>
+              </div>
             </SectionCard>
 
             <SectionCard title="Kimi" desc="Configure your Kimi (Moonshot) API connection.">
-              <FieldLabel label="API Key">
-                <PasswordInput
-                  value={config.ai.kimi.api_key}
-                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, kimi: { ...config.ai.kimi, api_key: v } } })}
-                  placeholder="sk-..."
-                />
-              </FieldLabel>
+              <div className="space-y-4">
+                <FieldLabel label="API Key">
+                  <PasswordInput
+                    value={config.ai.kimi.api_key}
+                    onChange={(v) => setConfig({ ...config, ai: { ...config.ai, kimi: { ...config.ai.kimi, api_key: v } } })}
+                    placeholder="sk-..."
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldLabel label="Model">
+                    <Input value={config.ai.kimi.model} onChange={(e) => setConfig({ ...config, ai: { ...config.ai, kimi: { ...config.ai.kimi, model: e.target.value } } })} />
+                  </FieldLabel>
+                  <FieldLabel label="Max Tokens">
+                    <Input type="number" value={config.ai.kimi.max_tokens === 0 ? '' : config.ai.kimi.max_tokens} placeholder="0 (Unlimited)" onChange={(e) => setConfig({ ...config, ai: { ...config.ai, kimi: { ...config.ai.kimi, max_tokens: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 } } })} />
+                  </FieldLabel>
+                </div>
+              </div>
             </SectionCard>
 
             <SectionCard title="Opencode" desc="Configure your Opencode (Zen/Go) API connection.">
-              <FieldLabel label="API Key">
-                <PasswordInput
-                  value={config.ai.opencode.api_key}
-                  onChange={(v) => setConfig({ ...config, ai: { ...config.ai, opencode: { ...config.ai.opencode, api_key: v } } })}
-                  placeholder="sk-..."
-                />
-              </FieldLabel>
+              <div className="space-y-4">
+                <FieldLabel label="API Key">
+                  <PasswordInput
+                    value={config.ai.opencode.api_key}
+                    onChange={(v) => setConfig({ ...config, ai: { ...config.ai, opencode: { ...config.ai.opencode, api_key: v } } })}
+                    placeholder="sk-..."
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldLabel label="Model">
+                    <Input value={config.ai.opencode.model} onChange={(e) => setConfig({ ...config, ai: { ...config.ai, opencode: { ...config.ai.opencode, model: e.target.value } } })} />
+                  </FieldLabel>
+                  <FieldLabel label="Max Tokens">
+                    <Input type="number" value={config.ai.opencode.max_tokens === 0 ? '' : config.ai.opencode.max_tokens} placeholder="0 (Unlimited)" onChange={(e) => setConfig({ ...config, ai: { ...config.ai, opencode: { ...config.ai.opencode, max_tokens: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 } } })} />
+                  </FieldLabel>
+                </div>
+              </div>
             </SectionCard>
 
             <SectionCard title="Local LLMs" desc="Configure your local models (Ollama/Llama.cpp).">
