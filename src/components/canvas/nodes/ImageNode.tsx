@@ -5,11 +5,17 @@ interface ImageNodeProps {
   data: {
     url?: string;
     alt?: string;
+    opacity?: number;
+    borderRadius?: number;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
   };
   selected?: boolean;
 }
 
 export function ImageNode({ data, selected }: ImageNodeProps) {
+  const { opacity = 100, borderRadius = 8, backgroundColor, borderColor, borderWidth } = data;
   return (
     <>
       <NodeResizer 
@@ -22,9 +28,16 @@ export function ImageNode({ data, selected }: ImageNodeProps) {
         keepAspectRatio={true}
       />
       <div 
-        className={`relative w-full h-full group transition-shadow rounded-lg overflow-hidden flex items-center justify-center bg-muted/50 border border-border/50
+        className={`relative w-full h-full group transition-shadow overflow-hidden flex items-center justify-center bg-muted/50 border border-border/50
           ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background/50' : 'hover:shadow-md'}
         `}
+        style={{
+          opacity: opacity / 100,
+          borderRadius: `${borderRadius}px`,
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: borderWidth !== undefined ? `${borderWidth}px` : undefined,
+        }}
       >
         {data.url ? (
           <img 

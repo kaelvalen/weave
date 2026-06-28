@@ -5,14 +5,14 @@ interface DrawNodeProps {
     points: { x: number; y: number }[];
     strokeColor?: string;
     strokeWidth?: number;
-    isFinished?: boolean;
     fillColor?: string;
+    opacity?: number;
   };
   selected?: boolean;
 }
 
 export function DrawNode({ data, selected }: DrawNodeProps) {
-  const { points, strokeColor = '#000000', strokeWidth = 3, fillColor = 'none' } = data;
+  const { points = [], strokeColor = '#000', strokeWidth = 3, fillColor = 'none', opacity = 100 } = data;
 
   if (!points || points.length === 0) return null;
 
@@ -33,7 +33,10 @@ export function DrawNode({ data, selected }: DrawNodeProps) {
       
       {/* We need the div to stretch to its bounds. Drawing bounds calculation must be handled before creating the node. 
           Assuming the points are relative to the bounding box of the node (0,0 is top-left). */}
-      <div className={`w-full h-full relative ${selected ? 'ring-2 ring-primary/50' : ''}`}>
+      <div 
+        className={`relative w-full h-full group ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background/50' : ''}`}
+        style={{ opacity: opacity / 100 }}
+      >
         <svg 
           className="absolute inset-0 w-full h-full pointer-events-none" 
           style={{ overflow: 'visible' }}

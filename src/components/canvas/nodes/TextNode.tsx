@@ -3,16 +3,22 @@ import { useState, useRef, useEffect } from 'react';
 
 interface TextNodeProps {
   data: {
-    text: string;
+    text?: string;
     fontSize?: number;
     color?: string;
     fontWeight?: string;
+    opacity?: number;
+    borderRadius?: number;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
     onChange?: (text: string) => void;
   };
   selected?: boolean;
 }
 
 export function TextNode({ data, selected }: TextNodeProps) {
+  const { fontSize = 16, color = 'inherit', fontWeight = 'normal', opacity = 100, borderRadius, backgroundColor, borderColor, borderWidth } = data;
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text || 'Text');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -43,9 +49,16 @@ export function TextNode({ data, selected }: TextNodeProps) {
         lineStyle={{ borderWidth: 2 }}
       />
       <div 
-        className={`relative w-full h-full group p-2 flex items-center justify-center cursor-text rounded-md transition-shadow
-          ${selected ? 'ring-2 ring-primary/50 bg-primary/5' : 'hover:ring-1 hover:ring-border/50 hover:bg-muted/30'}
+        className={`relative w-full h-full group p-2 flex items-center justify-center cursor-text transition-shadow
+          ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background/50' : 'hover:ring-1 hover:ring-border'}
         `}
+        style={{
+          opacity: opacity / 100,
+          borderRadius: borderRadius !== undefined ? `${borderRadius}px` : undefined,
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: borderWidth !== undefined ? `${borderWidth}px` : undefined,
+        }}
         onDoubleClick={() => setIsEditing(true)}
       >
         {isEditing ? (

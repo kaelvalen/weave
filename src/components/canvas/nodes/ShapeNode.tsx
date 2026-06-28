@@ -5,12 +5,22 @@ interface ShapeNodeProps {
     shapeType: 'rectangle' | 'circle' | 'diamond' | 'line' | 'arrow' | 'polygon' | 'star';
     backgroundColor?: string;
     borderColor?: string;
+    opacity?: number;
+    borderRadius?: number;
+    borderWidth?: number;
   };
   selected?: boolean;
 }
 
 export function ShapeNode({ data, selected }: ShapeNodeProps) {
-  const { shapeType, backgroundColor = '#3b82f6', borderColor = 'transparent' } = data;
+  const { 
+    shapeType, 
+    backgroundColor = '#3b82f6', 
+    borderColor = 'transparent',
+    opacity = 100,
+    borderRadius,
+    borderWidth
+  } = data;
   
   const isCircle = shapeType === 'circle';
   const isDiamond = shapeType === 'diamond';
@@ -40,24 +50,30 @@ export function ShapeNode({ data, selected }: ShapeNodeProps) {
         style={{
           backgroundColor: (isLine || isArrow) ? 'transparent' : backgroundColor,
           borderColor: (isLine || isArrow) ? 'transparent' : borderColor,
-          borderWidth: ((isLine || isArrow) || borderColor === 'transparent') ? 0 : 2,
-          borderRadius: isCircle ? '50%' : (isDiamond || isPolygon || isStar) ? '0' : '12px',
+          borderWidth: ((isLine || isArrow) || borderColor === 'transparent') ? 0 : (borderWidth ?? 2),
+          borderRadius: isCircle ? '50%' : (isDiamond || isPolygon || isStar) ? '0' : (borderRadius !== undefined ? `${borderRadius}px` : '12px'),
+          opacity: opacity / 100,
           clipPath,
           boxShadow: (isDiamond || isPolygon || isStar || isLine || isArrow) ? 'none' : '0 4px 20px -2px rgb(0 0 0 / 0.1), 0 0 3px rgb(0 0 0 / 0.05)',
-          transition: 'border-radius 0.2s ease, background-color 0.2s ease'
+          transition: 'border-radius 0.2s ease, background-color 0.2s ease, opacity 0.2s ease'
         }}
       >
         {(isDiamond || isPolygon || isStar) && (
-          <div className="absolute inset-0 z-[-1] drop-shadow-md" style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}></div>
+          <div className="absolute inset-0 z-[-1] drop-shadow-md" style={{ filter: `drop-shadow(0 0 ${borderWidth ?? 0}px ${borderColor}) drop-shadow(0 4px 6px rgba(0,0,0,0.1))` }}></div>
         )}
 
         {(isLine || isArrow) && (
           <div className="w-full relative flex items-center">
-            <div className="w-full h-1" style={{ backgroundColor }} />
+            <div className="w-full" style={{ height: borderWidth ?? 2, backgroundColor: borderColor !== 'transparent' ? borderColor : backgroundColor }} />
             {isArrow && (
               <div 
-                className="absolute right-0 w-4 h-4 translate-x-1" 
-                style={{ clipPath: 'polygon(0 0, 100% 50%, 0 100%)', backgroundColor }}
+                className="absolute right-0 translate-x-1" 
+                style={{ 
+                  width: (borderWidth ?? 2) * 4, 
+                  height: (borderWidth ?? 2) * 4,
+                  clipPath: 'polygon(0 0, 100% 50%, 0 100%)', 
+                  backgroundColor: borderColor !== 'transparent' ? borderColor : backgroundColor 
+                }}
               />
             )}
           </div>

@@ -100,10 +100,15 @@ function CanvasInner() {
     }
   }, []);
 
-  const updateNodeData = useCallback((id: string, newData: any) => {
+  const updateNode = useCallback((id: string, updates: Partial<Node>) => {
     setNodes((nds) => nds.map((node) => {
       if (node.id === id) {
-        return { ...node, data: { ...node.data, ...newData } };
+        return { 
+          ...node, 
+          ...updates, 
+          style: { ...node.style, ...(updates.style || {}) }, 
+          data: { ...node.data, ...(updates.data || {}) } 
+        };
       }
       return node;
     }));
@@ -382,7 +387,7 @@ function CanvasInner() {
         )}
       </div>
 
-      <PropertiesPanel selectedNode={selectedNode} updateNodeData={updateNodeData} deleteNode={deleteSelectedNode} />
+      <PropertiesPanel selectedNode={selectedNode} updateNode={updateNode} deleteNode={deleteSelectedNode} />
     </div>
   );
 }

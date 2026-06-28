@@ -2,13 +2,20 @@ import { Handle, Position, NodeResizer } from '@xyflow/react';
 
 interface NoteNodeProps {
   data: {
-    text: string;
+    text?: string;
     onChange: (text: string) => void;
+    opacity?: number;
+    borderRadius?: number;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
   };
   selected?: boolean;
 }
 
 export function NoteNode({ data, selected }: NoteNodeProps) {
+  const { opacity = 100, borderRadius, backgroundColor = '#fef08a', borderColor, borderWidth } = data;
+  
   return (
     <>
       <NodeResizer 
@@ -19,7 +26,18 @@ export function NoteNode({ data, selected }: NoteNodeProps) {
         handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
         lineStyle={{ borderWidth: 2 }}
       />
-      <div className={`bg-yellow-100 dark:bg-yellow-900/80 rounded-br-2xl border border-yellow-300 dark:border-yellow-700/50 w-full h-full p-0 flex flex-col group transition-shadow ${selected ? 'shadow-lg ring-2 ring-yellow-400 ring-offset-2 ring-offset-background/50' : 'shadow-md hover:shadow-lg'}`}>
+      <div 
+        className={`relative w-full h-full group shadow-md transition-shadow flex flex-col p-0
+          ${selected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-background/50' : 'hover:shadow-lg'}
+        `}
+        style={{ 
+          opacity: opacity / 100,
+          borderRadius: borderRadius !== undefined ? `${borderRadius}px` : undefined,
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: borderWidth !== undefined ? `${borderWidth}px` : undefined,
+        }}
+      >
         
         {/* Decorative corner fold */}
         <div className="absolute bottom-0 right-0 w-6 h-6 bg-yellow-200 dark:bg-yellow-800 rounded-tl-xl rounded-br-2xl shadow-[-2px_-2px_4px_rgba(0,0,0,0.05)] pointer-events-none border-l border-t border-yellow-300/50 dark:border-yellow-700/50"></div>

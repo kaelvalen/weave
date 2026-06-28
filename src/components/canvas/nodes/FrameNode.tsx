@@ -4,12 +4,18 @@ interface FrameNodeProps {
   data: {
     label?: string;
     variant?: 'frame' | 'section' | 'slice';
+    opacity?: number;
+    borderRadius?: number;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
   };
   selected?: boolean;
 }
 
 export function FrameNode({ data, selected }: FrameNodeProps) {
   const variant = data.variant || 'frame';
+  const { opacity = 100, borderRadius, backgroundColor, borderColor, borderWidth } = data;
 
   let borderClass = 'border-foreground/30';
   let bgClass = 'bg-transparent';
@@ -39,8 +45,15 @@ export function FrameNode({ data, selected }: FrameNodeProps) {
       <div 
         className={`relative w-full h-full group
           ${selected ? `border-2 ${variant === 'slice' ? 'border-green-500' : 'border-primary'}` : borderClass}
-          ${bgClass}
+          ${backgroundColor ? '' : bgClass}
         `}
+        style={{
+          opacity: opacity / 100,
+          borderRadius: borderRadius !== undefined ? `${borderRadius}px` : undefined,
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: borderWidth !== undefined ? `${borderWidth}px` : undefined,
+        }}
       >
         <div className={`absolute top-0 left-0 -translate-y-[100%] pb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap cursor-grab`}>
           <span className={`text-xs tracking-wider ${labelClass}`}>
