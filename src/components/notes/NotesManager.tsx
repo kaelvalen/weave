@@ -8,6 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+// CodeMirror imports
+import CodeMirror from '@uiw/react-codemirror';
+import { ViewUpdate } from '@codemirror/view';
+import { useThemeStore } from '@/stores/useThemeStore';
+import { getWeaveTheme } from '@/lib/editorTheme';
+import { markdown } from '@codemirror/lang-markdown';
+
 interface Note {
   id: string;
   title: string;
@@ -23,8 +30,13 @@ export function NotesManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [cursor, setCursor] = useState({ line: 1, col: 1 });
   
   const { executeCapability } = usePluginStore();
+  const { mode } = useThemeStore();
+
+  const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+  const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
 
   const loadNotes = useCallback(async () => {
     try {
@@ -104,8 +116,19 @@ export function NotesManager() {
     n.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleEditorUpdate = useCallback((vu: ViewUpdate) => {
+    if (vu.selectionSet || vu.docChanged) {
+      const state = vu.state;
+      const pos = state.selection.main.head;
+      const line = state.doc.lineAt(pos);
+      setCursor({ line: line.number, col: pos - line.from + 1 });
+    }
+  }, []);
+
+  const wordCount = selectedNote?.content ? selectedNote.content.trim().split(/\s+/).filter(Boolean).length : 0;
+
   return (
-    <div className="flex h-full w-full bg-background pt-16">
+    <div className="flex h-full w-full bg-transparent pt-16">
       {/* ── Sidebar ── */}
       <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
         <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
@@ -165,7 +188,7 @@ export function NotesManager() {
       </div>
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background relative">
+      <div className="flex-1 flex flex-col min-w-0 bg-background/90 backdrop-blur-md relative">
         {selectedNote ? (
           <div className="flex flex-col h-full">
             <div className="h-14 flex items-center justify-between border-b px-6 flex-shrink-0 bg-card">
@@ -186,18 +209,64 @@ export function NotesManager() {
               </div>
             </div>
             
-            <div className="flex-1 w-full relative">
-              <textarea
+            <div className="flex-1 w-full relative overflow-hidden bg-transparent">
+              <CodeMirror
                 value={selectedNote.content}
-                onChange={(e) => setSelectedNote({ ...selectedNote, content: e.target.value })}
-                placeholder="Start writing..."
-                spellCheck={false}
-                className="absolute inset-0 w-full h-full p-6 pb-32 text-sm bg-background text-foreground resize-none focus:outline-none leading-relaxed"
+                height="100%"
+                theme={getWeaveTheme(isDark)}
+                extensions={[markdown()]}
+                onChange={(val) => setSelectedNote({ ...selectedNote, content: val })}
+                onUpdate={handleEditorUpdate}
+                className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-sans [&_.cm-content]:pb-32"
+                basicSetup={{
+                  lineNumbers: false,
+                  highlightActiveLineGutter: false,
+                  highlightSpecialChars: true,
+                  history: true,
+                  foldGutter: false,
+                  drawSelection: true,
+                  dropCursor: true,
+                  allowMultipleSelections: true,
+                  indentOnInput: true,
+                  syntaxHighlighting: true,
+                  bracketMatching: true,
+                  closeBrackets: true,
+                  autocompletion: true,
+                  rectangularSelection: true,
+                  crosshairCursor: true,
+                  highlightActiveLine: false,
+                  highlightSelectionMatches: true,
+                  closeBracketsKeymap: true,
+                  defaultKeymap: true,
+                  searchKeymap: true,
+                  historyKeymap: true,
+                  foldKeymap: true,
+                  completionKeymap: true,
+                  lintKeymap: true,
+                }}
               />
+            </div>
+            
+            {/* ── Status Bar ── */}
+            <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Cursor Position">
+                  Ln {cursor.line}, Col {cursor.col}
+                </span>
+                <span className="opacity-40">|</span>
+                <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Word Count">
+                  {wordCount} words
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold" title="Language Mode">
+                  MARKDOWN
+                </span>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-background">
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-transparent">
             <div className="w-16 h-16 rounded border bg-muted flex items-center justify-center mb-4">
               <FileText className="w-6 h-6 opacity-40" />
             </div>

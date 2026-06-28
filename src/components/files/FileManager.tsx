@@ -177,7 +177,7 @@ export function FileManager() {
   const SelectedIcon = selectedFile ? (selectedFile.type === 'directory' ? FolderOpen : getFileIcon(selectedFile.name)) : FileIcon;
 
   return (
-    <div className="flex h-full w-full bg-background pt-16">
+    <div className="flex h-full w-full bg-transparent pt-16">
       {/* ── Sidebar: File Tree ── */}
       <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
         <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
@@ -222,7 +222,7 @@ export function FileManager() {
       </div>
 
       {/* ── Main Area: File Preview ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background relative">
+      <div className="flex-1 flex flex-col min-w-0 bg-background/90 backdrop-blur-md relative">
         {selectedFile ? (
           <div className="flex flex-col h-full w-full">
             <div className="h-14 flex items-center border-b px-2 gap-1 flex-shrink-0 bg-card">
@@ -232,7 +232,7 @@ export function FileManager() {
               </div>
             </div>
             
-            <div className="flex-1 flex flex-col min-h-0 bg-background">
+            <div className="flex-1 flex flex-col min-h-0 bg-transparent">
               {selectedFile.type === 'directory' ? (
                 <div className="flex-1 p-8 flex flex-col items-center justify-center text-center">
                   <div className="w-20 h-20 rounded border bg-muted flex items-center justify-center mb-6">
@@ -251,7 +251,7 @@ export function FileManager() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-background">
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-transparent">
             <div className="w-16 h-16 rounded border bg-muted flex items-center justify-center mb-4">
               <FileIcon className="w-6 h-6 opacity-40" />
             </div>

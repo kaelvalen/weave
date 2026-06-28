@@ -206,8 +206,8 @@ export function ChatInput() {
   const canSend = (!!input.trim() || images.length > 0) && !isStreaming;
 
   return (
-    <div className="flex-shrink-0 px-4 pb-4 pt-1 max-w-4xl mx-auto w-full">
-      <div className="rounded-xl overflow-hidden border bg-card shadow-sm transition-shadow focus-within:shadow-md">
+    <div className="flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full">
+      <div className="rounded-[24px] overflow-hidden border bg-card/90 backdrop-blur-xl shadow-lg transition-all duration-300 focus-within:shadow-xl focus-within:border-primary/40">
         {/* Plugin hint strip */}
         {hints.length > 0 && input.length > 3 && (
           <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/50">
@@ -235,7 +235,7 @@ export function ChatInput() {
           <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger
               disabled={modelsLoading || isStreaming}
-              className="w-[150px] h-8 text-xs flex-shrink-0 bg-transparent border-0 hover:bg-muted focus:shadow-none rounded-md px-2 gap-1.5 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-[140px] h-9 text-xs flex-shrink-0 bg-background/50 hover:bg-background border border-border/50 shadow-sm rounded-full px-3 gap-1.5 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
             >
               {pm.icon ? (
                 <>
@@ -342,7 +342,7 @@ export function ChatInput() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mb-0.5"
+            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mb-0.5"
             title="Attach image"
           >
             <Paperclip className="w-4 h-4" />
@@ -407,7 +407,7 @@ export function ChatInput() {
             type="button"
             onClick={handleStop}
             aria-label="Stop generation"
-            className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors mb-0.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors mb-0.5 bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm"
           >
             <Square className="w-3 h-3 fill-current" />
           </button>
@@ -418,9 +418,9 @@ export function ChatInput() {
             onClick={handleSend}
             aria-label="Send"
             className={[
-              'flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors mb-0.5',
+              'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors mb-0.5 shadow-sm',
               'disabled:opacity-50 disabled:cursor-not-allowed',
-              canSend ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground'
+              canSend ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-muted text-muted-foreground'
             ].join(' ')}
           >
             <ArrowUp className="w-4 h-4" />

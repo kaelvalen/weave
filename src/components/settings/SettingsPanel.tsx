@@ -54,7 +54,7 @@ export function SettingsPanel() {
   if (!config) return null;
 
   return (
-    <div className="flex flex-col h-full w-full bg-background pt-16">
+    <div className="flex flex-col h-full w-full bg-transparent pt-16">
       <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
         {/* ── Header ── */}
         <div className="flex items-center justify-between py-8 flex-shrink-0">

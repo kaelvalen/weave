@@ -8,7 +8,9 @@ import { readFile } from '@tauri-apps/plugin-fs';
 
 // CodeMirror imports
 import CodeMirror from '@uiw/react-codemirror';
+import { ViewUpdate } from '@codemirror/view';
 import { useThemeStore } from '@/stores/useThemeStore';
+import { getWeaveTheme } from '@/lib/editorTheme';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { rust } from '@codemirror/lang-rust';
@@ -75,6 +77,7 @@ export function FileEditor({ path }: FileEditorProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
+  const [cursor, setCursor] = useState({ line: 1, col: 1 });
   
   const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
   const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
@@ -169,6 +172,15 @@ export function FileEditor({ path }: FileEditorProps) {
     }
   };
 
+  const handleEditorUpdate = useCallback((vu: ViewUpdate) => {
+    if (vu.selectionSet || vu.docChanged) {
+      const state = vu.state;
+      const pos = state.selection.main.head;
+      const line = state.doc.lineAt(pos);
+      setCursor({ line: line.number, col: pos - line.from + 1 });
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-background">
@@ -213,21 +225,18 @@ export function FileEditor({ path }: FileEditorProps) {
 
   return (
     <div 
-      className="flex flex-col h-full w-full bg-background" 
+      className="flex flex-col h-full w-full bg-background relative" 
       onKeyDown={handleKeyDown}
       tabIndex={-1} // Allow div to receive keyboard events
     >
-      {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-4 h-12 border-b bg-card flex-shrink-0 z-10">
+      {/* ── Toolbar / Breadcrumb ── */}
+      <div className="flex items-center justify-between px-4 h-12 border-b bg-card/80 backdrop-blur-md flex-shrink-0 z-10 transition-colors">
         <div className="flex items-center gap-2 overflow-hidden">
           <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-medium truncate text-foreground/90">
             {filename}
           </span>
           {isDirty && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-2 px-1.5 py-0.5 rounded-sm bg-muted/50 border border-border/50">
-            {languageName}
-          </span>
         </div>
         
         <Button 
@@ -243,16 +252,17 @@ export function FileEditor({ path }: FileEditorProps) {
       </div>
 
       {/* ── CodeMirror Editor ── */}
-      <div className="flex-1 relative w-full overflow-hidden text-sm">
+      <div className="flex-1 relative w-full overflow-hidden text-sm bg-transparent">
         <CodeMirror
           value={content}
           height="100%"
-          theme={isDark ? 'dark' : 'light'}
+          theme={getWeaveTheme(isDark)}
           extensions={languageExt ? [languageExt as any] : []}
           onChange={(val) => {
             setContent(val);
             if (!isDirty) setIsDirty(true);
           }}
+          onUpdate={handleEditorUpdate}
           className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-mono [&_.cm-content]:pb-32"
           basicSetup={{
             lineNumbers: true,
@@ -281,6 +291,26 @@ export function FileEditor({ path }: FileEditorProps) {
             lintKeymap: true,
           }}
         />
+      </div>
+
+      {/* ── Status Bar ── */}
+      <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Cursor Position">
+            Ln {cursor.line}, Col {cursor.col}
+          </span>
+          <span className="opacity-40">|</span>
+          <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="File Size">
+            {(new Blob([content]).size / 1024).toFixed(1)} KB
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="hover:text-foreground transition-colors cursor-pointer" title="Encoding">UTF-8</span>
+          <span className="opacity-40">|</span>
+          <span className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold" title="Language Mode">
+            {languageName}
+          </span>
+        </div>
       </div>
     </div>
   );

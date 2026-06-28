@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import type { Plugin, PluginCategory } from '@/types/plugin';
 
@@ -27,6 +28,7 @@ function extractError(err: unknown): string {
 interface PluginState {
   plugins: Plugin[];
   loadedPlugins: string[];
+  autoLoadPlugins: string[];
   activePlugin: string | null;
   isLoading: boolean;
   error: string | null;
@@ -46,10 +48,12 @@ interface PluginState {
 }
 
 export const usePluginStore = create<PluginState>()(
-  immer((set, get) => ({
-    plugins: [],
-    loadedPlugins: [],
-    activePlugin: null,
+  persist(
+    immer((set, get) => ({
+      plugins: [],
+      loadedPlugins: [],
+      autoLoadPlugins: [],
+      activePlugin: null,
     isLoading: false,
     error: null,
     searchQuery: '',
@@ -59,6 +63,13 @@ export const usePluginStore = create<PluginState>()(
       set((state) => { state.isLoading = true; state.error = null; });
       try {
         const plugins: Plugin[] = await invoke('plugin_discover');
+        
+        // Find plugins that should be auto-loaded but aren't yet
+        const { autoLoadPlugins } = get();
+        const toLoad = plugins.filter(p => 
+          autoLoadPlugins.includes(p.id) && p.state !== 'active' && p.state !== 'loaded'
+        );
+
         set((state) => {
           state.plugins = plugins;
           state.loadedPlugins = plugins
@@ -66,6 +77,11 @@ export const usePluginStore = create<PluginState>()(
             .map((p) => p.id);
           state.isLoading = false;
         });
+
+        // Trigger background loads for saved plugins
+        for (const p of toLoad) {
+          get().loadPlugin(p.id).catch(console.error);
+        }
       } catch (err) {
         const msg = extractError(err);
         console.error('Failed to discover plugins:', msg);
@@ -81,6 +97,7 @@ export const usePluginStore = create<PluginState>()(
           const idx = state.plugins.findIndex((p) => p.id === id);
           if (idx >= 0) { state.plugins[idx] = plugin; }
           if (!state.loadedPlugins.includes(id)) { state.loadedPlugins.push(id); }
+          if (!state.autoLoadPlugins.includes(id)) { state.autoLoadPlugins.push(id); }
         });
       } catch (err) {
         const msg = extractError(err);
@@ -97,6 +114,7 @@ export const usePluginStore = create<PluginState>()(
           const idx = state.plugins.findIndex((p) => p.id === id);
           if (idx >= 0) { state.plugins[idx] = { ...state.plugins[idx], state: 'unloaded' }; }
           state.loadedPlugins = state.loadedPlugins.filter((pid) => pid !== id);
+          state.autoLoadPlugins = state.autoLoadPlugins.filter((pid) => pid !== id);
         });
       } catch (err) {
         const msg = extractError(err);
@@ -144,5 +162,10 @@ export const usePluginStore = create<PluginState>()(
     clearError: () => {
       set((state) => { state.error = null; });
     },
-  }))
+  })),
+  {
+    name: 'weave-plugin-store',
+    partialize: (state) => ({ autoLoadPlugins: state.autoLoadPlugins }),
+  }
+  )
 );

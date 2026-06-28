@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
-import type { ChatMessage as ChatMessageType } from '@/types/chat';
+import type { ChatMessage as ChatMessageType, PluginCall } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { User, Bot, Copy, Check, Brain, Edit2, RefreshCw } from 'lucide-react';
@@ -8,6 +8,8 @@ import { ToolCallCard } from './ToolCallCard';
 import { Textarea } from '@/components/ui/textarea';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
@@ -27,6 +29,7 @@ SyntaxHighlighter.registerLanguage('python', python);
 interface ChatMessageProps {
   message: ChatMessageType;
   isLast?: boolean;
+  isConsecutive?: boolean;
 }
 
 function formatTime(ts: number) {
@@ -95,7 +98,7 @@ function InlineBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
+export function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
@@ -121,26 +124,60 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
   const hasIntent      = message.metadata?.intent;
 
+  // Detect raw OpenRouter tool return messages injected by backend
+  const isFakeToolUser = message.role === 'user' && message.content.startsWith('Tool ') && message.content.includes(' returned:');
+  let fakeToolCall: PluginCall | null = null;
+  
+  if (isFakeToolUser) {
+    const match = message.content.match(/^Tool ([\w.-]+) returned:\s*([\s\S]*?)\s*(?:\n*Please continue.*)?$/);
+    if (match) {
+      const pluginId = match[1];
+      const resultStr = match[2];
+      let result: any = resultStr;
+      try { result = JSON.parse(resultStr); } catch (e) {}
+      
+      fakeToolCall = {
+        plugin_id: pluginId,
+        capability: pluginId.includes('.') ? pluginId.split('.').pop()! : 'execute',
+        params: { note: "Parameters were parsed by local tool engine" },
+        status: 'success',
+        result
+      };
+    }
+  }
+
+  if (fakeToolCall) {
+    return (
+      <div className="group flex items-start gap-4 px-5 py-1">
+        <div className="flex-shrink-0 w-8" />
+        <div className="flex-1 min-w-0">
+          <ToolCallCard call={fakeToolCall} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="group flex items-start gap-4 px-5 py-2">
+    <div className={`group flex items-start gap-4 px-5 ${isConsecutive ? 'py-0.5' : 'py-2'}`}>
       {/* Avatar */}
-      <div className="flex-shrink-0 mt-1">
-        <MsgAvatar role={message.role as 'user' | 'assistant'} />
+      <div className="flex-shrink-0 mt-1 w-8">
+        {!isConsecutive && <MsgAvatar role={message.role as 'user' | 'assistant'} />}
       </div>
 
       {/* Content Area */}
       <div className="flex-1 min-w-0">
         {/* Meta row */}
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-semibold">
-            {message.role === 'user' ? 'You' : 'Weave AI'}
-          </span>
-          <span className="text-xs text-muted-foreground font-mono">
-            {formatTime(message.timestamp)}
-          </span>
-          {message.metadata?.model && (
-            <InlineBadge>{message.metadata.model}</InlineBadge>
-          )}
+        {!isConsecutive && (
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-semibold">
+              {message.role === 'user' ? 'You' : 'Weave AI'}
+            </span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {formatTime(message.timestamp)}
+            </span>
+            {message.metadata?.model && (
+              <InlineBadge>{message.metadata.model}</InlineBadge>
+            )}
 
           {/* Actions */}
           <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
@@ -174,6 +211,7 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
             </Tooltip>
           </div>
         </div>
+        )}
 
         {/* Intent & Plugin chips */}
         {(hasIntent || hasPluginCalls) && (
@@ -225,10 +263,15 @@ export function ChatMessage({ message, isLast: _isLast }: ChatMessageProps) {
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{ code: CodeBlock as any }}
               >
-                {message.content}
+                {message.content
+                  .replace(/<call[\s\S]*?<\/call>/g, '')
+                  .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+                  .replace(/\\\((.*?)\\\)/g, '$$$1$$')
+                }
               </ReactMarkdown>
             </div>
           )}

@@ -108,9 +108,30 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
             <EmptyState />
           ) : (
             <div className="py-2 space-y-4">
-              {messages.filter(m => !m.metadata?.isHidden).map((msg, index, arr) => (
-                <ChatMessage key={msg.id} message={msg} isLast={index === arr.length - 1} />
-              ))}
+              {messages.filter(m => !m.metadata?.isHidden).map((msg, index, arr) => {
+                let isConsecutive = false;
+                if (index > 0) {
+                  const prevMsg = arr[index - 1];
+                  const prevIsFakeTool = prevMsg.role === 'user' && prevMsg.content.startsWith('Tool ') && prevMsg.content.includes(' returned:');
+                  const currentIsFakeTool = msg.role === 'user' && msg.content.startsWith('Tool ') && msg.content.includes(' returned:');
+                  
+                  const prevEffectiveRole = prevIsFakeTool ? 'assistant' : prevMsg.role;
+                  const currentEffectiveRole = currentIsFakeTool ? 'assistant' : msg.role;
+
+                  if (prevEffectiveRole === currentEffectiveRole) {
+                    isConsecutive = true;
+                  }
+                }
+
+                return (
+                  <ChatMessage 
+                    key={msg.id} 
+                    message={msg} 
+                    isLast={index === arr.length - 1} 
+                    isConsecutive={isConsecutive}
+                  />
+                );
+              })}
               {isStreaming &&
                 messages[messages.length - 1]?.role === 'assistant' &&
                 messages[messages.length - 1]?.content === '' && (
