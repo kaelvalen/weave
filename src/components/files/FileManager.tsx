@@ -177,29 +177,20 @@ export function FileManager() {
   const SelectedIcon = selectedFile ? (selectedFile.type === 'directory' ? FolderOpen : getFileIcon(selectedFile.name)) : FileIcon;
 
   return (
-    <div className="flex flex-col h-full w-full bg-background pt-16">
-      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between py-8 flex-shrink-0">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Files</h2>
-            <p className="text-sm text-muted-foreground mt-1">Manage your local workspace and plugin files.</p>
-          </div>
-          <Button onClick={handleOpenFolder} className="gap-2 shadow-sm">
-            <FolderOpen className="w-4 h-4" /> Open Folder
-          </Button>
-        </div>
-
-        {/* ── Body ── */}
-        <div className="flex-1 flex min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">
-          {/* ── Sidebar: File Tree ── */}
-          <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
+    <div className="flex h-full w-full bg-background pt-16">
+      {/* ── Sidebar: File Tree ── */}
+      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
         <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
           <div className="flex items-center gap-2 overflow-hidden mr-2">
             <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <h3 className="text-xs font-semibold tracking-wide truncate" title={currentRoot === '.' ? 'Local Files' : currentRoot}>
               {currentRoot === '.' ? 'Local Files' : currentRoot.split('/').pop() || currentRoot}
             </h3>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleOpenFolder} title="Open Folder">
+              <FolderOpen className="w-3.5 h-3.5" />
+            </Button>
           </div>
         </div>
 
@@ -267,8 +258,6 @@ export function FileManager() {
             <p className="text-sm">Select a file from your workspace</p>
           </div>
         )}
-      </div>
-        </div>
       </div>
     </div>
   );
