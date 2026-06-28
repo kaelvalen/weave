@@ -25,10 +25,10 @@ export function PropertiesPanel({ selectedNode, updateNodeData, deleteNode }: Pr
   };
 
   return (
-    <div className="w-64 h-full bg-card/90 backdrop-blur border-l border-border flex flex-col shadow-xl z-10 absolute right-0 top-0 transition-transform duration-300">
-      <div className="p-4 border-b border-border bg-card/50">
+    <div className="w-72 bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl flex flex-col shadow-2xl z-50 absolute right-4 top-4 transition-all duration-300">
+      <div className="p-4 border-b border-border/30 bg-card/40 rounded-t-2xl">
         <h3 className="font-semibold text-sm">Properties</h3>
-        <p className="text-xs text-muted-foreground capitalize">{selectedNode.type} Node</p>
+        <p className="text-xs text-muted-foreground capitalize">{(selectedNode.type || 'default').replace('Node', '')}</p>
       </div>
 
       <ScrollArea className="flex-1 p-4">
@@ -112,13 +112,41 @@ export function PropertiesPanel({ selectedNode, updateNodeData, deleteNode }: Pr
               </select>
             </div>
           )}
+
+          {/* Image properties */}
+          {selectedNode.type === 'imageNode' && (
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-muted-foreground">Image URL</label>
+              <input 
+                type="text"
+                className="w-full bg-background border border-border/50 rounded-lg p-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                placeholder="https://example.com/image.png"
+                value={(selectedNode.data.url as string) || ''}
+                onChange={(e) => updateNodeData(selectedNode.id, { url: e.target.value })}
+              />
+            </div>
+          )}
+
+          {/* Frame properties */}
+          {selectedNode.type === 'frameNode' && (
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-muted-foreground">Frame Label</label>
+              <input 
+                type="text"
+                className="w-full bg-background border border-border/50 rounded-lg p-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                placeholder="Frame Label"
+                value={(selectedNode.data.label as string) || ''}
+                onChange={(e) => updateNodeData(selectedNode.id, { label: e.target.value })}
+              />
+            </div>
+          )}
           
           
           {/* Delete Node Button */}
-          <div className="pt-4 border-t border-border mt-2">
+          <div className="pt-4 mt-2">
             <button
               onClick={deleteNode}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-destructive bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground rounded transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold text-destructive bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground rounded-lg transition-all active:scale-95"
             >
               Delete Node
             </button>

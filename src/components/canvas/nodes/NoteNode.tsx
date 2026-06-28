@@ -1,29 +1,44 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeResizer } from '@xyflow/react';
 
 interface NoteNodeProps {
   data: {
     text: string;
     onChange: (text: string) => void;
   };
+  selected?: boolean;
 }
 
-export function NoteNode({ data }: NoteNodeProps) {
+export function NoteNode({ data, selected }: NoteNodeProps) {
   return (
-    <div className="bg-yellow-200/90 dark:bg-yellow-900/60 shadow-md rounded border border-yellow-300 dark:border-yellow-700/50 min-w-[200px] p-0 overflow-hidden">
-      <Handle type="target" position={Position.Top} className="w-2 h-2 bg-yellow-500" />
+    <>
+      <NodeResizer 
+        color="#eab308" 
+        isVisible={selected} 
+        minWidth={150} 
+        minHeight={150} 
+        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
+        lineStyle={{ borderWidth: 2 }}
+      />
+      <div className={`bg-yellow-100 dark:bg-yellow-900/80 rounded-br-2xl border border-yellow-300 dark:border-yellow-700/50 w-full h-full p-0 flex flex-col group transition-shadow ${selected ? 'shadow-lg ring-2 ring-yellow-400 ring-offset-2 ring-offset-background/50' : 'shadow-md hover:shadow-lg'}`}>
+        
+        {/* Decorative corner fold */}
+        <div className="absolute bottom-0 right-0 w-6 h-6 bg-yellow-200 dark:bg-yellow-800 rounded-tl-xl rounded-br-2xl shadow-[-2px_-2px_4px_rgba(0,0,0,0.05)] pointer-events-none border-l border-t border-yellow-300/50 dark:border-yellow-700/50"></div>
+        
+        <Handle type="target" position={Position.Top} className="w-3 h-3 bg-yellow-500 border-2 border-yellow-200 opacity-0 group-hover:opacity-100 transition-transform hover:scale-125 z-10" />
       
-      <div className="bg-yellow-300/50 dark:bg-yellow-800/50 h-6 w-full flex items-center px-2 cursor-grab drag-handle">
-        <span className="text-[10px] uppercase font-bold text-yellow-800 dark:text-yellow-400">Note</span>
+      <div className="bg-yellow-200/50 dark:bg-yellow-800/50 h-7 w-full flex items-center px-3 cursor-grab drag-handle border-b border-yellow-300/30 dark:border-yellow-700/30">
+        <span className="text-[10px] uppercase font-bold text-yellow-800/70 dark:text-yellow-400/70">Note</span>
       </div>
 
       <textarea
-        className="w-full min-h-[100px] p-3 bg-transparent resize-y outline-none text-yellow-950 dark:text-yellow-100 placeholder:text-yellow-700/50 dark:placeholder:text-yellow-400/50 text-sm"
+        className="w-full flex-1 p-3 bg-transparent resize-none outline-none text-yellow-950 dark:text-yellow-100 placeholder:text-yellow-700/50 dark:placeholder:text-yellow-400/50 text-sm"
         placeholder="Type a note here..."
         defaultValue={data.text}
         onChange={(e) => data.onChange && data.onChange(e.target.value)}
       />
       
-      <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-yellow-500" />
-    </div>
+      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-yellow-500 border-2 border-yellow-200 opacity-0 group-hover:opacity-100 transition-transform hover:scale-125 z-10" />
+      </div>
+    </>
   );
 }

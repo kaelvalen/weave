@@ -1,4 +1,4 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeResizer } from '@xyflow/react';
 import { useState, useRef, useEffect } from 'react';
 
 interface TextNodeProps {
@@ -33,13 +33,22 @@ export function TextNode({ data, selected }: TextNodeProps) {
   };
 
   return (
-    <div 
-      className={`relative group p-2 min-w-[50px] min-h-[30px] flex items-center justify-center cursor-text
-        ${selected ? 'ring-1 ring-primary/50' : 'hover:ring-1 hover:ring-border/50'}
-      `}
-      onDoubleClick={() => setIsEditing(true)}
-    >
-      {isEditing ? (
+    <>
+      <NodeResizer 
+        color="#8b5cf6" 
+        isVisible={selected} 
+        minWidth={50} 
+        minHeight={30}
+        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
+        lineStyle={{ borderWidth: 2 }}
+      />
+      <div 
+        className={`relative w-full h-full group p-2 flex items-center justify-center cursor-text rounded-md transition-shadow
+          ${selected ? 'ring-2 ring-primary/50 bg-primary/5' : 'hover:ring-1 hover:ring-border/50 hover:bg-muted/30'}
+        `}
+        onDoubleClick={() => setIsEditing(true)}
+      >
+        {isEditing ? (
         <textarea
           ref={inputRef}
           value={text}
@@ -50,8 +59,8 @@ export function TextNode({ data, selected }: TextNodeProps) {
             fontSize: data.fontSize || 16,
             color: data.color || 'inherit',
             fontWeight: data.fontWeight || 'normal',
-            width: `${Math.max(50, text.length * (data.fontSize || 16) * 0.6)}px`, // Auto-grow width roughly
-            minHeight: `${(data.fontSize || 16) * 1.5}px`
+            width: '100%',
+            height: '100%'
           }}
         />
       ) : (
@@ -67,10 +76,11 @@ export function TextNode({ data, selected }: TextNodeProps) {
         </div>
       )}
 
-      <div className={`opacity-0 ${selected ? 'opacity-100' : 'group-hover:opacity-100'} transition-opacity`}>
-        <Handle type="target" position={Position.Left} className="w-2 h-2 bg-foreground border-none" />
-        <Handle type="source" position={Position.Right} className="w-2 h-2 bg-foreground border-none" />
+      <div className={`opacity-0 ${selected ? 'opacity-100' : 'group-hover:opacity-100'} transition-opacity duration-200`}>
+        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10" />
+        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10" />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
