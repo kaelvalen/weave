@@ -7,34 +7,12 @@ import { CommandPalette } from '@/components/ui/CommandPalette';
 import { invoke } from '@tauri-apps/api/core';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ThemeProvider } from '@/components/layout/ThemeProvider';
 
 function App() {
-  const { theme, setReady, setVersion } = useAppStore();
+  const { setReady, setVersion } = useAppStore();
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else if (theme === 'light') {
-      root.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        root.classList.add('dark');
-      }
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (useAppStore.getState().theme === 'system') {
-        if (e.matches) {
-          root.classList.add('dark');
-        } else {
-          root.classList.remove('dark');
-        }
-      }
-    };
-    mediaQuery.addEventListener('change', handleChange);
 
     invoke<string>('system_get_version')
       .then((v) => setVersion(v))
@@ -43,21 +21,19 @@ function App() {
     usePluginStore.getState().discoverPlugins();
 
     setReady(true);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, [theme, setReady, setVersion]);
+  }, [setReady, setVersion]);
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
-        <TopNav />
-        <Workspace />
-        <CommandPalette />
-        <Toaster position="bottom-right" />
-      </div>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider delayDuration={200}>
+        <div className="h-screen w-screen flex flex-col bg-transparent text-foreground overflow-hidden">
+          <TopNav />
+          <Workspace />
+          <CommandPalette />
+          <Toaster position="bottom-right" />
+        </div>
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

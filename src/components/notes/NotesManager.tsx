@@ -105,18 +105,29 @@ export function NotesManager() {
   );
 
   return (
-    <div className="flex h-full w-full bg-background">
-      {/* ── Sidebar ── */}
-      <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r bg-card">
-        <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-muted-foreground" />
-            <h3 className="text-xs font-semibold tracking-wide uppercase">Notes</h3>
+    <div className="flex flex-col h-full w-full bg-background pt-16">
+      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between py-8 flex-shrink-0">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Notes</h2>
+            <p className="text-sm text-muted-foreground mt-1">Manage and organize your personal thoughts and tasks.</p>
           </div>
-          <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleCreate}>
-            <Plus className="w-3.5 h-3.5" />
+          <Button onClick={handleCreate} className="gap-2 shadow-sm">
+            <Plus className="w-4 h-4" /> New Note
           </Button>
         </div>
+
+        {/* ── Body ── */}
+        <div className="flex-1 flex min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">
+          {/* ── Sidebar ── */}
+          <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
+            <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-xs font-semibold tracking-wide uppercase">Notes List</h3>
+              </div>
+            </div>
 
         <div className="px-3 py-3 border-b flex-shrink-0">
           <div className="relative">
@@ -130,7 +141,7 @@ export function NotesManager() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-2">
+        <ScrollArea className="flex-1 p-2 pb-32">
           {loading ? (
             <div className="flex items-center justify-center p-4 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -165,7 +176,7 @@ export function NotesManager() {
       </div>
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background">
+      <div className="flex-1 flex flex-col min-w-0 bg-background relative">
         {selectedNote ? (
           <div className="flex flex-col h-full">
             <div className="h-14 flex items-center justify-between border-b px-6 flex-shrink-0 bg-card">
@@ -192,18 +203,20 @@ export function NotesManager() {
                 onChange={(e) => setSelectedNote({ ...selectedNote, content: e.target.value })}
                 placeholder="Start writing..."
                 spellCheck={false}
-                className="absolute inset-0 w-full h-full p-6 text-sm bg-background text-foreground resize-none focus:outline-none leading-relaxed"
+                className="absolute inset-0 w-full h-full p-6 pb-32 text-sm bg-background text-foreground resize-none focus:outline-none leading-relaxed"
               />
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-background">
             <div className="w-16 h-16 rounded border bg-muted flex items-center justify-center mb-4">
               <FileText className="w-6 h-6 opacity-40" />
             </div>
             <p className="text-sm">Select a note or create a new one</p>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   );

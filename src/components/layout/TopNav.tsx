@@ -18,13 +18,9 @@ export function TopNav() {
 
   return (
     <header
-      className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between gap-4 h-12 px-2 select-none rounded-full"
+      className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between gap-4 h-12 px-2 select-none rounded-full bg-card/80 border border-border backdrop-blur-md shadow-sm"
       data-tauri-drag-region
       style={{
-        background: 'hsl(var(--card) / 0.8)',
-        border: '1px solid hsl(var(--border))',
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)',
         WebkitAppRegion: 'drag',
       } as React.CSSProperties}
     >

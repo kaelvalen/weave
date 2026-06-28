@@ -177,20 +177,29 @@ export function FileManager() {
   const SelectedIcon = selectedFile ? (selectedFile.type === 'directory' ? FolderOpen : getFileIcon(selectedFile.name)) : FileIcon;
 
   return (
-    <div className="flex h-full w-full bg-background">
-      {/* ── Sidebar: File Tree ── */}
-      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card">
-        <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0">
+    <div className="flex flex-col h-full w-full bg-background pt-16">
+      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between py-8 flex-shrink-0">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Files</h2>
+            <p className="text-sm text-muted-foreground mt-1">Manage your local workspace and plugin files.</p>
+          </div>
+          <Button onClick={handleOpenFolder} className="gap-2 shadow-sm">
+            <FolderOpen className="w-4 h-4" /> Open Folder
+          </Button>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="flex-1 flex min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">
+          {/* ── Sidebar: File Tree ── */}
+          <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
+        <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
           <div className="flex items-center gap-2 overflow-hidden mr-2">
             <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <h3 className="text-xs font-semibold tracking-wide truncate" title={currentRoot === '.' ? 'Local Files' : currentRoot}>
               {currentRoot === '.' ? 'Local Files' : currentRoot.split('/').pop() || currentRoot}
             </h3>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleOpenFolder} title="Open Folder">
-              <FolderOpen className="w-3.5 h-3.5" />
-            </Button>
           </div>
         </div>
 
@@ -204,7 +213,7 @@ export function FileManager() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-2">
+        <ScrollArea className="flex-1 p-2 pb-32">
           {isLoading ? (
             <div className="flex items-center justify-center p-4 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...
@@ -222,17 +231,17 @@ export function FileManager() {
       </div>
 
       {/* ── Main Area: File Preview ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background">
+      <div className="flex-1 flex flex-col min-w-0 bg-background relative">
         {selectedFile ? (
-          <div className="flex flex-col h-full">
-            <div className="h-10 flex items-center border-b px-2 gap-1 flex-shrink-0 bg-card">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-background border border-b-transparent rounded-t shadow-sm">
+          <div className="flex flex-col h-full w-full">
+            <div className="h-14 flex items-center border-b px-2 gap-1 flex-shrink-0 bg-card">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-background border rounded-md shadow-sm ml-2">
                 <SelectedIcon className="w-3.5 h-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium">{selectedFile.name}</span>
               </div>
             </div>
             
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-h-0 bg-background">
               {selectedFile.type === 'directory' ? (
                 <div className="flex-1 p-8 flex flex-col items-center justify-center text-center">
                   <div className="w-20 h-20 rounded border bg-muted flex items-center justify-center mb-6">
@@ -251,13 +260,15 @@ export function FileManager() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-background">
             <div className="w-16 h-16 rounded border bg-muted flex items-center justify-center mb-4">
               <FileIcon className="w-6 h-6 opacity-40" />
             </div>
             <p className="text-sm">Select a file from your workspace</p>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   );

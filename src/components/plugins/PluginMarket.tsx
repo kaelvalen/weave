@@ -15,15 +15,21 @@ const CATEGORIES = [
 ];
 
 export function PluginMarket() {
-  const {
-    plugins, isLoading, error,
-    discoverPlugins, searchQuery, setSearchQuery,
-    selectedCategory, setCategory, clearError,
-    loadPlugin, unloadPlugin, loadedPlugins,
-  } = usePluginStore();
+  const plugins = usePluginStore((s) => s.plugins);
+  const isLoading = usePluginStore((s) => s.isLoading);
+  const error = usePluginStore((s) => s.error);
+  const loadedPlugins = usePluginStore((s) => s.loadedPlugins);
+  const searchQuery = usePluginStore((s) => s.searchQuery);
+  const selectedCategory = usePluginStore((s) => s.selectedCategory);
+  const discoverPlugins = usePluginStore((s) => s.discoverPlugins);
+  const setSearchQuery = usePluginStore((s) => s.setSearchQuery);
+  const setCategory = usePluginStore((s) => s.setCategory);
+  const clearError = usePluginStore((s) => s.clearError);
+  const loadPlugin = usePluginStore((s) => s.loadPlugin);
+  const unloadPlugin = usePluginStore((s) => s.unloadPlugin);
+
   const [refreshing, setRefreshing] = useState(false);
 
-  // Auto-dismiss error after 5 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(clearError, 5000);
@@ -51,35 +57,38 @@ export function PluginMarket() {
   const builtinPlugins    = filteredPlugins.filter((p) => p.is_builtin);
   const discoveredPlugins = filteredPlugins.filter((p) => !p.is_builtin);
 
-  // Count plugins per category for badges
   const categoryCounts: Record<string, number> = {};
   for (const p of plugins) {
     categoryCounts[p.category] = (categoryCounts[p.category] || 0) + 1;
   }
 
   return (
-    <div className="flex flex-col h-full max-w-5xl mx-auto w-full">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between h-14 px-6 flex-shrink-0 border-b">
-        <div className="flex items-center gap-3">
-          <Package className="w-5 h-5 text-foreground" />
-          <h2 className="text-base font-semibold">Plugins</h2>
-          <span className="text-xs text-muted-foreground font-mono px-1.5 py-0.5 rounded bg-muted border">
-            {plugins.length}
-          </span>
+    <div className="flex flex-col h-full w-full bg-background pt-16">
+      <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between py-8 flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Plugins</h2>
+              <span className="text-xs text-muted-foreground font-mono px-2 py-0.5 rounded-full bg-muted border">
+                {plugins.length} available
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Discover, manage, and extend Weave's capabilities.</p>
+          </div>
+
+          <Button
+            onClick={handleRefresh}
+            disabled={refreshing || isLoading}
+            className="gap-2 shadow-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing || isLoading}
-          className="gap-2"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
+        {/* ── Body ── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">
 
       {/* ── Error Banner ── */}
       {error && (
@@ -114,7 +123,7 @@ export function PluginMarket() {
                 key={cat.label}
                 type="button"
                 onClick={() => setCategory(cat.value)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium border ${
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -135,7 +144,7 @@ export function PluginMarket() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-6 pb-24">
+        <div className="px-6 py-6 pb-32">
           {isLoading ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -170,9 +179,9 @@ export function PluginMarket() {
                   </h3>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                     {builtinPlugins.map((p) => (
-                      <PluginCard 
-                        key={p.id} 
-                        plugin={p} 
+                      <PluginCard
+                        key={p.id}
+                        plugin={p}
                         isLoaded={loadedPlugins.includes(p.id) || p.state === 'active' || p.state === 'loaded'}
                         onLoad={() => loadPlugin(p.id)}
                         onUnload={() => unloadPlugin(p.id)}
@@ -189,9 +198,9 @@ export function PluginMarket() {
                   </h3>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                     {discoveredPlugins.map((p) => (
-                      <PluginCard 
-                        key={p.id} 
-                        plugin={p} 
+                      <PluginCard
+                        key={p.id}
+                        plugin={p}
                         isLoaded={loadedPlugins.includes(p.id) || p.state === 'active' || p.state === 'loaded'}
                         onLoad={() => loadPlugin(p.id)}
                         onUnload={() => unloadPlugin(p.id)}
@@ -202,6 +211,8 @@ export function PluginMarket() {
               )}
             </div>
           )}
+        </div>
+      </div>
         </div>
       </div>
     </div>

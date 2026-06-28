@@ -14,6 +14,12 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-family, Inter)", "system-ui", "sans-serif"],
+      },
+      borderWidth: {
+        DEFAULT: "var(--border-width, 1px)",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

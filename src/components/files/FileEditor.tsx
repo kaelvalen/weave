@@ -8,7 +8,7 @@ import { readFile } from '@tauri-apps/plugin-fs';
 
 // CodeMirror imports
 import CodeMirror from '@uiw/react-codemirror';
-import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import { useThemeStore } from '@/stores/useThemeStore';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { rust } from '@codemirror/lang-rust';
@@ -73,8 +73,11 @@ export function FileEditor({ path }: FileEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  
   const { executeCapability } = usePluginStore();
+  const { mode } = useThemeStore();
+  
+  const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+  const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
 
   const languageExt = getLanguageExtension(path);
   const languageName = getLanguageName(path);
@@ -186,7 +189,7 @@ export function FileEditor({ path }: FileEditorProps) {
 
   if (isMedia) {
     return (
-      <div className="flex flex-col h-full w-full bg-[#09090b]">
+      <div className="flex flex-col h-full w-full bg-background">
         <div className="flex items-center justify-between px-4 h-12 border-b bg-card flex-shrink-0 z-10">
           <div className="flex items-center gap-2 overflow-hidden">
             <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -210,7 +213,7 @@ export function FileEditor({ path }: FileEditorProps) {
 
   return (
     <div 
-      className="flex flex-col h-full w-full bg-[#09090b]" 
+      className="flex flex-col h-full w-full bg-background" 
       onKeyDown={handleKeyDown}
       tabIndex={-1} // Allow div to receive keyboard events
     >
@@ -244,13 +247,13 @@ export function FileEditor({ path }: FileEditorProps) {
         <CodeMirror
           value={content}
           height="100%"
-          theme={vscodeDark}
+          theme={isDark ? 'dark' : 'light'}
           extensions={languageExt ? [languageExt as any] : []}
           onChange={(val) => {
             setContent(val);
             if (!isDirty) setIsDirty(true);
           }}
-          className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-mono"
+          className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-mono [&_.cm-content]:pb-32"
           basicSetup={{
             lineNumbers: true,
             highlightActiveLineGutter: true,

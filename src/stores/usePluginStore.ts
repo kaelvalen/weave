@@ -3,6 +3,27 @@ import { immer } from 'zustand/middleware/immer';
 import { invoke } from '@tauri-apps/api/core';
 import type { Plugin, PluginCategory } from '@/types/plugin';
 
+/** Extract a human-readable message from Tauri error objects.
+ *  Tauri serializes Rust enums as { "VariantName": data }, not plain strings. */
+function extractError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (typeof err === 'object' && err !== null) {
+    // Tauri serializes WeaveError variants as { "VariantName": "msg" } or { "VariantName": { field: value } }
+    const keys = Object.keys(err);
+    if (keys.length > 0) {
+      const val = (err as any)[keys[0]];
+      if (typeof val === 'string') return val;
+      if (typeof val === 'object' && val !== null) {
+        // e.g. { plugin_id: "...", reason: "..." }
+        return val.reason || val.message || val.stderr || JSON.stringify(val);
+      }
+    }
+    return JSON.stringify(err);
+  }
+  return String(err);
+}
+
 interface PluginState {
   plugins: Plugin[];
   loadedPlugins: string[];
@@ -46,7 +67,7 @@ export const usePluginStore = create<PluginState>()(
           state.isLoading = false;
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = extractError(err);
         console.error('Failed to discover plugins:', msg);
         set((state) => { state.isLoading = false; state.error = `Plugin discovery failed: ${msg}`; });
       }
@@ -62,7 +83,7 @@ export const usePluginStore = create<PluginState>()(
           if (!state.loadedPlugins.includes(id)) { state.loadedPlugins.push(id); }
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = extractError(err);
         console.error(`Failed to load plugin ${id}:`, msg);
         set((state) => { state.error = `Failed to load ${id}: ${msg}`; });
       }
@@ -78,7 +99,7 @@ export const usePluginStore = create<PluginState>()(
           state.loadedPlugins = state.loadedPlugins.filter((pid) => pid !== id);
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = extractError(err);
         console.error(`Failed to unload plugin ${id}:`, msg);
         set((state) => { state.error = `Failed to unload ${id}: ${msg}`; });
       }

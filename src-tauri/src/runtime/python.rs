@@ -77,6 +77,12 @@ impl PythonRuntime {
         let requirements = path.join("requirements.txt");
         if requirements.exists() {
             let python_exe = Self::venv_python_executable(&venv_path);
+            
+            // Ensure pip is actually installed (venv with_pip=True sometimes silently fails on NixOS/Debian)
+            let _ = Command::new(&python_exe)
+                .args(["-m", "ensurepip", "--upgrade"])
+                .output();
+
             let output = Command::new(&python_exe)
                 .args([
                     "-m",

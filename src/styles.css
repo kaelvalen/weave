@@ -70,7 +70,6 @@
 
   * {
     @apply border-border;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
   html, body, #root {
@@ -207,3 +206,4 @@
     animation: shimmer 1.5s ease-in-out infinite;
   }
 }
+
