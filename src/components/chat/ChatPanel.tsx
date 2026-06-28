@@ -9,7 +9,7 @@ import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, XCircle } from 'lucide-react';
+import { PlayCircle } from 'lucide-react';
 
 const SUGGESTED_PROMPTS = [
   { text: 'List files in current directory', icon: '📁', desc: 'Browse filesystem' },

@@ -3,14 +3,14 @@ import { Wrench, ChevronDown, ChevronRight, CheckCircle2, XCircle } from 'lucide
 import { PluginCall } from '@/types/chat';
 import { FileCode, FileDiff, CheckCircle, PlayCircle, Loader2 } from 'lucide-react';
 
-import { useChatStore } from '@/stores/useChatStore';
+
 
 interface ToolCallCardProps {
   call: PluginCall;
   messageId: string;
 }
 
-export function ToolCallCard({ call, messageId }: ToolCallCardProps) {
+export function ToolCallCard({ call }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
   const isError = call.status === 'error';
   const pluginName = call.plugin_id.split('.').pop() || call.plugin_id;

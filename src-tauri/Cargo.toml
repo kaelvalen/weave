@@ -36,6 +36,8 @@ meval = "0.2"
 fend-core = "1.5.8"
 pyo3 = { version = "0.22", features = ["auto-initialize"] }
 wait-timeout = "0.2.1"
+memory-stats = "1.2.0"
+sysinfo = "0.30"
 
 [dependencies.wasmtime]
 version = "22"

@@ -1,13 +1,17 @@
 import { useAppStore } from '@/stores/useAppStore';
-import { MessageCircle, Package, FolderOpen, Settings, FileText } from 'lucide-react';
+import { MessageCircle, Package, FolderOpen, Settings, FileText, Database, Cpu, GitBranch, PenTool } from 'lucide-react';
 import type { View } from '@/types/app';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems: { view: View; label: string; icon: typeof MessageCircle }[] = [
-  { view: 'chat',     label: 'Chat',     icon: MessageCircle },
-  { view: 'files',    label: 'Files',    icon: FolderOpen },
-  { view: 'notes',    label: 'Notes',    icon: FileText },
-  { view: 'plugins',  label: 'Plugins',  icon: Package },
+  { view: 'chat',      label: 'Chat',      icon: MessageCircle },
+  { view: 'files',     label: 'Files',     icon: FolderOpen },
+  { view: 'notes',     label: 'Notes',     icon: FileText },
+  { view: 'knowledge', label: 'Knowledge', icon: Database },
+  { view: 'models',    label: 'Models',    icon: Cpu },
+  { view: 'workflows', label: 'Workflows', icon: GitBranch },
+  { view: 'canvas',    label: 'Canvas',    icon: PenTool },
+  { view: 'plugins',   label: 'Plugins',   icon: Package },
 ];
 
 export function TopNav() {
