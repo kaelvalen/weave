@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 
 export function Workspace() {
   const { activeView } = useAppStore();
+  const isChatExpanded = useAppStore((s) => s.isChatExpanded);
 
   const renderView = () => {
     switch (activeView) {
@@ -46,14 +47,14 @@ export function Workspace() {
 
       {/* Floating AI Chat Container */}
       <div 
-        className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col pointer-events-none ${
-          useAppStore((s) => s.isChatExpanded) 
+        className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 flex flex-col pointer-events-none ${
+          isChatExpanded
             ? 'w-[768px] max-w-[95vw] h-[80vh] bottom-6 opacity-100 shadow-2xl' 
             : 'w-[540px] max-w-[90vw] h-14 bottom-10 opacity-95 hover:opacity-100 shadow-xl translate-y-0'
         }`}
       >
         <div 
-          className="w-full h-full overflow-hidden pointer-events-auto border border-border/40 bg-card/95 backdrop-blur-2xl flex flex-col rounded-[20px] shadow-inner"
+          className="w-full h-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-[20px] shadow-inner"
         >
           <ChatPanel isFloating={true} />
         </div>

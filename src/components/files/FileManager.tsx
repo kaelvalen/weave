@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   FolderOpen, FileText, ChevronRight, ChevronDown, 
-  Search, Plus, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo
+  Search, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';

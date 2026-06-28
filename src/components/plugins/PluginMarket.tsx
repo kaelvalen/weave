@@ -3,7 +3,6 @@ import { usePluginStore } from '@/stores/usePluginStore';
 import { PluginCard } from './PluginCard';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, RefreshCw, Package, Box, Puzzle, Code2, Brain, Layers, Zap, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -20,6 +19,7 @@ export function PluginMarket() {
     plugins, isLoading, error,
     discoverPlugins, searchQuery, setSearchQuery,
     selectedCategory, setCategory, clearError,
+    loadPlugin, unloadPlugin, loadedPlugins,
   } = usePluginStore();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -134,8 +134,8 @@ export function PluginMarket() {
       </div>
 
       {/* ── Content ── */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-6 py-6">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6 pb-24">
           {isLoading ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -169,7 +169,15 @@ export function PluginMarket() {
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted border">{builtinPlugins.length}</span>
                   </h3>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {builtinPlugins.map((p) => <PluginCard key={p.id} plugin={p} />)}
+                    {builtinPlugins.map((p) => (
+                      <PluginCard 
+                        key={p.id} 
+                        plugin={p} 
+                        isLoaded={loadedPlugins.includes(p.id) || p.state === 'active' || p.state === 'loaded'}
+                        onLoad={() => loadPlugin(p.id)}
+                        onUnload={() => unloadPlugin(p.id)}
+                      />
+                    ))}
                   </div>
                 </section>
               )}
@@ -180,14 +188,22 @@ export function PluginMarket() {
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted border">{discoveredPlugins.length}</span>
                   </h3>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {discoveredPlugins.map((p) => <PluginCard key={p.id} plugin={p} />)}
+                    {discoveredPlugins.map((p) => (
+                      <PluginCard 
+                        key={p.id} 
+                        plugin={p} 
+                        isLoaded={loadedPlugins.includes(p.id) || p.state === 'active' || p.state === 'loaded'}
+                        onLoad={() => loadPlugin(p.id)}
+                        onUnload={() => unloadPlugin(p.id)}
+                      />
+                    ))}
                   </div>
                 </section>
               )}
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

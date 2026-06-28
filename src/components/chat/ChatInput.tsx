@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
-import { ArrowUp, Loader2, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square } from 'lucide-react';
+import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
 import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
