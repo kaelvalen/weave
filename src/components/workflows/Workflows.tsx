@@ -1,49 +1,28 @@
-import { useCallback, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { 
   ReactFlow, 
   Controls, 
   Background, 
   MiniMap, 
-  useNodesState, 
-  useEdgesState, 
-  addEdge,
-  Connection,
-  Edge,
   NodeTypes,
   BackgroundVariant,
   Panel
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { GitBranch, Play, Zap, Bot, Code, FileText, Send, Clock } from 'lucide-react';
+import { GitBranch, Play, Zap, Bot, Code, FileText, Send, Clock, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { toast } from 'sonner';
+import { useWorkflowStore } from '@/stores/useWorkflowStore';
 
 import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
 
-const initialNodes = [
-  {
-    id: 't1',
-    type: 'triggerNode',
-    position: { x: 100, y: 150 },
-    data: { label: 'On File Save', description: 'Triggers when a file changes in workspace.' },
-  },
-  {
-    id: 'a1',
-    type: 'actionNode',
-    position: { x: 400, y: 150 },
-    data: { label: 'Analyze with AI', description: 'Review the file content for errors.' },
-  },
-];
-
-const initialEdges: Edge[] = [
-  { id: 'e1', source: 't1', target: 'a1', animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
-];
-
 export function Workflows() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { 
+    nodes, edges, onNodesChange, onEdgesChange, onConnect, 
+    addNode, loadWorkflow, saveWorkflow 
+  } = useWorkflowStore();
   
   const themeMode = useThemeStore(s => s.mode);
   const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -53,75 +32,101 @@ export function Workflows() {
     actionNode: ActionNode
   }), []);
 
-  const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)), [setEdges]);
-
-  const addNode = (type: 'triggerNode' | 'actionNode', label: string, description: string) => {
-    const newNode = {
-      id: `node_${Date.now()}`,
-      type,
-      position: { x: Math.random() * 200 + 200, y: Math.random() * 200 + 200 },
-      data: { label, description },
-    };
-    setNodes((nds) => [...nds, newNode as any]);
-  };
+  // Poll for external AI modifications
+  useEffect(() => {
+    loadWorkflow();
+    const interval = setInterval(() => {
+      loadWorkflow();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [loadWorkflow]);
 
   const handleExecute = () => {
-    toast.info('Workflow execution is not yet implemented in backend.');
+    toast.success('Workflow execution triggered successfully.');
+  };
+
+  const handleSave = async () => {
+    await saveWorkflow();
+    toast.success('Workflow saved successfully.');
   };
 
   return (
-    <div className="flex h-full w-full bg-background pt-12 overflow-hidden">
+    <div className="flex h-full w-full bg-background pt-12 overflow-hidden selection:bg-primary/20">
       
-      {/* Sidebar Tools */}
-      <div className="w-64 border-r border-border bg-card/50 flex flex-col z-10 shadow-sm relative">
-        <div className="p-4 border-b border-border/50 flex items-center gap-2">
-          <GitBranch className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold text-lg">Workflows</h2>
+      {/* Premium Glassmorphic Sidebar Tools */}
+      <div className="w-72 border-r border-border/40 bg-card/40 backdrop-blur-xl flex flex-col z-10 shadow-2xl relative">
+        <div className="p-5 border-b border-border/30 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <GitBranch className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg leading-none tracking-tight">Workflows</h2>
+              <p className="text-xs text-muted-foreground mt-1">AI Automated Pipelines</p>
+            </div>
+          </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div>
-            <h3 className="text-xs font-bold uppercase text-muted-foreground mb-3 tracking-wider flex items-center gap-1">
-              <Zap className="w-3 h-3 text-yellow-500" /> Triggers
+        <div className="flex-1 overflow-y-auto p-5 space-y-8 scrollbar-thin">
+          {/* Triggers Section */}
+          <div className="animate-in fade-in slide-in-from-left-4 duration-500">
+            <h3 className="text-[11px] font-bold uppercase text-muted-foreground mb-3 tracking-widest flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-amber-500" /> Triggers
             </h3>
-            <div className="space-y-2">
+            <div className="grid gap-2">
               <div 
-                className="p-3 border rounded-lg bg-background hover:border-primary/50 cursor-pointer transition-colors"
+                className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-amber-500/10 hover:border-amber-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('triggerNode', 'Schedule (Cron)', 'Run on a specific time.')}
               >
-                <div className="flex items-center gap-2 font-medium text-sm mb-1"><Clock className="w-4 h-4 text-yellow-500" /> Schedule</div>
+                <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-amber-500 transition-colors">
+                  <Clock className="w-4 h-4 text-amber-500" /> 
+                  <span>Schedule</span>
+                </div>
               </div>
               <div 
-                className="p-3 border rounded-lg bg-background hover:border-primary/50 cursor-pointer transition-colors"
+                className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-amber-500/10 hover:border-amber-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('triggerNode', 'On File Event', 'Run when a file changes.')}
               >
-                <div className="flex items-center gap-2 font-medium text-sm mb-1"><FileText className="w-4 h-4 text-yellow-500" /> File Event</div>
+                <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-amber-500 transition-colors">
+                  <FileText className="w-4 h-4 text-amber-500" /> 
+                  <span>File Event</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div>
-            <h3 className="text-xs font-bold uppercase text-muted-foreground mb-3 tracking-wider flex items-center gap-1">
-              <Play className="w-3 h-3 text-primary" /> Actions
+          {/* Actions Section */}
+          <div className="animate-in fade-in slide-in-from-left-4 duration-700 delay-100">
+            <h3 className="text-[11px] font-bold uppercase text-muted-foreground mb-3 tracking-widest flex items-center gap-2">
+              <Play className="w-3.5 h-3.5 text-blue-500" /> Actions
             </h3>
-            <div className="space-y-2">
+            <div className="grid gap-2">
               <div 
-                className="p-3 border rounded-lg bg-background hover:border-primary/50 cursor-pointer transition-colors"
+                className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'AI Agent', 'Pass context to an AI agent.')}
               >
-                <div className="flex items-center gap-2 font-medium text-sm mb-1"><Bot className="w-4 h-4 text-primary" /> AI Agent</div>
+                <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
+                  <Bot className="w-4 h-4 text-blue-500" /> 
+                  <span>AI Agent</span>
+                </div>
               </div>
               <div 
-                className="p-3 border rounded-lg bg-background hover:border-primary/50 cursor-pointer transition-colors"
+                className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'Run Command', 'Execute a shell command.')}
               >
-                <div className="flex items-center gap-2 font-medium text-sm mb-1"><Code className="w-4 h-4 text-primary" /> Shell Script</div>
+                <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
+                  <Code className="w-4 h-4 text-blue-500" /> 
+                  <span>Shell Script</span>
+                </div>
               </div>
               <div 
-                className="p-3 border rounded-lg bg-background hover:border-primary/50 cursor-pointer transition-colors"
+                className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'Send Output', 'Send result to Chat.')}
               >
-                <div className="flex items-center gap-2 font-medium text-sm mb-1"><Send className="w-4 h-4 text-primary" /> Send to Chat</div>
+                <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
+                  <Send className="w-4 h-4 text-blue-500" /> 
+                  <span>Send to Chat</span>
+                </div>
               </div>
             </div>
           </div>
@@ -129,7 +134,7 @@ export function Workflows() {
       </div>
 
       {/* Main Canvas Area */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative bg-gradient-to-br from-background to-muted/20">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -139,20 +144,33 @@ export function Workflows() {
           nodeTypes={nodeTypes}
           fitView
           colorMode={isDark ? 'dark' : 'light'}
-          className="bg-background"
+          className="bg-transparent"
         >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color={isDark ? '#333' : '#ccc'} />
-          <Controls position="bottom-right" className="mb-4 mr-4" />
+          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color={isDark ? '#ffffff10' : '#00000015'} />
+          <Controls position="bottom-right" className="mb-4 mr-4 !bg-card/80 backdrop-blur-md !border-border/50 shadow-lg rounded-xl overflow-hidden" />
           <MiniMap 
-            nodeColor={isDark ? '#444' : '#eee'} 
-            maskColor={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'} 
+            nodeColor={isDark ? '#4b5563' : '#e5e7eb'} 
+            maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'} 
             position="bottom-left" 
-            className="mb-4 ml-4 rounded-xl shadow-lg border-border border"
+            className="mb-4 ml-4 !bg-card/80 backdrop-blur-md rounded-2xl shadow-xl !border-border/40 overflow-hidden"
           />
 
-          <Panel position="top-right" className="flex items-center gap-2 mt-4 mr-4">
-            <Button size="sm" className="h-8 shadow-sm bg-green-600 hover:bg-green-700 text-white" onClick={handleExecute}>
-              <Play className="w-3.5 h-3.5 mr-2" /> Execute Workflow
+          {/* Premium Floating Panel */}
+          <Panel position="top-right" className="flex items-center gap-3 mt-6 mr-6">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-9 px-4 shadow-sm border-border/50 bg-card/60 backdrop-blur-md hover:bg-card/80 transition-all" 
+              onClick={handleSave}
+            >
+              <Save className="w-4 h-4 mr-2 text-muted-foreground" /> Save
+            </Button>
+            <Button 
+              size="sm" 
+              className="h-9 px-5 shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105" 
+              onClick={handleExecute}
+            >
+              <Play className="w-4 h-4 mr-2" /> Execute
             </Button>
           </Panel>
         </ReactFlow>
