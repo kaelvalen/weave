@@ -119,10 +119,11 @@ export function FileEditor({ path }: FileEditorProps) {
     }
 
     executeCapability('com.weave.builtin.file', 'file.read', { path })
-      .then((res: any) => {
+      .then((res) => {
         if (!mounted) return;
-        if (res && res.success) {
-          setContent(res.content);
+        const result = res as { success: boolean; content: string };
+        if (result && result.success) {
+          setContent(result.content);
         } else {
           setError('Failed to read file content.');
         }
@@ -141,6 +142,8 @@ export function FileEditor({ path }: FileEditorProps) {
         URL.revokeObjectURL(mediaUrl);
       }
     };
+    // mediaUrl is managed inside this effect; adding it would cause a fetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, executeCapability, isMedia, isImage, ext]);
 
   const handleSave = useCallback(async (currentContent: string) => {
@@ -149,7 +152,7 @@ export function FileEditor({ path }: FileEditorProps) {
       const res = await executeCapability('com.weave.builtin.file', 'file.write', { 
         path, 
         content: currentContent 
-      }) as any;
+      }) as { success: boolean };
       
       if (res && res.success) {
         toast.success('File saved', { description: filename });
@@ -257,7 +260,7 @@ export function FileEditor({ path }: FileEditorProps) {
           value={content}
           height="100%"
           theme={getWeaveTheme(isDark)}
-          extensions={languageExt ? [languageExt as any] : []}
+          extensions={languageExt ? [languageExt] : []}
           onChange={(val) => {
             setContent(val);
             if (!isDirty) setIsDirty(true);

@@ -62,21 +62,24 @@ function CanvasInner() {
     targetNodeId: null
   });
 
+  const [overlayOffset, setOverlayOffset] = useState({ left: 0, top: 0 });
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   // Update local state when active project changes
   useEffect(() => {
-    if (project) {
-      setNodes(project.nodes);
-      setEdges(project.edges);
+    const currentProject = getActiveProject();
+    if (currentProject) {
+      setNodes(currentProject.nodes);
+      setEdges(currentProject.edges);
       // Give it a tiny delay to fit view after loading new nodes
       setTimeout(() => fitView({ duration: 800 }), 100);
     } else {
       setNodes([]);
       setEdges([]);
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, getActiveProject, fitView, setNodes, setEdges]);
 
   // Auto-save debounced
   useEffect(() => {
@@ -270,6 +273,8 @@ function CanvasInner() {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (activeTool === 'select' || activeTool === 'pan') return;
+    const rect = reactFlowWrapper.current?.getBoundingClientRect();
+    setOverlayOffset({ left: rect?.left || 0, top: rect?.top || 0 });
     setIsDrawing(true);
     setCurrentPoints([{ x: e.clientX, y: e.clientY }]);
   };
@@ -324,8 +329,8 @@ function CanvasInner() {
     
     let width = Math.abs(flowEnd.x - flowStart.x);
     let height = Math.abs(flowEnd.y - flowStart.y);
-    let x = Math.min(flowStart.x, flowEnd.x);
-    let y = Math.min(flowStart.y, flowEnd.y);
+    const x = Math.min(flowStart.x, flowEnd.x);
+    const y = Math.min(flowStart.y, flowEnd.y);
 
     // If clicked without dragging (or dragged very little), use default sizes
     if (width < 10 && height < 10) {
@@ -385,18 +390,18 @@ function CanvasInner() {
 
   // Listen for AI Plugin commands
   useEffect(() => {
-    const unlisten = listen<{ action: string; payload: any }>('canvas-action', (event) => {
+    const unlisten = listen<{ action: string; payload: Record<string, unknown> }>('canvas-action', (event) => {
       const { action, payload } = event.payload;
       if (action === 'add_node') {
         setNodes((nds) => [...nds, {
-          id: payload.id || `ai_node_${Date.now()}`,
-          type: payload.type,
-          position: payload.position || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-          data: payload.data || {}
+          id: (payload.id as string) || `ai_node_${Date.now()}`,
+          type: payload.type as string,
+          position: (payload.position as { x: number; y: number }) || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
+          data: (payload.data as Record<string, unknown>) || {}
         }]);
       } else if (action === 'update_node') {
         setNodes((nds) => nds.map((node) => 
-          node.id === payload.id ? { ...node, data: { ...node.data, ...payload.data } } : node
+          node.id === (payload.id as string) ? { ...node, data: { ...node.data, ...(payload.data as Record<string, unknown>) } } : node
         ));
       } else if (action === 'clear') {
         setNodes([]);
@@ -411,7 +416,7 @@ function CanvasInner() {
     return () => {
       unlisten.then(f => f());
     };
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, handleExport, handleImport]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -519,15 +524,15 @@ function CanvasInner() {
                     fill="none"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    transform={`translate(-${reactFlowWrapper.current?.getBoundingClientRect().left || 0}, -${reactFlowWrapper.current?.getBoundingClientRect().top || 0})`}
+                    transform={`translate(-${overlayOffset.left}, -${overlayOffset.top})`}
                   />
                 </svg>
               ) : (
                 <div 
                   className="absolute border-2 border-primary border-dashed bg-primary/10 pointer-events-none"
                   style={{
-                    left: Math.min(currentPoints[0].x, currentPoints[currentPoints.length - 1].x) - (reactFlowWrapper.current?.getBoundingClientRect().left || 0),
-                    top: Math.min(currentPoints[0].y, currentPoints[currentPoints.length - 1].y) - (reactFlowWrapper.current?.getBoundingClientRect().top || 0),
+                    left: Math.min(currentPoints[0].x, currentPoints[currentPoints.length - 1].x) - overlayOffset.left,
+                    top: Math.min(currentPoints[0].y, currentPoints[currentPoints.length - 1].y) - overlayOffset.top,
                     width: Math.abs(currentPoints[currentPoints.length - 1].x - currentPoints[0].x),
                     height: Math.abs(currentPoints[currentPoints.length - 1].y - currentPoints[0].y)
                   }}

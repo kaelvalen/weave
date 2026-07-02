@@ -36,8 +36,13 @@ function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
+  node?: unknown;
+  inline?: boolean;
+}
+
 // Custom code block component for ReactMarkdown
-const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
+const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) => {
   const [isCopied, setIsCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
@@ -136,15 +141,15 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
     if (match) {
       const pluginId = match[1];
       const resultStr = match[2];
-      let result: any = resultStr;
-      try { result = JSON.parse(resultStr); } catch (e) {}
+      let result: unknown = resultStr;
+      try { result = JSON.parse(resultStr); } catch { /* keep raw string on parse failure */ }
       
       fakeToolCall = {
         plugin_id: pluginId,
         capability: pluginId.includes('.') ? pluginId.split('.').pop()! : 'execute',
         params: { note: "Parameters were parsed by local tool engine" },
         status: 'success',
-        result
+        result: result as Record<string, unknown>
       };
     }
   }
@@ -276,7 +281,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
-                components={{ code: CodeBlock as any }}
+                components={{ code: CodeBlock }}
               >
                 {message.content
                   .replace(/<call[\s\S]*?<\/call>/g, '')

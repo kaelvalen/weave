@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, createElement } from 'react';
 import { 
   FolderOpen, FileText, ChevronRight, ChevronDown, 
   Search, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo, RefreshCw
@@ -33,10 +33,29 @@ interface FSNode {
   isLoading?: boolean;
 }
 
-function FileTreeItem({ item, depth = 0, selectedPath, onSelect, onToggle }: any) {
+function FileTreeItem({ 
+  item, 
+  depth = 0, 
+  selectedPath, 
+  onSelect, 
+  onToggle,
+  query
+}: { 
+  item: FSNode; 
+  depth?: number; 
+  selectedPath?: string; 
+  onSelect: (item: FSNode) => void; 
+  onToggle: (item: FSNode) => void;
+  query: string;
+}) {
   const isSelected = selectedPath === item.path;
   const isFolder = item.type === 'directory';
-  const Icon = isFolder ? FolderOpen : getFileIcon(item.name);
+
+  const visibleChildren = useMemo(() => {
+    if (!query.trim()) return item.children;
+    const q = query.toLowerCase();
+    return item.children?.filter((child) => child.name.toLowerCase().includes(q));
+  }, [item.children, query]);
 
   return (
     <div>
@@ -59,13 +78,19 @@ function FileTreeItem({ item, depth = 0, selectedPath, onSelect, onToggle }: any
           )}
         </span>
         
-        <Icon className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`} />
+        {isFolder ? (
+          <FolderOpen className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`} />
+        ) : (
+          createElement(getFileIcon(item.name), {
+            className: `w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`,
+          })
+        )}
         <span className="text-sm truncate select-none">{item.name}</span>
       </div>
       
-      {isFolder && item.isOpen && item.children && (
+      {isFolder && item.isOpen && visibleChildren && visibleChildren.length > 0 && (
         <div>
-          {item.children.map((child: any) => (
+          {visibleChildren.map((child) => (
             <FileTreeItem 
               key={child.path} 
               item={child} 
@@ -73,6 +98,7 @@ function FileTreeItem({ item, depth = 0, selectedPath, onSelect, onToggle }: any
               selectedPath={selectedPath} 
               onSelect={onSelect} 
               onToggle={onToggle}
+              query={query}
             />
           ))}
         </div>
@@ -88,13 +114,16 @@ export function FileManager() {
   });
   const [selectedFile, setSelectedFile] = useState<FSNode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const { executeCapability } = usePluginStore();
 
   const loadDirectory = useCallback(async (dirPath: string): Promise<FSNode[]> => {
     try {
-      const res = await executeCapability('com.weave.builtin.file', 'file.list', { directory: dirPath }) as any;
-      if (res && res.success) {
-        return res.entries.map((e: any) => ({
+      const res = await executeCapability('com.weave.builtin.file', 'file.list', { directory: dirPath }) as
+        | { success: true; entries: Array<{ name: string; path: string; type: FSNode['type']; size?: number; modified?: number }> }
+        | undefined;
+      if (res?.success) {
+        return res.entries.map((e) => ({
           name: e.name,
           path: e.path,
           type: e.type,
@@ -190,7 +219,11 @@ export function FileManager() {
     }
   };
 
-  const SelectedIcon = selectedFile ? (selectedFile.type === 'directory' ? FolderOpen : getFileIcon(selectedFile.name)) : FileIcon;
+  const filteredRootNodes = useMemo(() => {
+    if (!searchQuery.trim()) return rootNodes;
+    const q = searchQuery.toLowerCase();
+    return rootNodes.filter((node) => node.name.toLowerCase().includes(q));
+  }, [rootNodes, searchQuery]);
 
   return (
     <div className="flex h-full w-full bg-transparent pt-16">
@@ -219,6 +252,8 @@ export function FileManager() {
             <Input 
               placeholder="Search files..." 
               className="pl-8 h-8 text-xs bg-background"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
@@ -228,15 +263,22 @@ export function FileManager() {
             <div className="flex items-center justify-center p-4 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...
             </div>
-          ) : rootNodes.map((item) => (
-            <FileTreeItem 
-              key={item.path} 
-              item={item} 
-              selectedPath={selectedFile?.path} 
-              onSelect={setSelectedFile} 
-              onToggle={handleToggle}
-            />
-          ))}
+          ) : filteredRootNodes.length === 0 ? (
+            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+              {searchQuery.trim() ? 'No files match your search.' : 'No files in this directory.'}
+            </div>
+          ) : (
+            filteredRootNodes.map((item) => (
+              <FileTreeItem 
+                key={item.path} 
+                item={item} 
+                selectedPath={selectedFile?.path} 
+                onSelect={setSelectedFile} 
+                onToggle={handleToggle}
+                query={searchQuery}
+              />
+            ))
+          )}
         </ScrollArea>
       </div>
 
@@ -246,7 +288,13 @@ export function FileManager() {
           <div className="flex flex-col h-full w-full">
             <div className="h-14 flex items-center border-b px-2 gap-1 flex-shrink-0 bg-card">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-background border rounded-md shadow-sm ml-2">
-                <SelectedIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                {selectedFile.type === 'directory' ? (
+                  <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+                ) : (
+                  createElement(getFileIcon(selectedFile.name), {
+                    className: 'w-3.5 h-3.5 text-muted-foreground',
+                  })
+                )}
                 <span className="text-xs font-medium">{selectedFile.name}</span>
               </div>
             </div>

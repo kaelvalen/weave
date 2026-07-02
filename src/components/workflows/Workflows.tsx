@@ -32,11 +32,22 @@ export function Workflows() {
     actionNode: ActionNode
   }), []);
 
-  // Poll for external AI modifications
+  // Poll for external AI modifications, but don't overwrite active edits
   useEffect(() => {
-    loadWorkflow();
-    const interval = setInterval(() => {
+    const shouldReload = () => {
+      const state = useWorkflowStore.getState();
+      const anySelected = state.nodes.some((n) => n.selected);
+      return !state.dirty && !anySelected;
+    };
+
+    if (shouldReload()) {
       loadWorkflow();
+    }
+
+    const interval = setInterval(() => {
+      if (shouldReload()) {
+        loadWorkflow();
+      }
     }, 2000);
     return () => clearInterval(interval);
   }, [loadWorkflow]);

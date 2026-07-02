@@ -19,7 +19,7 @@ export function ProjectManager() {
     setEditName(currentName);
   };
 
-  const handleSaveEdit = (id: string, e: React.MouseEvent) => {
+  const handleSaveEdit = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     if (editName.trim()) {
       renameProject(id, editName.trim());
@@ -27,7 +27,7 @@ export function ProjectManager() {
     setEditingId(null);
   };
 
-  const handleCancelEdit = (e: React.MouseEvent) => {
+  const handleCancelEdit = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     setEditingId(null);
   };
@@ -74,8 +74,8 @@ export function ProjectManager() {
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveEdit(project.id, e as any);
-                        if (e.key === 'Escape') handleCancelEdit(e as any);
+                        if (e.key === 'Enter') handleSaveEdit(project.id, e);
+                        if (e.key === 'Escape') handleCancelEdit(e);
                       }}
                       className="flex-1 bg-background border border-border rounded px-2 py-1 text-sm outline-none focus:border-primary"
                       autoFocus

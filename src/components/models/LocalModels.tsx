@@ -49,11 +49,14 @@ export function LocalModels() {
   };
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    // Standard data-fetch on mount: load installed models and poll system stats.
     fetchModels();
     
     // Poll stats
     fetchStats();
     const interval = setInterval(fetchStats, 2000);
+    /* eslint-enable react-hooks/set-state-in-effect */
     
     // Listen to download progress
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {

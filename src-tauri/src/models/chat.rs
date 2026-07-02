@@ -112,8 +112,6 @@ impl ChatMessage {
 
 impl MessageMetadata {
     pub fn add_plugin_call(&mut self, call: PluginCall) {
-        if let Some(ref mut _meta) = self.plugin_calls.first() {
-        }
         self.plugin_calls.push(call);
     }
 }

@@ -19,8 +19,10 @@ export interface LocalConfig {
   api_url?: string;
 }
 
+import type { Provider } from './chat';
+
 export interface AiConfig {
-  default_provider: 'openai' | 'anthropic' | 'kimi' | 'local';
+  default_provider: Provider;
   openai: ProviderConfig;
   anthropic: ProviderConfig;
   kimi: ProviderConfig;

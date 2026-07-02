@@ -8,6 +8,7 @@ dist-ssr/
 # Tauri
 src-tauri/target/
 src-tauri/gen/
+src-tauri/examples/scratch/
 
 # Environment
 .env
@@ -45,4 +46,5 @@ __pycache__/
 
 # External Weave Plugins
 /external_plugins/
+external_plugins/**/.venv/
 .worktrees/

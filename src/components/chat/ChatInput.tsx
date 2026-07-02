@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
+import type { Provider } from '@/types/chat';
 import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
@@ -19,20 +20,15 @@ import kimiIcon from '@/assets/kimi-ai-icon.svg';
 import opencodeLightIcon from '@/assets/opencodelightmode.png';
 import opencodeDarkIcon from '@/assets/opencodedarkmode.png';
 
-type ModelOption = { value: string; label: string; provider: string };
+type ModelOption = { value: string; label: string; provider: Provider };
 
 const FALLBACK_MODELS: ModelOption[] = [
-  { value: 'gpt-5.6-sol',          label: 'GPT-5.6 Sol',      provider: 'openai' },
-  { value: 'gpt-5.5-pro',          label: 'GPT-5.5 Pro',      provider: 'openai' },
-  { value: 'gpt-5.4-mini',         label: 'GPT-5.4 Mini',     provider: 'openai' },
-  { value: 'claude-fable-5',        label: 'Claude Fable 5',   provider: 'anthropic' },
-  { value: 'claude-opus-4-8',       label: 'Claude Opus 4.8',  provider: 'anthropic' },
-  { value: 'claude-sonnet-4-6',     label: 'Claude Sonnet 4.6',provider: 'anthropic' },
-  { value: 'claude-haiku-4-5',      label: 'Claude Haiku 4.5', provider: 'anthropic' },
-  { value: 'kimi-k2.6',             label: 'Kimi K2.6',        provider: 'kimi' },
-  { value: 'kimi-k2.7-code',        label: 'Kimi K2.7 Code',   provider: 'kimi' },
-  { value: 'llama3',                label: 'Llama 3 (Local)',   provider: 'local' },
-  { value: 'mistral',               label: 'Mistral (Local)',   provider: 'local' },
+  { value: 'gpt-4o',                  label: 'GPT-4o',              provider: 'openai' },
+  { value: 'gpt-4o-mini',             label: 'GPT-4o Mini',         provider: 'openai' },
+  { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet',provider: 'anthropic' },
+  { value: 'kimi-k2-0711-preview',    label: 'Kimi K2',             provider: 'kimi' },
+  { value: 'opencode-gpt-4o',         label: 'OpenCode GPT-4o',     provider: 'opencode' },
+  { value: 'llama3.1',                label: 'Llama 3.1 (Local)',   provider: 'local' },
 ];
 
 const PROVIDER_META: Record<string, { color: string, icon?: string, iconDark?: string }> = {
@@ -70,13 +66,15 @@ export function ChatInput() {
 
   useEffect(() => {
     let cancelled = false;
+    // Standard data-fetch pattern: loading state for async model list refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setModelsLoading(true);
 
     invoke<AppConfig>('system_get_config')
-      .then(async (_config) => {
-        const providers = Object.keys(PROVIDER_META);
+      .then(async () => {
+        const providers = Object.keys(PROVIDER_META) as Provider[];
 
-        if (providers.length === 0) { if (!cancelled) setModels(FALLBACK_MODELS); return; }
+        if (providers.length === 0) { if (!cancelled) setModels([]); return; }
 
         const results = await Promise.allSettled(
           providers.map((key) => invoke<string[]>('list_provider_models', { provider: key }))
@@ -86,11 +84,11 @@ export function ChatInput() {
           const key = providers[idx];
           if (res.status === 'fulfilled' && res.value.length > 0) {
             res.value.forEach((id) => merged.push({ value: id, label: id, provider: key }));
-          } else {
+          } else if (res.status === 'rejected') {
             FALLBACK_MODELS.filter((m) => m.provider === key).forEach((m) => merged.push(m));
           }
         });
-        if (!cancelled) setModels(merged.length > 0 ? merged : FALLBACK_MODELS);
+        if (!cancelled) setModels(merged);
       })
       .catch(() => { if (!cancelled) setModels(FALLBACK_MODELS); })
       .finally(() => { if (!cancelled) setModelsLoading(false); });
@@ -246,7 +244,10 @@ export function ChatInput() {
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: pm.color }} />
               )}
               <span className="truncate flex-1 text-left">
-                {modelsLoading ? '…' : (models.find(m => m.value === selectedModel)?.label || 'Model')}
+                {modelsLoading
+                  ? '…'
+                  : (models.find(m => m.value === selectedModel)?.label ||
+                     (models.length === 0 ? 'No models configured' : 'Model'))}
               </span>
               <ChevronDown className="w-3 h-3 opacity-50 flex-shrink-0" />
             </DropdownMenuTrigger>
@@ -272,9 +273,13 @@ export function ChatInput() {
                 </button>
               </div>
               <div className="max-h-[200px] overflow-y-auto">
-                {(() => {
+                {models.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                    No models configured
+                  </div>
+                ) : (() => {
                   const filtered = models.filter(m => m.label.toLowerCase().includes(searchQuery.toLowerCase()) || m.value.toLowerCase().includes(searchQuery.toLowerCase()));
-                  
+
                   const favs = filtered.filter(m => favoriteModels.includes(m.value));
                   const recents = filtered.filter(m => recentModels.includes(m.value) && !favoriteModels.includes(m.value));
                   const rest = filtered.filter(m => !favoriteModels.includes(m.value) && !recentModels.includes(m.value));

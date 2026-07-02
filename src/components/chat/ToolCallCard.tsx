@@ -26,7 +26,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
 
   const renderCoderResult = () => {
     if (!call.result) return null;
-    const res = call.result as any;
+    const res = call.result as Record<string, unknown>;
     
     if (call.capability === 'coder.apply_diff') {
       const oldStr = (call.params.old_str as string) || '';
@@ -49,7 +49,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
               <div className="text-green-500">{newStr}</div>
             </div>
           </div>
-          {res.backed_up && <div className="text-[10px] text-muted-foreground mt-1 text-right">Backed up to .weave.bak</div>}
+          {(res.backed_up as boolean) && <div className="text-[10px] text-muted-foreground mt-1 text-right">Backed up to .weave.bak</div>}
         </div>
       );
     }
@@ -58,27 +58,27 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
       return (
         <div className="mt-2 flex items-center gap-2 p-2 bg-muted/30 border rounded text-xs">
           <FileCode className="w-4 h-4 text-blue-500" />
-          <span>Wrote <strong>{res.bytes_written}</strong> bytes to <code className="bg-background px-1 py-0.5 rounded border">{res.path}</code></span>
+          <span>Wrote <strong>{res.bytes_written as number}</strong> bytes to <code className="bg-background px-1 py-0.5 rounded border">{res.path as string}</code></span>
         </div>
       );
     }
 
     if (call.capability === 'coder.run_check' || call.capability === 'coder.run_tests') {
-      const success = res.success;
+      const success = res.success as boolean;
       return (
         <div className="mt-2 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-medium">
             {success ? <CheckCircle className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
-            {call.capability === 'coder.run_tests' ? 'Test Results' : 'Check Results'} ({res.check_type})
+            {call.capability === 'coder.run_tests' ? 'Test Results' : 'Check Results'} ({res.check_type as string})
           </div>
           <div className="text-[11px] font-mono bg-background/50 border rounded p-2 overflow-x-auto whitespace-pre max-h-[250px] overflow-y-auto">
-            <div className="text-muted-foreground mb-1">$ {res.command}</div>
-            <div className={success ? 'text-foreground' : 'text-red-400'}>{res.stdout || res.stderr || 'No output'}</div>
+            <div className="text-muted-foreground mb-1">$ {res.command as string}</div>
+            <div className={success ? 'text-foreground' : 'text-red-400'}>{(res.stdout as string) || (res.stderr as string) || 'No output'}</div>
           </div>
           {(res.tests_passed !== null && res.tests_passed !== undefined) && (
             <div className="flex gap-4 text-[11px]">
-              <span className="text-green-500 font-medium">{res.tests_passed} Passed</span>
-              {res.tests_failed > 0 && <span className="text-red-500 font-medium">{res.tests_failed} Failed</span>}
+              <span className="text-green-500 font-medium">{res.tests_passed as number} Passed</span>
+              {(res.tests_failed as number) > 0 && <span className="text-red-500 font-medium">{res.tests_failed as number} Failed</span>}
             </div>
           )}
         </div>

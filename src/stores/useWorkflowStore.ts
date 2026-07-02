@@ -14,6 +14,7 @@ import { readTextFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-f
 export interface WorkflowState {
   nodes: Node[];
   edges: Edge[];
+  dirty: boolean;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -47,23 +48,27 @@ const initialEdges: Edge[] = [
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   nodes: initialNodes,
   edges: initialEdges,
+  dirty: false,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
       nodes: applyNodeChanges(changes, get().nodes),
+      dirty: true,
     });
   },
   onEdgesChange: (changes: EdgeChange[]) => {
     set({
       edges: applyEdgeChanges(changes, get().edges),
+      dirty: true,
     });
   },
   onConnect: (connection: Connection) => {
     set({
       edges: addEdge({ ...connection, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }, get().edges),
+      dirty: true,
     });
   },
-  
+
   addNode: (type, label, description) => {
     const newNode: Node = {
       id: `node_${Date.now()}`,
@@ -71,7 +76,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       position: { x: Math.random() * 200 + 200, y: Math.random() * 200 + 200 },
       data: { label, description },
     };
-    set({ nodes: [...get().nodes, newNode] });
+    set({ nodes: [...get().nodes, newNode], dirty: true });
   },
 
   setNodes: (nodes) => set({ nodes }),
@@ -98,6 +103,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         edges: get().edges
       };
       await writeTextFile('weave_workflow.json', JSON.stringify(data, null, 2), { baseDir: BaseDirectory.AppData });
+      set({ dirty: false });
     } catch (e) {
       console.error('Failed to save workflow', e);
     }

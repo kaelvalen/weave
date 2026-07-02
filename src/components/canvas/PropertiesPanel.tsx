@@ -90,11 +90,11 @@ export function PropertiesPanel({ selectedNode, updateNode, deleteNode }: Proper
   const style = selectedNode.style || {};
   const position = selectedNode.position || { x: 0, y: 0 };
 
-  const handleUpdate = (field: 'position' | 'style' | 'data', key: string, value: any) => {
+  const handleUpdate = (field: 'position' | 'style' | 'data', key: string, value: unknown) => {
     if (field === 'position') {
-      updateNode(selectedNode.id, { position: { ...position, [key]: value } });
+      updateNode(selectedNode.id, { position: { ...position, [key]: value as number } });
     } else if (field === 'style') {
-      updateNode(selectedNode.id, { style: { [key]: value } });
+      updateNode(selectedNode.id, { style: { [key]: value as string | number } });
     } else if (field === 'data') {
       updateNode(selectedNode.id, { data: { [key]: value } });
     }

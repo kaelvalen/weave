@@ -242,7 +242,7 @@ impl CoderPlugin {
         if path.join("Cargo.toml").exists() {
             Ok(("rust", "sh", "-c 'cargo check 2>&1'".to_string()))
         } else if path.join("package.json").exists() {
-            let pkg = std::fs::read_to_string(path.join("n package.json")).unwrap_or_default();
+            let pkg = std::fs::read_to_string(path.join("package.json")).unwrap_or_default();
             if pkg.contains("\"type-check\"") || std::fs::read_to_string(path.join("package.json")).unwrap_or_default().contains("\"type-check\"") {
                 Ok(("typescript", "sh", "-c 'npm run type-check 2>&1'".to_string()))
             } else if pkg.contains("\"build\"") || std::fs::read_to_string(path.join("package.json")).unwrap_or_default().contains("\"build\"") {

@@ -28,7 +28,9 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
   const [activeFrame, setActiveFrame] = useState<ToolMode>('frame');
   const [activeDraw, setActiveDraw] = useState<ToolMode>('pen');
 
-  // Sync active tool categories when activeTool changes externally (shortcuts)
+  // Sync active tool categories when activeTool changes externally (shortcuts).
+  // This is derived-state synchronization for the toolbar dropdown previews.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (['rectangle', 'circle', 'diamond', 'line', 'arrow', 'polygon', 'star', 'image'].includes(activeTool)) {
       setActiveShape(activeTool);
@@ -40,6 +42,7 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
       setActiveDraw(activeTool);
     }
   }, [activeTool]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toolGroups = [
     { type: 'single', id: 'select', icon: MousePointer2, label: 'Move (V)' },

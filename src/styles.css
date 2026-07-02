@@ -133,8 +133,7 @@
   .prose li { @apply leading-relaxed; }
 
   /* ─── Scrollbar ─── */
-  ::-webkit-scrollbar { display: none; }
-  * { -ms-overflow-style: none; scrollbar-width: none; }
+  /* Scrollbars are visible by default; use .hide-scrollbar to opt out per element. */
 
   /* ─── View Transition ─── */
   .view-transition > * {
@@ -205,6 +204,15 @@
     );
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* ─── Hide scrollbar utility ─── */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

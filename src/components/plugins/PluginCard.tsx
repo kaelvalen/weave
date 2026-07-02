@@ -73,7 +73,7 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
   const [toggling, setToggling] = useState(false);
 
   // Rust serde serializes Error(String) as { "error": "msg" } due to rename_all="lowercase"
-  const hasError = typeof plugin.state === 'object' && plugin.state !== null && 'error' in (plugin.state as any);
+  const hasError = typeof plugin.state === 'object' && plugin.state !== null && 'error' in (plugin.state as Record<string, unknown>);
 
   const handleToggle = async () => {
     if (plugin.is_builtin || toggling) return;

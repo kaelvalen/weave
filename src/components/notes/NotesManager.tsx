@@ -40,11 +40,11 @@ export function NotesManager() {
 
   const loadNotes = useCallback(async () => {
     try {
-      const res = await executeCapability('com.weave.builtin.note', 'note.list', {}) as any;
+      const res = await executeCapability('com.weave.builtin.note', 'note.list', {}) as { success: boolean; notes: Note[] };
       if (res && res.success) {
         setNotes(res.notes);
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to load notes');
     } finally {
       setLoading(false);
@@ -60,13 +60,13 @@ export function NotesManager() {
       const res = await executeCapability('com.weave.builtin.note', 'note.create', { 
         title: 'Untitled Note',
         content: ''
-      }) as any;
+      }) as { success: boolean; note: Note };
       
       if (res && res.success) {
         await loadNotes();
         setSelectedNote(res.note);
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to create note');
     }
   };
@@ -79,13 +79,13 @@ export function NotesManager() {
         id: selectedNote.id,
         title: selectedNote.title,
         content: selectedNote.content
-      }) as any;
+      }) as { success: boolean };
       
       if (res && res.success) {
         toast.success('Note saved');
         await loadNotes();
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to save note');
     } finally {
       setSaving(false);
@@ -99,14 +99,14 @@ export function NotesManager() {
     try {
       const res = await executeCapability('com.weave.builtin.note', 'note.delete', {
         id: selectedNote.id
-      }) as any;
+      }) as { success: boolean };
       
       if (res && res.success) {
         setSelectedNote(null);
         await loadNotes();
         toast.success('Note deleted');
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete note');
     }
   };

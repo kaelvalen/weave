@@ -28,6 +28,8 @@ export function KnowledgeBase() {
   };
 
   useEffect(() => {
+    // Standard data-fetch on mount: populate knowledge base file list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFiles();
   }, []);
 

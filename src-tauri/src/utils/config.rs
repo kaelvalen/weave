@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use super::errors::WeaveError;
 
+pub const OLLAMA_DEFAULT_URL: &str = "http://localhost:11434";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub ai: AiConfig,
@@ -123,7 +125,7 @@ impl Default for AppConfig {
                     model_alias: "llama3".to_string(),
                     context_length: 4096,
                     temperature: 0.7,
-                    api_url: Some("http://localhost:11434".to_string()),
+                    api_url: Some(OLLAMA_DEFAULT_URL.to_string()),
                 },
             },
             plugins: PluginConfig {
