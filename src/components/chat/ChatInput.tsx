@@ -146,15 +146,35 @@ export function ChatInput() {
   const query = input.trimStart();
   const isSlashCommandActive = query.startsWith('/') && !query.slice(1).includes(' ');
   const slashSearch = isSlashCommandActive ? query.toLowerCase() : '';
+  const allSlashCommands = useMemo(() => {
+    const externalCmds = externalPlugins.map((p) => {
+      const shortId = p.id.split('.').pop() || p.id;
+      const cmdName = `/${shortId.toLowerCase()}`;
+      return {
+        command: cmdName,
+        title: p.name,
+        desc: p.description || `Execute ${p.name} capability`,
+        icon: Cpu,
+        template: `${cmdName} `,
+        isExternal: !p.is_builtin,
+      };
+    });
+
+    const existingCmds = new Set(SLASH_COMMANDS.map(c => c.command.toLowerCase()));
+    const uniqueExternal = externalCmds.filter(c => !existingCmds.has(c.command.toLowerCase()));
+
+    return [...SLASH_COMMANDS, ...uniqueExternal];
+  }, [externalPlugins]);
+
   const filteredSlashCommands = useMemo(() => {
     return isSlashCommandActive
-      ? SLASH_COMMANDS.filter(cmd =>
+      ? allSlashCommands.filter(cmd =>
           cmd.command.toLowerCase().startsWith(slashSearch) ||
           cmd.title.toLowerCase().includes(slashSearch.slice(1)) ||
           cmd.desc.toLowerCase().includes(slashSearch.slice(1))
         )
       : [];
-  }, [isSlashCommandActive, slashSearch]);
+  }, [isSlashCommandActive, slashSearch, allSlashCommands]);
 
   const selectSlashCommand = useCallback((cmd: (typeof SLASH_COMMANDS)[0]) => {
     setInput(cmd.template);
@@ -275,9 +295,16 @@ export function ChatInput() {
 
     // 1. Check external / discovered / loaded plugins from usePluginStore
     for (const p of externalPlugins) {
+      const cleanName = p.name.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+      const shortId = p.id.split('.').pop()?.toLowerCase() || '';
+      const shortIdSpace = shortId.replace(/_/g, ' ');
+
       if (
         (inputLow.includes(p.name.toLowerCase()) ||
          inputLow.includes(p.id.toLowerCase()) ||
+         (cleanName && cleanName.length > 2 && inputLow.includes(cleanName)) ||
+         (shortId && shortId.length > 2 && inputLow.includes(shortId)) ||
+         (shortIdSpace && shortIdSpace.length > 2 && inputLow.includes(shortIdSpace)) ||
          loadedPlugins.includes(p.id)) &&
         !seen.has(p.name)
       ) {

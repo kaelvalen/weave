@@ -21,7 +21,13 @@ export function extractError(
     const keys = Object.keys(e);
     if (keys.length === 1) {
       const val = e[keys[0]];
-      if (typeof val === 'string') return val;
+      if (typeof val === 'string') {
+        if (['error', 'message', 'reason', 'Error', 'Message'].includes(keys[0])) {
+          return val;
+        }
+        const formattedKey = keys[0].replace(/([A-Z])/g, ' $1').trim();
+        return `${formattedKey}: ${val}`;
+      }
       if (typeof val === 'object' && val !== null) {
         const v = val as Record<string, unknown>;
         if (typeof v.message === 'string') return v.message;

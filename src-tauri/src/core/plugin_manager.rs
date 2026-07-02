@@ -241,14 +241,19 @@ impl PluginManager {
         }
 
         let mut plugins = self.plugins.write();
-        for plugin in &all_plugins {
-            if !plugins.contains_key(&plugin.id) {
-                plugins.insert(plugin.id.clone(), plugin.clone());
+        for plugin in all_plugins {
+            if let Some(existing) = plugins.get(&plugin.id) {
+                let mut updated = plugin.clone();
+                updated.state = existing.state.clone();
+                plugins.insert(updated.id.clone(), updated);
+            } else {
+                plugins.insert(plugin.id.clone(), plugin);
             }
         }
 
-        info!("Discovered {} plugins total", all_plugins.len());
-        Ok(all_plugins)
+        let result: Vec<Plugin> = plugins.values().cloned().collect();
+        info!("Discovered {} plugins total", result.len());
+        Ok(result)
     }
 
     fn extracted_dir(&self, plugin_id: &str) -> PathBuf {
@@ -312,7 +317,8 @@ impl PluginManager {
         let plugin = plugins.get_mut(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
         if plugin.is_loaded() {
-            return Err(WeaveError::PluginAlreadyLoaded(plugin_id.to_string()));
+            info!("Plugin {} is already loaded, returning existing state", plugin_id);
+            return Ok(plugin.clone());
         }
 
         match plugin.runtime.runtime_type {
