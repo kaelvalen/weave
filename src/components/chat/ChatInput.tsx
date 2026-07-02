@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAppStore } from '@/stores/useAppStore';
+import { usePluginStore } from '@/stores/usePluginStore';
 import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
@@ -79,6 +80,7 @@ export function ChatInput() {
   const { sendMessage, isStreaming, selectedModel, setModel } = useChatStore();
   const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
   const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } = useModelPreferenceStore();
+  const { plugins: externalPlugins, loadedPlugins } = usePluginStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -264,7 +266,45 @@ export function ChatInput() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const hints = PLUGIN_HINTS.filter((h) => input.toLowerCase().includes(h.keyword));
+  const hints = useMemo(() => {
+    const inputLow = input.toLowerCase().trim();
+    if (!inputLow) return [];
+
+    const matched: { label: string; icon: React.ElementType; isExternal?: boolean }[] = [];
+    const seen = new Set<string>();
+
+    // 1. Check external / discovered / loaded plugins from usePluginStore
+    for (const p of externalPlugins) {
+      if (
+        (inputLow.includes(p.name.toLowerCase()) ||
+         inputLow.includes(p.id.toLowerCase()) ||
+         loadedPlugins.includes(p.id)) &&
+        !seen.has(p.name)
+      ) {
+        seen.add(p.name);
+        matched.push({ label: p.name, icon: Cpu, isExternal: !p.is_builtin });
+      }
+    }
+
+    // 2. Check SLASH_COMMANDS
+    for (const sc of SLASH_COMMANDS) {
+      const cmdWord = sc.command.replace('/', '').toLowerCase();
+      if ((inputLow.includes(sc.command.toLowerCase()) || inputLow.includes(cmdWord)) && !seen.has(sc.title)) {
+        seen.add(sc.title);
+        matched.push({ label: sc.title, icon: sc.icon });
+      }
+    }
+
+    // 3. Check builtin keyword PLUGIN_HINTS
+    for (const h of PLUGIN_HINTS) {
+      if (inputLow.includes(h.keyword) && !seen.has(h.label)) {
+        seen.add(h.label);
+        matched.push({ label: h.label, icon: h.icon });
+      }
+    }
+
+    return matched;
+  }, [input, externalPlugins, loadedPlugins]);
   const currentProvider = models.find((m) => m.value === selectedModel)?.provider ?? 'openai';
   const pm = PROVIDER_META[currentProvider] ?? PROVIDER_META.openai;
   const canSend = (!!input.trim() || images.length > 0) && !isStreaming;
@@ -346,19 +386,23 @@ export function ChatInput() {
       {/* Main Glassmorphism Chat Input Box */}
       <div className="glow-effect rounded-[28px] overflow-hidden border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl transition-all duration-300 focus-within:shadow-2xl focus-within:border-primary/50">
         {/* Plugin hint strip */}
-        {hints.length > 0 && input.length > 3 && (
-          <div className="flex items-center gap-2 px-4 py-1.5 border-b bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1">
+        {hints.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/60 bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1 flex-shrink-0">
               <Zap className="w-3 h-3 text-amber-500 fill-current animate-pulse" />
               Active Plugins
             </span>
-            <div className="flex items-center gap-1.5 overflow-x-auto">
+            <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
               {hints.map((h, i) => {
                 const Icon = h.icon;
                 return (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-background text-foreground border border-border shadow-sm"
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-sm flex-shrink-0 transition-all duration-200 ${
+                      h.isExternal
+                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                        : 'bg-background text-foreground border-border/80'
+                    }`}
                   >
                     <Icon className="w-3 h-3 text-primary" />
                     {h.label}
@@ -386,7 +430,7 @@ export function ChatInput() {
               ) : (
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: pm.color }} />
               )}
-              <span className="truncate max-w-[110px] sm:max-w-[140px] font-medium text-left">
+              <span className="truncate max-w-[80px] sm:max-w-[130px] font-medium text-left">
                 {modelsLoading
                   ? 'Loading...'
                   : (models.find(m => m.value === selectedModel)?.label ||
@@ -558,7 +602,7 @@ export function ChatInput() {
 
           {/* Shortcut hint & Send / Stop button */}
           <div className="flex items-center gap-2 flex-shrink-0 mb-0.5">
-            <span className="text-[10px] text-muted-foreground/50 font-mono hidden md:inline select-none">
+            <span className="text-[10px] text-muted-foreground/50 font-mono hidden xl:inline select-none">
               ↵ Send
             </span>
             {isStreaming ? (
@@ -581,7 +625,7 @@ export function ChatInput() {
                 className={[
                   'w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md',
                   'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
-                  canSend ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white hover:shadow-lg hover:shadow-indigo-500/25 hover:scale-105 active:scale-95' : 'bg-muted text-muted-foreground'
+                  canSend ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:scale-105 active:scale-95' : 'bg-muted text-muted-foreground'
                 ].join(' ')}
               >
                 <ArrowUp className="w-4 h-4 stroke-[2.5]" />

@@ -225,24 +225,24 @@ function EmptyState() {
       </p>
 
       {/* Suggestion grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 w-full max-w-4xl">
+      <div className="grid gap-3.5 w-full max-w-4xl" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {SUGGESTED_PROMPTS.map((p, i) => (
           <button
             key={i}
             type="button"
-            className="group relative flex flex-col justify-between p-4 rounded-2xl border border-border/70 bg-card/60 hover:bg-card text-left transition-all duration-300 shadow-sm hover:shadow-lg hover:border-primary/40 hover:-translate-y-1 overflow-hidden"
+            className="group relative flex flex-col justify-between p-4 rounded-2xl border border-border/70 bg-card/60 hover:bg-card text-left transition-all duration-300 shadow-sm hover:shadow-lg hover:border-primary/40 hover:-translate-y-1 overflow-hidden min-w-0"
             onClick={() => useChatStore.getState().sendMessage(p.text)}
           >
             <div className="flex items-start justify-between gap-2 mb-2.5">
-              <div className="p-2 rounded-xl bg-muted/60 text-foreground group-hover:text-primary group-hover:scale-110 transition-all duration-300">
+              <div className="p-2 rounded-xl bg-muted/60 text-foreground group-hover:text-primary group-hover:scale-110 transition-all duration-300 flex-shrink-0">
                 <p.icon className="w-5 h-5 stroke-[2]" />
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${p.badge}`}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${p.badge}`}>
                 {p.category}
               </span>
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
                 {p.text}
               </p>
               <p className="text-xs text-muted-foreground/80 mt-1 line-clamp-2 leading-relaxed">
