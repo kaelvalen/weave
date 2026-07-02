@@ -411,7 +411,7 @@ export function ChatInput() {
       )}
 
       {/* Main Glassmorphism Chat Input Box */}
-      <div className="glow-effect rounded-[28px] overflow-hidden border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl transition-all duration-300 focus-within:shadow-2xl focus-within:border-primary/50">
+      <div className="glow-effect rounded-2xl overflow-hidden border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl transition-all duration-300 focus-within:shadow-2xl focus-within:border-primary/50">
         {/* Plugin hint strip */}
         {hints.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/60 bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">

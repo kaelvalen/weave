@@ -63,7 +63,7 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className={`flex h-full overflow-hidden ${!isFloating ? 'rounded-2xl border border-border/40 bg-card shadow-sm' : ''}`}>
       {/* ── Sidebar ── */}
       {showHistory && (
         <ChatHistorySidebar onClose={() => setShowHistory(false)} />
