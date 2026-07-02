@@ -14,6 +14,8 @@ impl PluginExecutor for CanvasPlugin {
         match capability {
             "canvas.add_node" => self.add_node(params),
             "canvas.update_node" => self.update_node(params),
+            "canvas.delete_node" => self.delete_node(params),
+            "canvas.connect_nodes" => self.connect_nodes(params),
             "canvas.clear" => self.clear(),
             "canvas.export" => self.export(),
             "canvas.import" => self.import(),
@@ -28,7 +30,7 @@ impl CanvasPlugin {
         let data = params.get("data").cloned().unwrap_or(json!({}));
         let position = params.get("position").cloned();
         
-        let id = format!("ai_node_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+        let id = format!("ai_node_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
         
         let payload = json!({
             "action": "add_node",
@@ -77,6 +79,63 @@ impl CanvasPlugin {
         Ok(json!({
             "success": true,
             "message": format!("Node {} updated", id)
+        }))
+    }
+
+    fn delete_node(&self, params: Value) -> Result<Value, WeaveError> {
+        let id = params.get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
+        
+        let payload = json!({
+            "action": "delete_node",
+            "payload": {
+                "id": id
+            }
+        });
+
+        if let Err(e) = self.canvas_tx.send(payload.clone()) {
+            tracing::warn!("Failed to send canvas action: {}", e);
+        } else {
+            info!("Emitted canvas delete_node event for {}", id);
+        }
+
+        Ok(json!({
+            "success": true,
+            "message": format!("Node {} deleted", id)
+        }))
+    }
+
+    fn connect_nodes(&self, params: Value) -> Result<Value, WeaveError> {
+        let source = params.get("source")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| WeaveError::PluginError("Missing 'source' parameter".to_string()))?;
+        let target = params.get("target")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| WeaveError::PluginError("Missing 'target' parameter".to_string()))?;
+        let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        
+        let id = format!("ai_edge_{}_{}", source, target);
+        let payload = json!({
+            "action": "connect_nodes",
+            "payload": {
+                "id": id,
+                "source": source,
+                "target": target,
+                "label": label
+            }
+        });
+
+        if let Err(e) = self.canvas_tx.send(payload.clone()) {
+            tracing::warn!("Failed to send canvas action: {}", e);
+        } else {
+            info!("Emitted canvas connect_nodes event from {} to {}", source, target);
+        }
+
+        Ok(json!({
+            "success": true,
+            "message": format!("Connected node {} to {}", source, target),
+            "edge_id": id
         }))
     }
 

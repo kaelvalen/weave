@@ -227,6 +227,14 @@ impl AppConfig {
         Ok(dir)
     }
 
+    pub fn workflows_dir() -> Result<PathBuf, WeaveError> {
+        let home = dirs::home_dir()
+            .ok_or_else(|| WeaveError::ConfigError("Cannot find home directory".to_string()))?;
+        let dir = home.join(".weave").join("workflows");
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir)
+    }
+
     pub fn validate(&self) -> Result<(), WeaveError> {
         if self.ai.openai.api_key.is_empty()
             && self.ai.anthropic.api_key.is_empty()

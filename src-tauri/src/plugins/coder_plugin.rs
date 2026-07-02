@@ -296,7 +296,7 @@ impl CoderPlugin {
             .map_err(|e| WeaveError::PluginError(format!("Failed to spawn process: {}", e)))?;
 
         let timeout = Duration::from_secs(timeout_secs);
-        match child.wait_timeout(timeout).unwrap() {
+        match child.wait_timeout(timeout).map_err(|e| WeaveError::PluginError(format!("Timeout error: {}", e)))? {
             Some(status) => {
                 let duration = start.elapsed().as_millis();
                 
@@ -345,8 +345,10 @@ impl CoderPlugin {
                         }
                     }
                     
-                    result_json.as_object_mut().unwrap().insert("tests_passed".to_string(), passed.map_or(Value::Null, |v| json!(v)));
-                    result_json.as_object_mut().unwrap().insert("tests_failed".to_string(), failed.map_or(Value::Null, |v| json!(v)));
+                    if let Some(obj) = result_json.as_object_mut() {
+                        obj.insert("tests_passed".to_string(), passed.map_or(Value::Null, |v| json!(v)));
+                        obj.insert("tests_failed".to_string(), failed.map_or(Value::Null, |v| json!(v)));
+                    }
                 }
 
                 Ok(result_json)

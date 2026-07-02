@@ -11,15 +11,17 @@ pub struct KnowledgeFile {
     pub created_at: i64,
 }
 
-pub fn get_knowledge_dir(app: &AppHandle) -> PathBuf {
-    let path = app.path().app_data_dir().unwrap().join("knowledge");
+pub fn get_knowledge_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let path = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?
+        .join("knowledge");
     std::fs::create_dir_all(&path).ok();
-    path
+    Ok(path)
 }
 
 #[tauri::command]
 pub async fn list_knowledge_files(app: AppHandle) -> Result<Vec<KnowledgeFile>, String> {
-    let dir = get_knowledge_dir(&app);
+    let dir = get_knowledge_dir(&app)?;
     let mut files = Vec::new();
     
     if let Ok(mut entries) = fs::read_dir(dir).await {
@@ -54,7 +56,7 @@ pub async fn list_knowledge_files(app: AppHandle) -> Result<Vec<KnowledgeFile>, 
 
 #[tauri::command]
 pub async fn upload_knowledge_file(app: AppHandle, filename: String, content: Vec<u8>) -> Result<(), String> {
-    let dir = get_knowledge_dir(&app);
+    let dir = get_knowledge_dir(&app)?;
     let file_path = dir.join(&filename);
     
     fs::write(file_path, content).await.map_err(|e| e.to_string())?;
@@ -64,7 +66,7 @@ pub async fn upload_knowledge_file(app: AppHandle, filename: String, content: Ve
 
 #[tauri::command]
 pub async fn delete_knowledge_file(app: AppHandle, filename: String) -> Result<(), String> {
-    let dir = get_knowledge_dir(&app);
+    let dir = get_knowledge_dir(&app)?;
     let file_path = dir.join(&filename);
     
     if file_path.exists() {

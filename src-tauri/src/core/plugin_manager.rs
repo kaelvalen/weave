@@ -18,6 +18,7 @@ use crate::plugins::http_plugin::HttpPlugin;
 use crate::plugins::memory_plugin::MemoryPlugin;
 use crate::plugins::coder_plugin::CoderPlugin;
 use crate::plugins::canvas_plugin::CanvasPlugin;
+use crate::plugins::workflow_plugin::WorkflowPlugin;
 use crate::utils::errors::WeaveError;
 
 pub struct PluginManager {
@@ -55,6 +56,7 @@ impl PluginManager {
         executors.insert("com.weave.builtin.memory".into(), Box::new(MemoryPlugin));
         executors.insert("com.weave.builtin.coder".into(), Box::new(CoderPlugin));
         executors.insert("com.weave.builtin.canvas".into(), Box::new(CanvasPlugin { canvas_tx }));
+        executors.insert("com.weave.builtin.workflow".into(), Box::new(WorkflowPlugin));
 
         Self {
             plugins: Arc::new(RwLock::new(plugins)),
@@ -182,9 +184,20 @@ impl PluginManager {
                 .category(PluginCategory::Ai)
                 .capability("canvas.add_node", r##"{"type":"shapeNode","data":{"shapeType":"rectangle","backgroundColor":"#3b82f6"},"position":{"x":100,"y":100}}"##, "Add a node to the canvas. Types: shapeNode, textNode, noteNode, codeNode, imageNode")
                 .capability("canvas.update_node", r#"{"id":"ai_node_123","data":{"text":"Hello"}}"#, "Update the data of an existing node")
+                .capability("canvas.delete_node", r#"{"id":"ai_node_123"}"#, "Delete a node from the canvas by its ID")
+                .capability("canvas.connect_nodes", r#"{"source":"ai_node_1","target":"ai_node_2","label":"connects to"}"#, "Connect two canvas nodes with a visual arrow edge")
                 .capability("canvas.clear", r#"{}"#, "Clear all nodes from the canvas")
                 .capability("canvas.export", r#"{}"#, "Trigger a save dialog to export the canvas to a file")
                 .capability("canvas.import", r#"{}"#, "Trigger an open dialog to import a canvas from a file")
+                .build(),
+
+            PluginBuilder::builtin("com.weave.builtin.workflow", "Workflows AI")
+                .description("Create, read, update, and manage automated AI workflow pipelines and execution templates")
+                .category(PluginCategory::Ai)
+                .capability("workflow.create", r#"{"name":"My Workflow","description":"Auto build and test","nodes":[],"edges":[]}"#, "Create a new automated workflow template")
+                .capability("workflow.list", r#"{}"#, "List all saved workflow templates")
+                .capability("workflow.get", r#"{"id":"wf_123"}"#, "Get the definition of a workflow by ID")
+                .capability("workflow.delete", r#"{"id":"wf_123"}"#, "Delete a saved workflow template by ID")
                 .build(),
         ]
     }

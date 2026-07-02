@@ -191,14 +191,15 @@ impl PythonRuntime {
                 stderr: None,
             })?;
 
-            if result.is_none() {
-                return Err(WeaveError::PythonRuntimeError {
-                    message: "Python plugin did not set a 'result' variable".to_string(),
-                    stderr: None,
-                });
-            }
-            
-            let result_bound = result.unwrap();
+            let result_bound = match result {
+                Some(r) => r,
+                None => {
+                    return Err(WeaveError::PythonRuntimeError {
+                        message: "Python plugin did not set a 'result' variable".to_string(),
+                        stderr: None,
+                    });
+                }
+            };
 
             let json = py.import_bound("json").map_err(|e| WeaveError::PythonRuntimeError {
                 message: format!("Failed to import json: {}", e),

@@ -403,6 +403,18 @@ function CanvasInner() {
         setNodes((nds) => nds.map((node) => 
           node.id === (payload.id as string) ? { ...node, data: { ...node.data, ...(payload.data as Record<string, unknown>) } } : node
         ));
+      } else if (action === 'delete_node') {
+        setNodes((nds) => nds.filter((node) => node.id !== (payload.id as string)));
+        setEdges((eds) => eds.filter((edge) => edge.source !== (payload.id as string) && edge.target !== (payload.id as string)));
+      } else if (action === 'connect_nodes') {
+        setEdges((eds) => [...eds, {
+          id: (payload.id as string) || `ai_edge_${payload.source}_${payload.target}`,
+          source: payload.source as string,
+          target: payload.target as string,
+          label: (payload.label as string) || '',
+          animated: true,
+          style: { stroke: '#3b82f6', strokeWidth: 2 }
+        }]);
       } else if (action === 'clear') {
         setNodes([]);
         setEdges([]);

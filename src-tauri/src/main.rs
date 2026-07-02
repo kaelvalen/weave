@@ -52,6 +52,7 @@ fn main() {
             weave::commands::plugin::plugin_get_all,
             weave::commands::plugin::plugin_get_loaded,
             weave::commands::plugin::plugin_get_by_id,
+            weave::commands::plugin::workflow_execute_chain,
             weave::commands::system::system_get_config,
             weave::commands::system::system_set_config,
             weave::commands::system::list_provider_models,

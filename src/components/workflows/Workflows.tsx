@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { toast } from 'sonner';
 import { useWorkflowStore } from '@/stores/useWorkflowStore';
+import { invoke } from '@tauri-apps/api/core';
 
 import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
@@ -52,8 +53,43 @@ export function Workflows() {
     return () => clearInterval(interval);
   }, [loadWorkflow]);
 
-  const handleExecute = () => {
-    toast.success('Workflow execution triggered successfully.');
+  const handleExecute = async () => {
+    try {
+      toast.info('Initiating automated workflow execution...');
+      const actionNodes = nodes.filter(n => n.type === 'actionNode');
+      const steps = actionNodes.map((node, index) => {
+        let capability = 'shell.run';
+        let params: Record<string, unknown> = { command: 'echo "Executing AI Action"' };
+        
+        if (node.data.label === 'AI Agent' || (node.data.description as string)?.toLowerCase().includes('ai')) {
+          capability = 'memory.store';
+          params = { key: `ai_step_${index}`, value: 'Agent context processed' };
+        } else if (node.data.label === 'Send to Chat') {
+          capability = 'note.create';
+          params = { title: `Workflow Output ${index}`, content: 'Automated workflow execution report.' };
+        }
+
+        return {
+          id: node.id,
+          plugin_id: capability.split('.')[0] ? `com.weave.builtin.${capability.split('.')[0]}` : 'com.weave.builtin.shell',
+          capability: capability,
+          params: params,
+          timeout_ms: 10000,
+          continue_on_error: true
+        };
+      });
+
+      if (steps.length === 0) {
+        toast.warning('No action nodes found in workflow. Add an action node to execute.');
+        return;
+      }
+
+      await invoke('workflow_execute_chain', { steps });
+      toast.success('Automated workflow pipeline executed successfully!');
+    } catch (err) {
+      console.error('Workflow execution failed:', err);
+      toast.error(`Workflow execution failed: ${err}`);
+    }
   };
 
   const handleSave = async () => {

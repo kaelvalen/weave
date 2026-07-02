@@ -166,7 +166,7 @@ pub async fn download_local_model(app: AppHandle, url: String, filename: String)
 
 #[tauri::command]
 pub fn get_system_stats(state: State<'_, SysinfoState>) -> Result<SystemStats, String> {
-    let mut sys = state.sys.lock().unwrap();
+    let mut sys = state.sys.lock().map_err(|e| format!("System info lock poisoned: {}", e))?;
     sys.refresh_memory();
     
     Ok(SystemStats {
