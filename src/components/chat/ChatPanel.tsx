@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
-import { Bot, Trash2, History } from 'lucide-react';
+import { Bot, History, PlusCircle, FolderOpen, Calculator, FileText, LayoutGrid, Workflow, Cpu, Loader2 } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
@@ -12,16 +12,16 @@ import { Button } from '@/components/ui/button';
 import { PlayCircle } from 'lucide-react';
 
 const SUGGESTED_PROMPTS = [
-  { category: 'Filesystem', text: 'List files in current directory', icon: '📁', desc: 'Browse workspace files & folders', badge: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  { category: 'Math & Calc', text: 'Calculate sqrt(144) + 42 * 18', icon: '🔢', desc: 'High precision calculations & conversions', badge: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' },
-  { category: 'Workspace', text: 'Create a note summarizing my current ideas', icon: '📝', desc: 'Save ideas directly into your notes', badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
-  { category: 'AI Canvas', text: 'Create a canvas node with architectural diagram', icon: '🎨', desc: 'Autonomously build visual layouts', badge: 'bg-purple-500/10 text-purple-500 border-purple-500/20' },
-  { category: 'Workflow', text: 'List available automated workflows', icon: '⚡', desc: 'Execute multi-step AI pipelines', badge: 'bg-pink-500/10 text-pink-500 border-pink-500/20' },
-  { category: 'System', text: 'What is Weave and how do I use plugins?', icon: '🤖', desc: 'Learn about your agentic assistant', badge: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' },
+  { category: 'Filesystem', text: 'List files in current directory', icon: FolderOpen, desc: 'Browse workspace files & folders', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
+  { category: 'Math & Calc', text: 'Calculate sqrt(144) + 42 * 18', icon: Calculator, desc: 'High precision calculations & conversions', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
+  { category: 'Workspace', text: 'Create a note summarizing my current ideas', icon: FileText, desc: 'Save ideas directly into your notes', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
+  { category: 'AI Canvas', text: 'Create a canvas node with architectural diagram', icon: LayoutGrid, desc: 'Autonomously build visual layouts', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
+  { category: 'Workflow', text: 'List available automated workflows', icon: Workflow, desc: 'Execute multi-step AI pipelines', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
+  { category: 'System', text: 'What is Weave and how do I use plugins?', icon: Cpu, desc: 'Learn about your agentic assistant', badge: 'bg-muted/80 text-muted-foreground border-border/60' },
 ];
 
 export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
-  const { messages, isStreaming, clearChat } = useChatStore();
+  const { messages, isStreaming, startNewSession } = useChatStore();
   const isChatExpanded = useAppStore(s => s.isChatExpanded);
   const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -74,19 +74,15 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300">
           {/* ── Toolbar ── */}
           <div className="flex items-center justify-between h-12 px-4 flex-shrink-0 gap-3 border-b border-border/40 bg-card/40 backdrop-blur-md z-10">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 title="Toggle History"
-                onClick={() => setShowHistory(!showHistory)}
-                className={`flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-200 shadow-sm ${showHistory ? 'bg-primary text-primary-foreground scale-105' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105'} active:scale-95`}
+                onClick={() => setShowHistory(prev => !prev)}
+                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 bg-transparent border-0 shadow-none ${showHistory ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground hover:scale-105'} active:scale-95`}
               >
                 <History className="w-4 h-4" />
               </button>
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-muted/40 border border-border/50">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-sm" />
-                <span className="text-xs font-semibold text-foreground tracking-tight">Weave Assistant</span>
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -96,15 +92,15 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
                   Thinking...
                 </div>
               )}
-              {hasMessages && !isStreaming && (
+              {!isStreaming && (
                 <button
                   type="button"
-                  title="Clear chat"
-                  onClick={clearChat}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 border border-transparent active:scale-95"
+                  title="Start a new chat session"
+                  onClick={startNewSession}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-transparent border-0 shadow-none text-muted-foreground hover:text-foreground transition-all duration-200 active:scale-95 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Clear</span>
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">New Chat</span>
                 </button>
               )}
             </div>
@@ -209,24 +205,19 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   );
 }
 
-import { Loader2 } from 'lucide-react';
-
 import logoLight from '@/assets/weave-logo/light-mode.svg';
 import logoDark from '@/assets/weave-logo/dark-mode.svg';
 
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[460px] px-6 py-8 animate-in fade-in zoom-in-95 duration-500">
-      {/* Glowing Logo Badge */}
-      <div className="relative mb-6 group cursor-pointer">
-        <div className="absolute -inset-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-full blur-xl opacity-25 group-hover:opacity-60 transition-opacity duration-500 animate-pulse" />
-        <div className="relative w-20 h-20 p-3.5 rounded-3xl bg-card border border-border shadow-2xl flex items-center justify-center transform group-hover:scale-105 transition-transform duration-300">
-          <img src={logoLight} alt="Weave" className="w-full h-full object-contain dark:hidden" />
-          <img src={logoDark} alt="Weave" className="w-full h-full object-contain hidden dark:block" />
-        </div>
+      {/* Logo Badge (No Glow) */}
+      <div className="mb-6 w-16 h-16 sm:w-20 sm:h-20 p-3.5 rounded-3xl bg-card border border-border shadow-md flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+        <img src={logoLight} alt="Weave" className="w-full h-full object-contain dark:hidden" />
+        <img src={logoDark} alt="Weave" className="w-full h-full object-contain hidden dark:block" />
       </div>
 
-      <h2 className="text-2xl sm:text-3xl font-extrabold mb-2 text-gradient-primary text-center tracking-tight">
+      <h2 className="text-2xl sm:text-3xl font-extrabold mb-2 text-foreground text-center tracking-tight">
         Welcome to Weave AI
       </h2>
       <p className="text-sm sm:text-base text-muted-foreground text-center max-w-md mb-8 leading-relaxed">
@@ -243,7 +234,9 @@ function EmptyState() {
             onClick={() => useChatStore.getState().sendMessage(p.text)}
           >
             <div className="flex items-start justify-between gap-2 mb-2.5">
-              <span className="text-2xl p-2 rounded-xl bg-muted/60 group-hover:scale-110 transition-transform duration-300">{p.icon}</span>
+              <div className="p-2 rounded-xl bg-muted/60 text-foreground group-hover:text-primary group-hover:scale-110 transition-all duration-300">
+                <p.icon className="w-5 h-5 stroke-[2]" />
+              </div>
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${p.badge}`}>
                 {p.category}
               </span>

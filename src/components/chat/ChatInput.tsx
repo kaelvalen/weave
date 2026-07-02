@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAppStore } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
-import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square, Sparkles, Zap, LayoutGrid } from 'lucide-react';
+import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square, Sparkles, Zap, LayoutGrid, Workflow, Cpu, Code2, FolderOpen } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
 import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
@@ -50,14 +50,27 @@ const PLUGIN_HINTS = [
 ];
 
 const QUICK_ACTIONS = [
-  { label: '@File', prefix: 'Read file ', icon: FileText, color: 'text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20' },
-  { label: '/calc', prefix: 'Calculate ', icon: Calculator, color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20' },
-  { label: '+Note', prefix: 'Create a note about ', icon: StickyNote, color: 'text-amber-500 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20' },
-  { label: '⚡ Canvas', prefix: 'Create a canvas layout with ', icon: LayoutGrid, color: 'text-purple-500 bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20' },
+  { label: '@File', prefix: 'Read file ', icon: FileText, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
+  { label: '/calc', prefix: 'Calculate ', icon: Calculator, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
+  { label: '+Note', prefix: 'Create a note about ', icon: StickyNote, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
+  { label: 'Canvas', prefix: 'Create a canvas layout with ', icon: LayoutGrid, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
+];
+
+const SLASH_COMMANDS = [
+  { command: '/calc', title: 'Calculator', desc: 'Evaluate high-precision math & unit conversions', icon: Calculator, template: '/calc ' },
+  { command: '/file', title: 'File Manager', desc: 'Read, write, list, or search workspace files', icon: FileText, template: '/file ' },
+  { command: '/note', title: 'Notes', desc: 'Create or update ideas in your scratch notes', icon: StickyNote, template: '/note ' },
+  { command: '/canvas', title: 'AI Canvas', desc: 'Autonomously build visual diagram nodes', icon: LayoutGrid, template: '/canvas ' },
+  { command: '/workflow', title: 'Workflows', desc: 'Execute automated AI pipelines', icon: Workflow, template: '/workflow ' },
+  { command: '/code', title: 'Code Coder', desc: 'Refactor, debug, or write code files', icon: Code2, template: '/code ' },
+  { command: '/web', title: 'Web Fetch', desc: 'Fetch and summarize content from a URL', icon: Sparkles, template: '/web ' },
+  { command: '/search', title: 'File Search', desc: 'Search content across workspace files', icon: FolderOpen, template: '/search ' },
+  { command: '/sys', title: 'System', desc: 'Learn about Weave AI and its built-in plugins', icon: Cpu, template: '/sys ' },
 ];
 
 export function ChatInput() {
   const [input, setInput] = useState('');
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -128,12 +141,58 @@ export function ChatInput() {
     }
   }, []);
 
+  const query = input.trimStart();
+  const isSlashCommandActive = query.startsWith('/') && !query.slice(1).includes(' ');
+  const slashSearch = isSlashCommandActive ? query.toLowerCase() : '';
+  const filteredSlashCommands = useMemo(() => {
+    return isSlashCommandActive
+      ? SLASH_COMMANDS.filter(cmd =>
+          cmd.command.toLowerCase().startsWith(slashSearch) ||
+          cmd.title.toLowerCase().includes(slashSearch.slice(1)) ||
+          cmd.desc.toLowerCase().includes(slashSearch.slice(1))
+        )
+      : [];
+  }, [isSlashCommandActive, slashSearch]);
+
+  const selectSlashCommand = useCallback((cmd: (typeof SLASH_COMMANDS)[0]) => {
+    setInput(cmd.template);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isSlashCommandActive && filteredSlashCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredSlashCommands[slashSelectedIndex] || filteredSlashCommands[0];
+        if (selected) {
+          selectSlashCommand(selected);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setInput('');
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  }, [handleSend]);
+  }, [handleSend, isSlashCommandActive, filteredSlashCommands, slashSelectedIndex, selectSlashCommand]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
+    setSlashSelectedIndex(0);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
@@ -235,6 +294,49 @@ export function ChatInput() {
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{qa.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Slash Command Autocomplete Menu */}
+      {isSlashCommandActive && filteredSlashCommands.length > 0 && (
+        <div className="mb-2 w-full max-h-60 overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 backdrop-blur-xl shadow-2xl p-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
+          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1 flex items-center justify-between">
+            <span>Available Capabilities</span>
+            <span>↑↓ to navigate, Enter to select</span>
+          </div>
+          {filteredSlashCommands.map((cmd, idx) => {
+            const Icon = cmd.icon;
+            const isSelected = idx === slashSelectedIndex;
+            return (
+              <button
+                key={cmd.command}
+                type="button"
+                onClick={() => selectSlashCommand(cmd)}
+                onMouseEnter={() => setSlashSelectedIndex(idx)}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left transition-all duration-150 cursor-pointer ${
+                  isSelected
+                    ? 'bg-primary/15 text-primary shadow-sm scale-[1.005]'
+                    : 'hover:bg-muted/60 text-foreground'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted/80 text-muted-foreground'}`}>
+                    <Icon className="w-4 h-4 stroke-[2]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold font-mono">{cmd.command}</span>
+                      <span className="text-xs font-semibold">{cmd.title}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground line-clamp-1">{cmd.desc}</p>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${isSelected ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border/60 bg-muted/40 text-muted-foreground'}`}>
+                  Plugin
+                </span>
               </button>
             );
           })}

@@ -140,19 +140,36 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="w-72 h-full border-r bg-muted/30 flex flex-col flex-shrink-0">
-      <div className="p-3 flex items-center justify-between border-b">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <History className="w-4 h-4" />
-          Chat History
+      <div className="p-3 flex items-center justify-between border-b bg-card/40">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-primary transition-colors group cursor-pointer"
+          title="Toggle History Sidebar"
+        >
+          <History className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+          <span>Chat History</span>
+        </button>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={startNewSession}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p>New Chat</p></TooltipContent>
+          </Tooltip>
+          {onClose && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted" onClick={onClose}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Close History</p></TooltipContent>
+            </Tooltip>
+          )}
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startNewSession}>
-              <Plus className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>New Chat</p></TooltipContent>
-        </Tooltip>
       </div>
 
       <ScrollArea className="flex-1">
