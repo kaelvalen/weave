@@ -87,18 +87,20 @@ function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
   const isUser = role === 'user';
   return (
     <div
-      className={`w-8 h-8 rounded-md border flex items-center justify-center flex-shrink-0 ${
-        isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+      className={`w-8 h-8 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105 ${
+        isUser
+          ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-primary/20'
+          : 'bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-primary border-primary/20 shadow-indigo-500/5'
       }`}
     >
-      {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+      {isUser ? <User className="w-4 h-4 stroke-[2.5]" /> : <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400 stroke-[2.5]" />}
     </div>
   );
 }
 
 function InlineBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted/80 text-muted-foreground border border-border/60 shadow-sm">
       {children}
     </span>
   );
@@ -166,9 +168,9 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
   }
 
   return (
-    <div className={`group flex items-start gap-4 px-5 ${isConsecutive ? 'py-0.5' : 'py-2'}`}>
+    <div className={`group flex items-start gap-3.5 px-4 sm:px-6 transition-colors ${isConsecutive ? 'py-1' : 'py-3 hover:bg-muted/20 rounded-2xl'}`}>
       {/* Avatar */}
-      <div className="flex-shrink-0 mt-1 w-8">
+      <div className="flex-shrink-0 mt-0.5 w-8">
         {!isConsecutive && <MsgAvatar role={message.role as 'user' | 'assistant'} />}
       </div>
 
@@ -176,57 +178,57 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
       <div className="flex-1 min-w-0">
         {/* Meta row */}
         {!isConsecutive && (
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-semibold">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs sm:text-sm font-bold text-foreground">
               {message.role === 'user' ? 'You' : 'Weave AI'}
             </span>
-            <span className="text-xs text-muted-foreground font-mono">
+            <span className="text-[11px] text-muted-foreground/70 font-mono">
               {formatTime(message.timestamp)}
             </span>
             {message.metadata?.model && (
               <InlineBadge>{message.metadata.model}</InlineBadge>
             )}
 
-          {/* Actions */}
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
-            {isAssistant && !isStreaming && (
+            {/* Actions */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1 bg-card/80 backdrop-blur-sm border border-border/60 rounded-lg px-1 py-0.5 shadow-sm">
+              {isAssistant && !isStreaming && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={() => regenerateResponse(message.id)}>
+                      <RefreshCw className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Regenerate response</p></TooltipContent>
+                </Tooltip>
+              )}
+              {!isAssistant && !isEditing && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={() => setIsEditing(true)}>
+                      <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Edit message</p></TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => regenerateResponse(message.id)}>
-                    <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={handleCopy}>
+                    {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>Regenerate response</p></TooltipContent>
+                <TooltipContent><p>{copied ? 'Copied!' : 'Copy'}</p></TooltipContent>
               </Tooltip>
-            )}
-            {!isAssistant && !isEditing && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
-                    <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent><p>Edit message</p></TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy}>
-                  {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent><p>{copied ? 'Copied!' : 'Copy'}</p></TooltipContent>
-            </Tooltip>
+            </div>
           </div>
-        </div>
         )}
 
         {/* Intent & Plugin chips */}
         {(hasIntent || hasPluginCalls) && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
             {hasIntent && message.metadata!.intent!.confidence > 0.4 && (
               <InlineBadge>
-                <Brain className="w-3 h-3" />
+                <Brain className="w-3 h-3 text-purple-500 animate-pulse" />
                 {message.metadata!.intent!.intent} ({Math.round(message.metadata!.intent!.confidence * 100)}%)
               </InlineBadge>
             )}
@@ -244,40 +246,46 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
 
         {/* Incomplete Tool Call Warning */}
         {message.content.includes('<call plugin=') && !message.content.includes('</call>') && (
-          <div className="mt-2 mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs rounded-md flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-            <span>Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı. <strong>Settings</strong>'den max_tokens değerini artırabilir veya modele dosyayı parça parça yazmasını söyleyebilirsiniz.</span>
+          <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            <span className="leading-relaxed">Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı. <strong>Settings</strong> bölümünden max_tokens değerini artırabilir veya modele dosyayı parça parça yazmasını söyleyebilirsiniz.</span>
           </div>
         )}
 
         {/* Message Body */}
-        <div className="text-sm text-foreground leading-relaxed break-words">
+        <div className={`text-sm text-foreground leading-relaxed break-words ${
+          message.role === 'user' && !isEditing
+            ? 'inline-block bg-primary/5 dark:bg-muted/40 border border-primary/10 dark:border-border/60 rounded-2xl px-4 py-3 shadow-sm font-sans'
+            : 'w-full'
+        }`}>
           {message.images && message.images.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="flex flex-wrap gap-2.5 mb-3">
               {message.images.map((img, idx) => (
-                <img key={idx} src={img} alt="attachment" className="max-w-[300px] max-h-[300px] object-contain rounded-md border" />
+                <div key={idx} className="overflow-hidden rounded-xl border border-border shadow-md max-w-[300px] max-h-[300px] bg-background">
+                  <img src={img} alt="attachment" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
+                </div>
               ))}
             </div>
           )}
           {isEditing ? (
-            <div className="mt-2 flex flex-col gap-2">
+            <div className="mt-2 flex flex-col gap-2.5 w-full">
               <Textarea 
                 value={editContent} 
                 onChange={(e) => setEditContent(e.target.value)} 
-                className="min-h-[100px] font-sans"
+                className="min-h-[100px] font-sans rounded-xl border-primary/40 focus-visible:ring-primary shadow-inner p-3"
                 autoFocus
               />
               <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setEditContent(message.content); }}>
+                <Button variant="outline" size="sm" className="rounded-xl h-8 px-3 text-xs" onClick={() => { setIsEditing(false); setEditContent(message.content); }}>
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleEditSave} disabled={!editContent.trim() || isStreaming}>
+                <Button size="sm" className="rounded-xl h-8 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm" onClick={handleEditSave} disabled={!editContent.trim() || isStreaming}>
                   Save & Submit
                 </Button>
               </div>
             </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-[calc(100vw-120px)] prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words">
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}

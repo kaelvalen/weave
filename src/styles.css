@@ -214,5 +214,37 @@
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* ─── Premium Chat UI Animations & Utilities ─── */
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-foreground via-neutral-400 to-muted-foreground dark:from-white dark:via-neutral-300 dark:to-neutral-500;
+  }
+  .text-gradient-accent {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400;
+  }
+  @keyframes animate-glow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .glow-effect {
+    position: relative;
+  }
+  .glow-effect::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+    background-size: 300% 300%;
+    border-radius: inherit;
+    z-index: -1;
+    animation: animate-glow 6s ease infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .glow-effect:focus-within::after,
+  .glow-effect:hover::after {
+    opacity: 0.4;
+  }
 }
 

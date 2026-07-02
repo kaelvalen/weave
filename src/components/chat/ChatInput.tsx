@@ -11,7 +11,7 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
-import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square } from 'lucide-react';
+import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square, Sparkles, Zap, LayoutGrid } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
 import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
@@ -47,6 +47,13 @@ const PLUGIN_HINTS = [
   { keyword: 'math',    icon: Calculator, label: 'Calc' },
   { keyword: 'note',    icon: StickyNote, label: 'Note' },
   { keyword: 'convert', icon: Calculator, label: 'Calc' },
+];
+
+const QUICK_ACTIONS = [
+  { label: '@File', prefix: 'Read file ', icon: FileText, color: 'text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20' },
+  { label: '/calc', prefix: 'Calculate ', icon: Calculator, color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20' },
+  { label: '+Note', prefix: 'Create a note about ', icon: StickyNote, color: 'text-amber-500 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20' },
+  { label: '⚡ Canvas', prefix: 'Create a canvas layout with ', icon: LayoutGrid, color: 'text-purple-500 bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20' },
 ];
 
 export function ChatInput() {
@@ -205,76 +212,110 @@ export function ChatInput() {
 
   return (
     <div className="flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full">
-      <div className="rounded-[24px] overflow-hidden border bg-card/90 backdrop-blur-xl shadow-lg transition-all duration-300 focus-within:shadow-xl focus-within:border-primary/40">
+      {/* Quick Action Pills above chat bar when input is empty */}
+      {!input && images.length === 0 && !isStreaming && (
+        <div className="flex items-center gap-1.5 mb-2.5 px-1 overflow-x-auto hide-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mr-1 flex-shrink-0">
+            <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
+            Quick Actions:
+          </span>
+          {QUICK_ACTIONS.map((qa, i) => {
+            const Icon = qa.icon;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  setInput(qa.prefix);
+                  if (textareaRef.current) {
+                    textareaRef.current.focus();
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-200 flex-shrink-0 shadow-sm hover:scale-105 active:scale-95 ${qa.color}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{qa.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Main Glassmorphism Chat Input Box */}
+      <div className="glow-effect rounded-[28px] overflow-hidden border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl transition-all duration-300 focus-within:shadow-2xl focus-within:border-primary/50">
         {/* Plugin hint strip */}
         {hints.length > 0 && input.length > 3 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/50">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Plugins
+          <div className="flex items-center gap-2 px-4 py-1.5 border-b bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-500 fill-current animate-pulse" />
+              Active Plugins
             </span>
-            {hints.map((h, i) => {
-              const Icon = h.icon;
-              return (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-background border"
-                >
-                  <Icon className="w-3 h-3" />
-                  {h.label}
-                </span>
-              );
-            })}
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {hints.map((h, i) => {
+                const Icon = h.icon;
+                return (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-background text-foreground border border-border shadow-sm"
+                  >
+                    <Icon className="w-3 h-3 text-primary" />
+                    {h.label}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* Main input row */}
-        <div className="flex items-end gap-2 px-2 py-2">
+        <div className="flex items-end gap-2.5 p-3">
           {/* Model selector */}
           <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger
               disabled={modelsLoading || isStreaming}
-              className="w-[140px] h-9 text-xs flex-shrink-0 bg-background/50 hover:bg-background border border-border/50 shadow-sm rounded-full px-3 gap-1.5 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              className="h-9 text-xs flex-shrink-0 bg-muted/60 hover:bg-muted border border-border/60 shadow-sm rounded-full px-3 gap-2 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              title="Select AI Model"
             >
               {pm.icon ? (
                 <>
-                  <img src={pm.icon} alt={currentProvider} className="w-3.5 h-3.5 object-contain flex-shrink-0 dark:hidden" />
-                  {pm.iconDark && <img src={pm.iconDark} alt={currentProvider} className="w-3.5 h-3.5 object-contain flex-shrink-0 hidden dark:block" />}
+                  <img src={pm.icon} alt={currentProvider} className="w-4 h-4 object-contain flex-shrink-0 dark:hidden" />
+                  {pm.iconDark && <img src={pm.iconDark} alt={currentProvider} className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block" />}
                 </>
               ) : (
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: pm.color }} />
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: pm.color }} />
               )}
-              <span className="truncate flex-1 text-left">
+              <span className="truncate max-w-[110px] sm:max-w-[140px] font-medium text-left">
                 {modelsLoading
-                  ? '…'
+                  ? 'Loading...'
                   : (models.find(m => m.value === selectedModel)?.label ||
-                     (models.length === 0 ? 'No models configured' : 'Model'))}
+                     (models.length === 0 ? 'No models' : 'Model'))}
               </span>
-              <ChevronDown className="w-3 h-3 opacity-50 flex-shrink-0" />
+              <ChevronDown className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px]" sideOffset={4}>
-              <div className="flex items-center px-2 py-1.5 border-b mb-1">
-                <Search className="w-3 h-3 mr-2 opacity-50" />
+            <DropdownMenuContent className="w-[220px] rounded-2xl shadow-xl backdrop-blur-xl bg-popover/95 border-border/80 p-1" sideOffset={8}>
+              <div className="flex items-center px-2.5 py-2 border-b mb-1">
+                <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search models..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.stopPropagation()}
-                  className="flex-1 bg-transparent text-xs outline-none min-w-0"
+                  className="flex-1 bg-transparent text-xs outline-none min-w-0 placeholder:text-muted-foreground"
                 />
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setForceRefresh(f => f + 1); }}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted ml-2"
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted ml-1"
                   disabled={modelsLoading}
                   title="Refresh models"
                 >
-                  <RefreshCw className={`w-3 h-3 ${modelsLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${modelsLoading ? 'animate-spin text-primary' : ''}`} />
                 </button>
               </div>
-              <div className="max-h-[200px] overflow-y-auto">
+              <div className="max-h-[220px] overflow-y-auto hide-scrollbar px-1">
                 {models.length === 0 ? (
-                  <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
                     No models configured
                   </div>
                 ) : (() => {
@@ -287,30 +328,31 @@ export function ChatInput() {
                   const renderModelItem = (m: ModelOption) => {
                     const meta = PROVIDER_META[m.provider] ?? PROVIDER_META.openai;
                     const isFav = favoriteModels.includes(m.value);
+                    const isSelected = m.value === selectedModel;
                     return (
                       <DropdownMenuItem
                         key={m.value}
                         onClick={() => { setModel(m.value, m.provider); setDropdownOpen(false); }}
-                        className="text-xs py-1.5 cursor-pointer flex items-center justify-between group"
+                        className={`text-xs py-2 px-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors mb-0.5 ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/80'}`}
                       >
-                        <div className="flex items-center gap-2 truncate min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-2.5 truncate min-w-0 flex-1 pr-2">
                           {meta.icon ? (
                             <>
-                              <img src={meta.icon} alt={m.provider} className="w-3.5 h-3.5 object-contain flex-shrink-0 dark:hidden" />
-                              {meta.iconDark && <img src={meta.iconDark} alt={m.provider} className="w-3.5 h-3.5 object-contain flex-shrink-0 hidden dark:block" />}
+                              <img src={meta.icon} alt={m.provider} className="w-4 h-4 object-contain flex-shrink-0 dark:hidden" />
+                              {meta.iconDark && <img src={meta.iconDark} alt={m.provider} className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block" />}
                             </>
                           ) : (
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: meta.color }} />
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: meta.color }} />
                           )}
                           <span className="truncate">{m.label}</span>
                         </div>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(m.value); }}
-                          className={`flex-shrink-0 p-1 rounded hover:bg-muted ${isFav ? 'text-yellow-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                          className={`flex-shrink-0 p-1 rounded-md hover:bg-background transition-opacity ${isFav ? 'text-yellow-500 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                           title={isFav ? "Remove from favorites" : "Add to favorites"}
                         >
-                          <Star className="w-3 h-3" fill={isFav ? "currentColor" : "none"} />
+                          <Star className="w-3.5 h-3.5" fill={isFav ? "currentColor" : "none"} />
                         </button>
                       </DropdownMenuItem>
                     );
@@ -320,18 +362,18 @@ export function ChatInput() {
                     <>
                       {favs.length > 0 && (
                         <div className="mb-2">
-                          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Favorites</div>
+                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Favorites</div>
                           {favs.map(renderModelItem)}
                         </div>
                       )}
                       {recents.length > 0 && (
                         <div className="mb-2">
-                          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Recent</div>
+                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Recent</div>
                           {recents.map(renderModelItem)}
                         </div>
                       )}
                       <div>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">All Models</div>
+                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">All Models</div>
                         {rest.map(renderModelItem)}
                       </div>
                     </>
@@ -341,16 +383,21 @@ export function ChatInput() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <div className="h-4 w-px bg-border flex-shrink-0 mb-2" />
+          <div className="h-5 w-px bg-border/60 flex-shrink-0 mb-2" />
 
           {/* Attach Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mb-0.5"
+            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 mb-0.5 relative group"
             title="Attach image"
           >
-            <Paperclip className="w-4 h-4" />
+            <Paperclip className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            {images.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm animate-pulse">
+                {images.length}
+              </span>
+            )}
           </button>
           <input 
             type="file" 
@@ -368,15 +415,16 @@ export function ChatInput() {
 
           <div className="flex-1 flex flex-col min-w-0">
             {images.length > 0 && (
-              <div className="flex items-center gap-2 px-1 pb-2 overflow-x-auto">
+              <div className="flex items-center gap-2.5 px-1 pb-2 overflow-x-auto hide-scrollbar">
                 {images.map((img, idx) => (
-                  <div key={idx} className="relative group w-12 h-12 flex-shrink-0 rounded-md overflow-hidden border">
+                  <div key={idx} className="relative group w-14 h-14 flex-shrink-0 rounded-xl overflow-hidden border border-border/80 shadow-md bg-background transition-transform hover:scale-105">
                     <img src={img} alt="attachment" className="w-full h-full object-cover" />
                     <button 
                       onClick={() => removeImage(idx)}
-                      className="absolute top-0.5 right-0.5 w-4 h-4 bg-background/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                      title="Remove image"
                     >
-                      <X className="w-3 h-3 text-foreground" />
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
@@ -394,43 +442,50 @@ export function ChatInput() {
               onFocus={() => {
                 if (!isChatExpanded) toggleChat(true);
               }}
-              placeholder="Ask anything..."
-            disabled={isStreaming}
-            rows={1}
-            className={[
-              'flex-1 min-h-[32px] max-h-[160px] py-1.5 px-1 text-sm resize-none',
-              'bg-transparent border-0 shadow-none',
-              'focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
-              'placeholder:text-muted-foreground',
-            ].join(' ')}
-          />
-        </div>
+              placeholder="Ask anything, attach images, or trigger tools..."
+              disabled={isStreaming}
+              rows={1}
+              className={[
+                'flex-1 min-h-[36px] max-h-[180px] py-2 px-1 text-sm leading-relaxed resize-none font-sans',
+                'bg-transparent border-0 shadow-none',
+                'focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
+                'placeholder:text-muted-foreground/70',
+              ].join(' ')}
+            />
+          </div>
 
-        {/* Send / Stop button */}
-        {isStreaming ? (
-          <button
-            type="button"
-            onClick={handleStop}
-            aria-label="Stop generation"
-            className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors mb-0.5 bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm"
-          >
-            <Square className="w-3 h-3 fill-current" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={!canSend}
-            onClick={handleSend}
-            aria-label="Send"
-            className={[
-              'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors mb-0.5 shadow-sm',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              canSend ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-muted text-muted-foreground'
-            ].join(' ')}
-          >
-            <ArrowUp className="w-4 h-4" />
-          </button>
-        )}
+          {/* Shortcut hint & Send / Stop button */}
+          <div className="flex items-center gap-2 flex-shrink-0 mb-0.5">
+            <span className="text-[10px] text-muted-foreground/50 font-mono hidden md:inline select-none">
+              ↵ Send
+            </span>
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                aria-label="Stop generation"
+                className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md hover:scale-105 active:scale-95 animate-pulse"
+                title="Stop generation"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!canSend}
+                onClick={handleSend}
+                aria-label="Send"
+                title={canSend ? "Send message (Enter)" : "Type a message to send"}
+                className={[
+                  'w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md',
+                  'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
+                  canSend ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white hover:shadow-lg hover:shadow-indigo-500/25 hover:scale-105 active:scale-95' : 'bg-muted text-muted-foreground'
+                ].join(' ')}
+              >
+                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
