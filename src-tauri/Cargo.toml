@@ -37,6 +37,9 @@ pyo3 = { version = "0.22", features = ["auto-initialize"] }
 wait-timeout = "0.2.1"
 memory-stats = "1.2.0"
 sysinfo = "0.30"
+diffy = "0.4"
+similar = "2"
+ignore = "0.4"
 
 [dependencies.wasmtime]
 version = "22"
