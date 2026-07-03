@@ -246,5 +246,31 @@
   .glow-effect:hover::after {
     opacity: 0.4;
   }
+
+  /* ─── Prevent Horizontal Overflow in Chat & ScrollArea ─── */
+  [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .prose {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+  .prose pre {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: pre !important;
+  }
+  .prose code {
+    word-break: break-word !important;
+    white-space: pre-wrap !important;
+  }
+  .prose pre code {
+    word-break: normal !important;
+    white-space: inherit !important;
+  }
 }
 

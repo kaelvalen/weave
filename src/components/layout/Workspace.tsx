@@ -66,7 +66,7 @@ export function Workspace() {
         }`}
       >
         <div 
-          className="w-full h-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner"
+          className="w-full h-full min-w-0 max-w-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner isolate [transform:translateZ(0)] [backface-visibility:hidden]"
         >
           <ChatPanel isFloating={true} />
         </div>

@@ -139,8 +139,8 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <div className="w-72 h-full border-r bg-muted/30 flex flex-col flex-shrink-0">
-      <div className="p-3 flex items-center justify-between border-b bg-card/40">
+    <div className="w-72 h-full border-r bg-muted/30 flex flex-col flex-shrink-0 rounded-l-2xl overflow-hidden">
+      <div className="p-3 flex items-center justify-between border-b bg-card/40 rounded-tl-2xl">
         <button
           type="button"
           onClick={onClose}

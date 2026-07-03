@@ -109,7 +109,7 @@ function inferCapabilityFromJson(json: string): string | null {
   return null;
 }
 
-/** Parse the parameter payload for a tool call, tolerating fenced code blocks. */
+/** Parse the parameter payload for a tool call, tolerating fenced code blocks and unclosed tags. */
 function parseToolParams(paramsStr: string, capName: string): Record<string, unknown> | null {
   try {
     let clean = (paramsStr || '{}').trim();
@@ -119,7 +119,16 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
       clean = clean.replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
     }
     if (!clean) return {};
-    return JSON.parse(clean);
+    try {
+      return JSON.parse(clean);
+    } catch {
+      // Fallback: if JSON.parse fails (e.g. trailing text or truncated JSON), find balanced JSON
+      const balanced = findBalancedJson(clean);
+      if (balanced.length > 0) {
+        return JSON.parse(balanced[0]);
+      }
+      throw new Error("No balanced JSON found");
+    }
   } catch (e) {
     console.warn(`Failed to parse tool params for ${capName}:`, e, paramsStr);
     return null;
@@ -135,14 +144,14 @@ function parseToolCalls(content: string): { calls: ParsedToolCall[]; failures: T
   const failures: ToolParseFailure[] = [];
 
   // Parse XML-style <call plugin="...">...</call> tags. Also tolerates a missing
-  // closing tag by stopping at the next opening tag or end of string.
-  const openRegex = /<call\s+plugin=["']([^"']+)["']\s*>/g;
+  // closing tag by stopping at the next opening tag or end of string, and allows unquoted attributes.
+  const openRegex = /<call\s+plugin=(?:["']([^"']+)["']|([^\s>]+))[^>]*>/g;
   let match: RegExpExecArray | null;
 
   while ((match = openRegex.exec(content)) !== null) {
     const tagStart = match.index;
     const tagEnd = match.index + match[0].length;
-    const capName = match[1];
+    const capName = match[1] || match[2];
     const rest = content.slice(tagEnd);
 
     const closeIdx = rest.indexOf('</call>');
@@ -440,10 +449,6 @@ export const useChatStore = create<ChatState>()(
     },
 
     finalizeMessage: async (messageId: string) => {
-      set((state) => {
-        state.isStreaming = false;
-      });
-
       const saveSession = () => {
         const store = get();
         if (store.messages.length > 0) {
@@ -458,6 +463,7 @@ export const useChatStore = create<ChatState>()(
       // AI Function Calling Interception
       const msg = get().messages.find(m => m.id === messageId);
       if (!msg || msg.role !== 'assistant') {
+        set((state) => { state.isStreaming = false; });
         saveSession();
         return;
       }
@@ -480,7 +486,8 @@ export const useChatStore = create<ChatState>()(
 
       const firstCall = calls[0];
       if (!firstCall) {
-        // No tool call, just save the final message
+        // No tool call, just stop streaming and save the final message
+        set((state) => { state.isStreaming = false; });
         saveSession();
         return;
       }
@@ -492,6 +499,7 @@ export const useChatStore = create<ChatState>()(
       if (!pluginId) {
         toast.error(`No plugin found providing capability: ${capName}`);
         set((state) => {
+          state.isStreaming = false;
           state.messages.push({
             id: generateId(),
             role: 'system',
@@ -513,8 +521,8 @@ export const useChatStore = create<ChatState>()(
         }
       });
 
-      // Require approval for destructive operations
-      const requiresApproval = ['coder.write_file', 'coder.apply_diff'].includes(capName);
+      // Execute tools autonomously without requiring step-by-step approval
+      const requiresApproval = false;
 
       // Attach tool call to assistant message
       set((state) => {
@@ -533,10 +541,11 @@ export const useChatStore = create<ChatState>()(
       saveSession();
 
       if (requiresApproval) {
+        set((state) => { state.isStreaming = false; });
         return; // Stop execution, wait for user to call executeToolCall
       }
 
-      // Execute the tool
+      // Execute the tool (isStreaming stays true for continuous execution and continuation)
       usePluginStore.getState().executeCapability(pluginId, capName, params)
         .then(res => {
           const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
@@ -568,8 +577,7 @@ export const useChatStore = create<ChatState>()(
             message: quietUserMsg.content,
             model: get().selectedModel,
             provider: get().selectedProvider,
-          }).then(() => set((state) => { state.isStreaming = false; }))
-            .catch(err => {
+          }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
               set((state) => { state.isStreaming = false; state.error = errorStr; });
@@ -603,8 +611,8 @@ export const useChatStore = create<ChatState>()(
           invoke('chat_send_message', {
             message: quietUserMsg.content,
             model: get().selectedModel,
-          }).then(() => set((state) => { state.isStreaming = false; }))
-            .catch(err => {
+            provider: get().selectedProvider,
+          }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
               set((state) => { state.isStreaming = false; state.error = errorStr; });
@@ -656,8 +664,8 @@ export const useChatStore = create<ChatState>()(
         invoke('chat_send_message', {
           message: quietUserMsg.content,
           model: get().selectedModel,
-        }).then(() => set((s) => { s.isStreaming = false; }))
-          .catch(err => {
+          provider: get().selectedProvider,
+        }).catch(err => {
             const errorStr = extractError(err);
             toast.error(errorStr);
             set((s) => { s.isStreaming = false; s.error = errorStr; });
@@ -704,8 +712,7 @@ export const useChatStore = create<ChatState>()(
             message: quietUserMsg.content,
             model: get().selectedModel,
             provider: get().selectedProvider,
-          }).then(() => set((s) => { s.isStreaming = false; }))
-            .catch(err => {
+          }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
               set((s) => { s.isStreaming = false; s.error = errorStr; });
@@ -738,8 +745,8 @@ export const useChatStore = create<ChatState>()(
           invoke('chat_send_message', {
             message: quietUserMsg.content,
             model: get().selectedModel,
-          }).then(() => set((s) => { s.isStreaming = false; }))
-            .catch(err => {
+            provider: get().selectedProvider,
+          }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
               set((s) => { s.isStreaming = false; s.error = errorStr; });

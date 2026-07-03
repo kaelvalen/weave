@@ -45,8 +45,8 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
 
   if (isFloating && !isChatExpanded) {
     return (
-      <div 
-        className="w-full h-full flex items-center px-4 cursor-pointer bg-card/50 hover:bg-muted/50 transition-colors group"
+      <div
+        className="w-full h-full flex items-center px-4 cursor-pointer bg-card/50 hover:bg-muted/50 transition-colors group rounded-2xl"
         onClick={() => toggleChat(true)}
       >
         <div className="flex items-center gap-3 w-full">
@@ -63,17 +63,17 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   }
 
   return (
-    <div className={`flex h-full overflow-hidden ${!isFloating ? 'rounded-2xl border border-border/40 bg-card shadow-sm' : ''}`}>
+    <div className={`flex h-full overflow-hidden rounded-2xl ${!isFloating ? 'border border-border/40 bg-card shadow-sm' : 'w-full'}`}>
       {/* ── Sidebar ── */}
       {showHistory && (
         <ChatHistorySidebar onClose={() => setShowHistory(false)} />
       )}
-      
+
       {/* ── Main Chat Area ── */}
       <div className="flex flex-col flex-1 min-w-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300">
           {/* ── Toolbar ── */}
-          <div className="flex items-center justify-between h-12 px-4 flex-shrink-0 gap-3 border-b border-border/40 bg-card/40 backdrop-blur-md z-10">
+          <div className="flex items-center justify-between h-12 px-4 flex-shrink-0 gap-3 border-b border-border/40 bg-card/40 backdrop-blur-md z-10 rounded-t-2xl">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -106,61 +106,61 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
             </div>
           </div>
 
-      {/* ── Messages ── */}
-      <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="flex flex-col max-w-4xl mx-auto w-full">
-          {!hasMessages ? (
-            <EmptyState />
-          ) : (
-            <div className="py-2 space-y-4">
-              {messages.filter(m => !m.metadata?.isHidden).map((msg, index, arr) => {
-                let isConsecutive = false;
-                if (index > 0) {
-                  const prevMsg = arr[index - 1];
-                  const prevIsFakeTool = prevMsg.role === 'user' && prevMsg.content.startsWith('Tool ') && prevMsg.content.includes(' returned:');
-                  const currentIsFakeTool = msg.role === 'user' && msg.content.startsWith('Tool ') && msg.content.includes(' returned:');
-                  
-                  const prevEffectiveRole = prevIsFakeTool ? 'assistant' : prevMsg.role;
-                  const currentEffectiveRole = currentIsFakeTool ? 'assistant' : msg.role;
+          {/* ── Messages ── */}
+          <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+            <div className="flex flex-col max-w-4xl mx-auto w-full min-w-0 max-w-full pr-3 sm:pr-4">
+              {!hasMessages ? (
+                <EmptyState />
+              ) : (
+                <div className="py-2 space-y-4">
+                  {messages.filter(m => !m.metadata?.isHidden).map((msg, index, arr) => {
+                    let isConsecutive = false;
+                    if (index > 0) {
+                      const prevMsg = arr[index - 1];
+                      const prevIsFakeTool = prevMsg.role === 'user' && prevMsg.content.startsWith('Tool ') && prevMsg.content.includes(' returned:');
+                      const currentIsFakeTool = msg.role === 'user' && msg.content.startsWith('Tool ') && msg.content.includes(' returned:');
 
-                  if (prevEffectiveRole === currentEffectiveRole) {
-                    isConsecutive = true;
-                  }
-                }
+                      const prevEffectiveRole = prevIsFakeTool ? 'assistant' : prevMsg.role;
+                      const currentEffectiveRole = currentIsFakeTool ? 'assistant' : msg.role;
 
-                return (
-                  <ChatMessage 
-                    key={msg.id} 
-                    message={msg} 
-                    isLast={index === arr.length - 1} 
-                    isConsecutive={isConsecutive}
-                  />
-                );
-              })}
-              {isStreaming &&
-                messages[messages.length - 1]?.role === 'assistant' &&
-                messages[messages.length - 1]?.content === '' && (
-                  <div className="flex items-start gap-4 px-5 py-3">
-                    <div className="w-8 h-8 rounded-md border bg-muted flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-4 h-4" />
-                    </div>
-                    <div className="flex gap-1 mt-2">
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
-                    </div>
-                  </div>
-                )}
-              <div ref={bottomRef} className="h-4" />
+                      if (prevEffectiveRole === currentEffectiveRole) {
+                        isConsecutive = true;
+                      }
+                    }
+
+                    return (
+                      <ChatMessage
+                        key={msg.id}
+                        message={msg}
+                        isLast={index === arr.length - 1}
+                        isConsecutive={isConsecutive}
+                      />
+                    );
+                  })}
+                  {isStreaming &&
+                    messages[messages.length - 1]?.role === 'assistant' &&
+                    messages[messages.length - 1]?.content === '' && (
+                      <div className="flex items-start gap-4 px-5 py-3">
+                        <div className="w-8 h-8 rounded-md border bg-muted flex items-center justify-center flex-shrink-0">
+                          <Bot className="w-4 h-4" />
+                        </div>
+                        <div className="flex gap-1 mt-2">
+                          <span className="typing-dot" />
+                          <span className="typing-dot" />
+                          <span className="typing-dot" />
+                        </div>
+                      </div>
+                    )}
+                  <div ref={bottomRef} className="h-4" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        </ScrollArea>
+          </ScrollArea>
         </div>
 
         {/* ── Approval Banner ── */}
         {(() => {
-          const pendingApprovals = messages.flatMap(m => 
+          const pendingApprovals = messages.flatMap(m =>
             (m.metadata?.plugin_calls || []).filter(c => c.status === 'pending_approval').map(c => ({ messageId: m.id, call: c }))
           );
           if (pendingApprovals.length === 0) return null;
@@ -197,11 +197,11 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
         })()}
 
         {/* ── Input ── */}
-        <div className="flex-shrink-0 bg-transparent">
+        <div className="flex-shrink-0 bg-transparent rounded-b-2xl">
           <ChatInput />
         </div>
       </div>
-  </div>
+    </div>
   );
 }
 
@@ -210,45 +210,45 @@ import logoDark from '@/assets/weave-logo/dark-mode.svg';
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[460px] px-6 py-8 animate-in fade-in zoom-in-95 duration-500">
+    <div className="flex flex-col items-center justify-center min-h-0 my-auto px-4 sm:px-6 py-4 animate-in fade-in zoom-in-95 duration-500 max-w-full overflow-y-auto">
       {/* Logo Badge (No Glow) */}
-      <div className="mb-6 w-16 h-16 sm:w-20 sm:h-20 p-3.5 rounded-3xl bg-card border border-border shadow-md flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+      <div className="mb-3 sm:mb-4 w-12 h-12 sm:w-14 sm:h-14 p-2.5 rounded-2xl bg-card border border-border shadow-sm flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
         <img src={logoLight} alt="Weave" className="w-full h-full object-contain dark:hidden" />
         <img src={logoDark} alt="Weave" className="w-full h-full object-contain hidden dark:block" />
       </div>
 
-      <h2 className="text-2xl sm:text-3xl font-extrabold mb-2 text-foreground text-center tracking-tight">
+      <h2 className="text-xl sm:text-2xl font-extrabold mb-1 text-foreground text-center tracking-tight">
         Welcome to Weave AI
       </h2>
-      <p className="text-sm sm:text-base text-muted-foreground text-center max-w-md mb-8 leading-relaxed">
+      <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-md mb-5 leading-relaxed">
         Your next-generation autonomous workspace. Execute workflows, analyze code, manage files, and design on canvas.
       </p>
 
       {/* Suggestion grid */}
-      <div className="grid gap-3.5 w-full max-w-4xl" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 w-full max-w-3xl">
         {SUGGESTED_PROMPTS.map((p, i) => (
           <button
             key={i}
             type="button"
-            className="group relative flex flex-col justify-between p-4 rounded-2xl border border-border/70 bg-card/60 hover:bg-card text-left transition-all duration-300 shadow-sm hover:shadow-lg hover:border-primary/40 hover:-translate-y-1 overflow-hidden min-w-0"
+            className="group relative flex flex-col justify-between p-3 rounded-xl border border-border/70 bg-card/60 hover:bg-card text-left transition-all duration-300 shadow-sm hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5 overflow-hidden min-w-0"
             onClick={() => useChatStore.getState().sendMessage(p.text)}
           >
-            <div className="flex items-start justify-between gap-2 mb-2.5">
-              <div className="p-2 rounded-xl bg-muted/60 text-foreground group-hover:text-primary group-hover:scale-110 transition-all duration-300 flex-shrink-0">
-                <p.icon className="w-5 h-5 stroke-[2]" />
+            <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="p-1.5 rounded-lg bg-muted/60 text-foreground group-hover:text-primary transition-colors flex-shrink-0">
+                  <p.icon className="w-4 h-4 stroke-[2]" />
+                </div>
+                <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                  {p.text}
+                </span>
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${p.badge}`}>
+              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${p.badge}`}>
                 {p.category}
               </span>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                {p.text}
-              </p>
-              <p className="text-xs text-muted-foreground/80 mt-1 line-clamp-2 leading-relaxed">
-                {p.desc}
-              </p>
-            </div>
+            <p className="text-[11px] text-muted-foreground/80 pl-7 line-clamp-1 leading-relaxed">
+              {p.desc}
+            </p>
           </button>
         ))}
       </div>

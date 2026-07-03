@@ -30,10 +30,11 @@ export function useChatStream() {
           if (!mounted) return;
           const { chunk, message_id, done } = event.payload;
           
-          if (!done) {
+          if (chunk) {
             chunkBuffer += chunk;
             lastMessageId = message_id;
-          } else {
+          }
+          if (done) {
             flush();
             useChatStore.getState().finalizeMessage(message_id);
           }
