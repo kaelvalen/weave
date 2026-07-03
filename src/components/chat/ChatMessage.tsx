@@ -245,7 +245,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
         )}
 
         {/* Incomplete Tool Call Warning */}
-        {message.content.includes('<call plugin=') && !message.content.includes('</call>') && (
+        {/<\s*call\s+plugin=/i.test(message.content) && !/<\/\s*call\s*>/i.test(message.content) && (
           <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
             <span className="leading-relaxed">Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı. <strong>Settings</strong> bölümünden max_tokens değerini artırabilir veya modele dosyayı parça parça yazmasını söyleyebilirsiniz.</span>
@@ -292,7 +292,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
                 components={{ code: CodeBlock }}
               >
                 {message.content
-                  .replace(/<call[\s\S]*?<\/call>/g, '')
+                  .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
                   .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
                   .replace(/\\\((.*?)\\\)/g, '$$$1$$')
                 }

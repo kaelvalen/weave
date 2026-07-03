@@ -38,6 +38,15 @@ interface ChatState {
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const getUiContext = () => {
+  let uiContext = useAppStore.getState().activeView as string;
+  if (uiContext === 'files') {
+    const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
+    uiContext = `Files View (Directory: ${rootDir})`;
+  }
+  return uiContext;
+};
+
 interface ParsedToolCall {
   capName: string;
   params: Record<string, unknown>;
@@ -145,7 +154,7 @@ function parseToolCalls(content: string): { calls: ParsedToolCall[]; failures: T
 
   // Parse XML-style <call plugin="...">...</call> tags. Also tolerates a missing
   // closing tag by stopping at the next opening tag or end of string, and allows unquoted attributes.
-  const openRegex = /<call\s+plugin=(?:["']([^"']+)["']|([^\s>]+))[^>]*>/g;
+  const openRegex = /<\s*call\s+plugin\s*=\s*(?:["']([^"']+)["']|([^\s>]+))[^>]*>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = openRegex.exec(content)) !== null) {
@@ -154,14 +163,24 @@ function parseToolCalls(content: string): { calls: ParsedToolCall[]; failures: T
     const capName = match[1] || match[2];
     const rest = content.slice(tagEnd);
 
-    const closeIdx = rest.indexOf('</call>');
-    const nextOpenIdx = rest.search(/<call\s+plugin=/);
-    const endIdx = closeIdx !== -1
-      ? closeIdx
-      : (nextOpenIdx !== -1 ? nextOpenIdx : rest.length);
-    const rawEnd = closeIdx !== -1
-      ? tagEnd + closeIdx + 7
-      : tagEnd + endIdx;
+    const closeIdx = rest.search(/<\/\s*call\s*>/i);
+    const nextOpenIdx = rest.search(/<\s*call\s+plugin\s*=/i);
+
+    let endIdx: number;
+    let rawEnd: number;
+
+    if (closeIdx !== -1 && (nextOpenIdx === -1 || closeIdx < nextOpenIdx)) {
+      const matchClose = rest.match(/<\/\s*call\s*>/i);
+      const closeTagLen = matchClose ? matchClose[0].length : 7;
+      endIdx = closeIdx;
+      rawEnd = tagEnd + closeIdx + closeTagLen;
+    } else if (nextOpenIdx !== -1) {
+      endIdx = nextOpenIdx;
+      rawEnd = tagEnd + nextOpenIdx;
+    } else {
+      endIdx = rest.length;
+      rawEnd = tagEnd + rest.length;
+    }
 
     const paramsStr = rest.slice(0, endIdx);
     const raw = content.slice(tagStart, rawEnd);
@@ -223,11 +242,7 @@ export const useChatStore = create<ChatState>()(
         state.error = null;
       });
 
-      let uiContext = useAppStore.getState().activeView as string;
-      if (uiContext === 'files') {
-        const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
-        uiContext = `Files View (Directory: ${rootDir})`;
-      }
+      const uiContext = getUiContext();
 
       try {
         await invoke('chat_send_message', {
@@ -312,11 +327,7 @@ export const useChatStore = create<ChatState>()(
       try {
         await invoke('chat_set_history', { history: store.messages.slice(0, -1) }); // set history without the new message
 
-        let uiContext = useAppStore.getState().activeView as string;
-        if (uiContext === 'files') {
-          const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
-          uiContext = `Files View (Directory: ${rootDir})`;
-        }
+        const uiContext = getUiContext();
 
         await invoke('chat_send_message', {
           message: newContent.trim(),
@@ -395,11 +406,7 @@ export const useChatStore = create<ChatState>()(
       try {
         await invoke('chat_set_history', { history: store.messages }); // update backend history
 
-        let uiContext = useAppStore.getState().activeView as string;
-        if (uiContext === 'files') {
-          const rootDir = localStorage.getItem('weave_file_manager_root') || '.';
-          uiContext = `Files View (Directory: ${rootDir})`;
-        }
+        const uiContext = getUiContext();
 
         await invoke('chat_send_message', {
           message: lastUserMsg.content,
@@ -484,57 +491,67 @@ export const useChatStore = create<ChatState>()(
         });
       }
 
-      const firstCall = calls[0];
-      if (!firstCall) {
+      if (calls.length === 0) {
         // No tool call, just stop streaming and save the final message
         set((state) => { state.isStreaming = false; });
         saveSession();
         return;
       }
 
-      const { capName, params, raw: matchedText } = firstCall;
       const pluginStore = usePluginStore.getState();
-      const pluginId = pluginStore.getPluginIdForCapability(capName);
+      const validCalls: { capName: string; params: Record<string, unknown>; raw: string; pluginId: string }[] = [];
 
-      if (!pluginId) {
-        toast.error(`No plugin found providing capability: ${capName}`);
-        set((state) => {
-          state.isStreaming = false;
-          state.messages.push({
-            id: generateId(),
-            role: 'system',
-            content: `Tool ${capName} not found.`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
+      for (const call of calls) {
+        const pluginId = pluginStore.getPluginIdForCapability(call.capName);
+        if (!pluginId) {
+          toast.error(`No plugin found providing capability: ${call.capName}`);
+          set((state) => {
+            state.messages.push({
+              id: generateId(),
+              role: 'system',
+              content: `Tool ${call.capName} not found.`,
+              timestamp: Date.now(),
+              metadata: { plugin_calls: [], isHidden: true }
+            });
           });
-        });
-        get().sendMessage(`System error: Tool ${capName} is not available. Please tell the user you cannot perform this action.`);
+        } else {
+          validCalls.push({ ...call, pluginId });
+        }
+      }
+
+      if (validCalls.length === 0) {
+        set((state) => { state.isStreaming = false; });
+        get().sendMessage(`System error: Requested tools are not available. Please tell the user you cannot perform this action.`);
         saveSession();
         return;
       }
 
-      // Remove the matched tool call from the assistant's message so it doesn't show in UI as raw text
+      // Remove all matched tool calls from the assistant's message so they don't show in UI as raw text
       set((state) => {
         const assistantMsg = state.messages.find(m => m.id === messageId);
         if (assistantMsg) {
-          assistantMsg.content = assistantMsg.content.replace(matchedText, '').trim();
+          for (const call of validCalls) {
+            assistantMsg.content = assistantMsg.content.replace(call.raw, '').trim();
+          }
         }
       });
 
       // Execute tools autonomously without requiring step-by-step approval
       const requiresApproval = false;
 
-      // Attach tool call to assistant message
+      // Attach tool calls to assistant message
       set((state) => {
         const assistantMsg = state.messages.find(m => m.id === messageId);
         if (assistantMsg) {
           if (!assistantMsg.metadata) assistantMsg.metadata = { plugin_calls: [] };
-          assistantMsg.metadata.plugin_calls.push({
-            plugin_id: pluginId,
-            capability: capName,
-            params,
-            status: requiresApproval ? 'pending_approval' : 'pending'
-          });
+          for (const call of validCalls) {
+            assistantMsg.metadata.plugin_calls.push({
+              plugin_id: call.pluginId,
+              capability: call.capName,
+              params: call.params,
+              status: requiresApproval ? 'pending_approval' : 'pending'
+            });
+          }
         }
       });
 
@@ -545,79 +562,65 @@ export const useChatStore = create<ChatState>()(
         return; // Stop execution, wait for user to call executeToolCall
       }
 
-      // Execute the tool (isStreaming stays true for continuous execution and continuation)
-      usePluginStore.getState().executeCapability(pluginId, capName, params)
-        .then(res => {
-          const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
-
-          set((state) => {
-            const assistantMsg = state.messages.find(m => m.id === messageId);
-            if (assistantMsg && assistantMsg.metadata) {
-              const call = assistantMsg.metadata.plugin_calls.find(c => c.capability === capName);
-              if (call) {
-                call.status = 'success';
-                call.result = typeof res === 'object' ? res as Record<string, unknown> : { value: res };
+      // Execute all valid tools in parallel (isStreaming stays true for continuous execution and continuation)
+      Promise.all(
+        validCalls.map(async (call) => {
+          try {
+            const res = await usePluginStore.getState().executeCapability(call.pluginId, call.capName, call.params);
+            const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+            set((state) => {
+              const assistantMsg = state.messages.find(m => m.id === messageId);
+              if (assistantMsg && assistantMsg.metadata) {
+                const c = assistantMsg.metadata.plugin_calls.find(pc => pc.capability === call.capName && pc.status === 'pending');
+                if (c) {
+                  c.status = 'success';
+                  c.result = typeof res === 'object' ? res as Record<string, unknown> : { value: res };
+                }
               }
-            }
-          });
-
-          saveSession();
-
-          // Feed it back to the AI quietly
-          const quietUserMsg: ChatMessage = {
-            id: generateId(),
-            role: 'user',
-            content: `Tool ${capName} returned:\n${resultStr}\n\nPlease continue your answer based on this result.`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
-          };
-          set((state) => { state.messages.push(quietUserMsg); state.isStreaming = true; });
-
-          invoke('chat_send_message', {
-            message: quietUserMsg.content,
-            model: get().selectedModel,
-            provider: get().selectedProvider,
-          }).catch(err => {
-              const errorStr = extractError(err);
-              toast.error(errorStr);
-              set((state) => { state.isStreaming = false; state.error = errorStr; });
             });
+            return `Tool ${call.capName} returned:\n${resultStr}`;
+          } catch (err) {
+            const errorStr = extractError(err);
+            toast.error(`Tool ${call.capName} failed: ${errorStr}`);
+            set((state) => {
+              const assistantMsg = state.messages.find(m => m.id === messageId);
+              if (assistantMsg && assistantMsg.metadata) {
+                const c = assistantMsg.metadata.plugin_calls.find(pc => pc.capability === call.capName && pc.status === 'pending');
+                if (c) {
+                  c.status = 'error';
+                  c.result = { error: errorStr };
+                }
+              }
+            });
+            return `Tool ${call.capName} failed with error:\n${errorStr}`;
+          }
         })
-        .catch(err => {
+      ).then((results) => {
+        saveSession();
+
+        const combinedResults = results.join('\n\n');
+        const quietUserMsg: ChatMessage = {
+          id: generateId(),
+          role: 'user',
+          content: `${combinedResults}\n\nPlease continue your answer based on these results.`,
+          timestamp: Date.now(),
+          metadata: { plugin_calls: [], isHidden: true }
+        };
+
+        set((state) => { state.messages.push(quietUserMsg); state.isStreaming = true; });
+
+        invoke('chat_send_message', {
+          message: quietUserMsg.content,
+          model: get().selectedModel,
+          provider: get().selectedProvider,
+          ui_context: getUiContext(),
+          images: [],
+        }).catch(err => {
           const errorStr = extractError(err);
           toast.error(errorStr);
-          set((state) => {
-            const assistantMsg = state.messages.find(m => m.id === messageId);
-            if (assistantMsg && assistantMsg.metadata) {
-              const call = assistantMsg.metadata.plugin_calls.find(c => c.capability === capName);
-              if (call) {
-                call.status = 'error';
-                call.result = { error: errorStr };
-              }
-            }
-          });
-
-          saveSession();
-
-          const quietUserMsg: ChatMessage = {
-            id: generateId(),
-            role: 'user',
-            content: `Tool ${capName} failed with error:\n${errorStr}\n\nPlease apologize and continue.`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
-          };
-          set((state) => { state.messages.push(quietUserMsg); state.isStreaming = true; });
-
-          invoke('chat_send_message', {
-            message: quietUserMsg.content,
-            model: get().selectedModel,
-            provider: get().selectedProvider,
-          }).catch(err => {
-              const errorStr = extractError(err);
-              toast.error(errorStr);
-              set((state) => { state.isStreaming = false; state.error = errorStr; });
-            });
+          set((state) => { state.isStreaming = false; state.error = errorStr; });
         });
+      });
     },
 
     executeToolCall: async (messageId: string, capName: string, isApproved: boolean) => {
@@ -665,6 +668,8 @@ export const useChatStore = create<ChatState>()(
           message: quietUserMsg.content,
           model: get().selectedModel,
           provider: get().selectedProvider,
+          ui_context: getUiContext(),
+          images: [],
         }).catch(err => {
             const errorStr = extractError(err);
             toast.error(errorStr);
@@ -712,6 +717,8 @@ export const useChatStore = create<ChatState>()(
             message: quietUserMsg.content,
             model: get().selectedModel,
             provider: get().selectedProvider,
+            ui_context: getUiContext(),
+            images: [],
           }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
@@ -746,6 +753,8 @@ export const useChatStore = create<ChatState>()(
             message: quietUserMsg.content,
             model: get().selectedModel,
             provider: get().selectedProvider,
+            ui_context: getUiContext(),
+            images: [],
           }).catch(err => {
               const errorStr = extractError(err);
               toast.error(errorStr);
