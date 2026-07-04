@@ -33,7 +33,10 @@ interface ChatState {
   loadSession: (id: string) => Promise<void>;
   startNewSession: () => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
-  updateSessionMeta: (id: string, updates: { title?: string, pinned?: boolean, folder?: string }) => Promise<void>;
+  updateSessionMeta: (
+    id: string,
+    updates: { title?: string; pinned?: boolean; folder?: string }
+  ) => Promise<void>;
 }
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -105,11 +108,14 @@ function inferCapabilityFromJson(json: string): string | null {
   try {
     const parsed = JSON.parse(json);
     if (typeof parsed.url === 'string') return 'web.fetch';
-    if (typeof parsed.title === 'string' && typeof parsed.content === 'string') return 'note.create';
+    if (typeof parsed.title === 'string' && typeof parsed.content === 'string')
+      return 'note.create';
     if (typeof parsed.expression === 'string') return 'calc.eval';
     if (typeof parsed.command === 'string') return 'shell.exec';
-    if (typeof parsed.query === 'string' && parsed.query.toLowerCase().startsWith('select')) return 'db.query';
-    if (typeof parsed.directory === 'string' && typeof parsed.pattern === 'string') return 'file.search';
+    if (typeof parsed.query === 'string' && parsed.query.toLowerCase().startsWith('select'))
+      return 'db.query';
+    if (typeof parsed.directory === 'string' && typeof parsed.pattern === 'string')
+      return 'file.search';
     if (typeof parsed.directory === 'string') return 'file.list';
     if (typeof parsed.path === 'string') return parsed.content ? 'file.write' : 'file.read';
   } catch {
@@ -123,9 +129,15 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
   try {
     let clean = (paramsStr || '{}').trim();
     if (clean.startsWith('```json')) {
-      clean = clean.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+      clean = clean
+        .replace(/^```json\s*/, '')
+        .replace(/\s*```$/, '')
+        .trim();
     } else if (clean.startsWith('```')) {
-      clean = clean.replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+      clean = clean
+        .replace(/^```\s*/, '')
+        .replace(/\s*```$/, '')
+        .trim();
     }
     if (!clean) return {};
     try {
@@ -136,7 +148,7 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
       if (balanced.length > 0) {
         return JSON.parse(balanced[0]);
       }
-      throw new Error("No balanced JSON found");
+      throw new Error('No balanced JSON found');
     }
   } catch (e) {
     console.warn(`Failed to parse tool params for ${capName}:`, e, paramsStr);
@@ -148,7 +160,10 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
  *  Supports `<call plugin="...">...</call>` (with or without a closing tag)
  *  and raw JSON fallback for models that don't use XML tags.
  *  Malformed calls are returned as failures so callers can log them. */
-function parseToolCalls(content: string): { calls: ParsedToolCall[]; failures: ToolParseFailure[] } {
+function parseToolCalls(content: string): {
+  calls: ParsedToolCall[];
+  failures: ToolParseFailure[];
+} {
   const calls: ParsedToolCall[] = [];
   const failures: ToolParseFailure[] = [];
 
@@ -256,11 +271,14 @@ export const useChatStore = create<ChatState>()(
         // Auto-save session
         const store = get();
         if (store.messages.length > 0) {
-          const title = store.conversationTitle === 'New Chat' && store.messages.length <= 2
-            ? content.slice(0, 30) + '...'
-            : store.conversationTitle;
+          const title =
+            store.conversationTitle === 'New Chat' && store.messages.length <= 2
+              ? content.slice(0, 30) + '...'
+              : store.conversationTitle;
 
-          set((s) => { s.conversationTitle = title; });
+          set((s) => {
+            s.conversationTitle = title;
+          });
 
           await invoke('chat_save_session', {
             id: store.conversationId,
@@ -290,10 +308,14 @@ export const useChatStore = create<ChatState>()(
       const state = get();
       if (state.isStreaming || !newContent.trim()) return;
 
-      const msgIndex = state.messages.findIndex(m => m.id === messageId);
+      const msgIndex = state.messages.findIndex((m) => m.id === messageId);
       if (msgIndex === -1) return;
 
-      const editedMessage = { ...state.messages[msgIndex], content: newContent.trim(), timestamp: Date.now() };
+      const editedMessage = {
+        ...state.messages[msgIndex],
+        content: newContent.trim(),
+        timestamp: Date.now(),
+      };
 
       const removedMessages = state.messages.slice(msgIndex);
 
@@ -301,8 +323,14 @@ export const useChatStore = create<ChatState>()(
       for (const msg of removedMessages) {
         if (msg.role === 'assistant' && msg.metadata?.plugin_calls) {
           for (const call of msg.metadata.plugin_calls) {
-            if (['coder.write_file', 'coder.apply_diff'].includes(call.capability) && call.status === 'success' && call.params.path) {
-              usePluginStore.getState().executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
+            if (
+              ['coder.write_file', 'coder.apply_diff'].includes(call.capability) &&
+              call.status === 'success' &&
+              call.params.path
+            ) {
+              usePluginStore
+                .getState()
+                .executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
                 .catch((err) => toast.error(extractError(err)));
             }
           }
@@ -365,7 +393,7 @@ export const useChatStore = create<ChatState>()(
       const state = get();
       if (state.isStreaming) return;
 
-      const msgIndex = state.messages.findIndex(m => m.id === messageId);
+      const msgIndex = state.messages.findIndex((m) => m.id === messageId);
       if (msgIndex === -1) return;
 
       // Ensure the message to regenerate is an assistant message
@@ -387,8 +415,14 @@ export const useChatStore = create<ChatState>()(
       for (const msg of removedMessages) {
         if (msg.role === 'assistant' && msg.metadata?.plugin_calls) {
           for (const call of msg.metadata.plugin_calls) {
-            if (['coder.write_file', 'coder.apply_diff'].includes(call.capability) && call.status === 'success' && call.params.path) {
-              usePluginStore.getState().executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
+            if (
+              ['coder.write_file', 'coder.apply_diff'].includes(call.capability) &&
+              call.status === 'success' &&
+              call.params.path
+            ) {
+              usePluginStore
+                .getState()
+                .executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
                 .catch((err) => toast.error(extractError(err)));
             }
           }
@@ -468,9 +502,11 @@ export const useChatStore = create<ChatState>()(
       };
 
       // AI Function Calling Interception
-      const msg = get().messages.find(m => m.id === messageId);
+      const msg = get().messages.find((m) => m.id === messageId);
       if (!msg || msg.role !== 'assistant') {
-        set((state) => { state.isStreaming = false; });
+        set((state) => {
+          state.isStreaming = false;
+        });
         saveSession();
         return;
       }
@@ -486,20 +522,27 @@ export const useChatStore = create<ChatState>()(
             role: 'system',
             content: `Malformed tool call skipped: ${failure.reason}`,
             timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
+            metadata: { plugin_calls: [], isHidden: true },
           });
         });
       }
 
       if (calls.length === 0) {
         // No tool call, just stop streaming and save the final message
-        set((state) => { state.isStreaming = false; });
+        set((state) => {
+          state.isStreaming = false;
+        });
         saveSession();
         return;
       }
 
       const pluginStore = usePluginStore.getState();
-      const validCalls: { capName: string; params: Record<string, unknown>; raw: string; pluginId: string }[] = [];
+      const validCalls: {
+        capName: string;
+        params: Record<string, unknown>;
+        raw: string;
+        pluginId: string;
+      }[] = [];
 
       for (const call of calls) {
         const pluginId = pluginStore.getPluginIdForCapability(call.capName);
@@ -511,7 +554,7 @@ export const useChatStore = create<ChatState>()(
               role: 'system',
               content: `Tool ${call.capName} not found.`,
               timestamp: Date.now(),
-              metadata: { plugin_calls: [], isHidden: true }
+              metadata: { plugin_calls: [], isHidden: true },
             });
           });
         } else {
@@ -520,15 +563,19 @@ export const useChatStore = create<ChatState>()(
       }
 
       if (validCalls.length === 0) {
-        set((state) => { state.isStreaming = false; });
-        get().sendMessage(`System error: Requested tools are not available. Please tell the user you cannot perform this action.`);
+        set((state) => {
+          state.isStreaming = false;
+        });
+        get().sendMessage(
+          `System error: Requested tools are not available. Please tell the user you cannot perform this action.`
+        );
         saveSession();
         return;
       }
 
       // Remove all matched tool calls from the assistant's message so they don't show in UI as raw text
       set((state) => {
-        const assistantMsg = state.messages.find(m => m.id === messageId);
+        const assistantMsg = state.messages.find((m) => m.id === messageId);
         if (assistantMsg) {
           for (const call of validCalls) {
             assistantMsg.content = assistantMsg.content.replace(call.raw, '').trim();
@@ -541,7 +588,7 @@ export const useChatStore = create<ChatState>()(
 
       // Attach tool calls to assistant message
       set((state) => {
-        const assistantMsg = state.messages.find(m => m.id === messageId);
+        const assistantMsg = state.messages.find((m) => m.id === messageId);
         if (assistantMsg) {
           if (!assistantMsg.metadata) assistantMsg.metadata = { plugin_calls: [] };
           for (const call of validCalls) {
@@ -549,7 +596,7 @@ export const useChatStore = create<ChatState>()(
               plugin_id: call.pluginId,
               capability: call.capName,
               params: call.params,
-              status: requiresApproval ? 'pending_approval' : 'pending'
+              status: requiresApproval ? 'pending_approval' : 'pending',
             });
           }
         }
@@ -558,7 +605,9 @@ export const useChatStore = create<ChatState>()(
       saveSession();
 
       if (requiresApproval) {
-        set((state) => { state.isStreaming = false; });
+        set((state) => {
+          state.isStreaming = false;
+        });
         return; // Stop execution, wait for user to call executeToolCall
       }
 
@@ -566,15 +615,20 @@ export const useChatStore = create<ChatState>()(
       Promise.all(
         validCalls.map(async (call) => {
           try {
-            const res = await usePluginStore.getState().executeCapability(call.pluginId, call.capName, call.params);
+            const res = await usePluginStore
+              .getState()
+              .executeCapability(call.pluginId, call.capName, call.params);
             const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
             set((state) => {
-              const assistantMsg = state.messages.find(m => m.id === messageId);
+              const assistantMsg = state.messages.find((m) => m.id === messageId);
               if (assistantMsg && assistantMsg.metadata) {
-                const c = assistantMsg.metadata.plugin_calls.find(pc => pc.capability === call.capName && pc.status === 'pending');
+                const c = assistantMsg.metadata.plugin_calls.find(
+                  (pc) => pc.capability === call.capName && pc.status === 'pending'
+                );
                 if (c) {
                   c.status = 'success';
-                  c.result = typeof res === 'object' ? res as Record<string, unknown> : { value: res };
+                  c.result =
+                    typeof res === 'object' ? (res as Record<string, unknown>) : { value: res };
                 }
               }
             });
@@ -583,9 +637,11 @@ export const useChatStore = create<ChatState>()(
             const errorStr = extractError(err);
             toast.error(`Tool ${call.capName} failed: ${errorStr}`);
             set((state) => {
-              const assistantMsg = state.messages.find(m => m.id === messageId);
+              const assistantMsg = state.messages.find((m) => m.id === messageId);
               if (assistantMsg && assistantMsg.metadata) {
-                const c = assistantMsg.metadata.plugin_calls.find(pc => pc.capability === call.capName && pc.status === 'pending');
+                const c = assistantMsg.metadata.plugin_calls.find(
+                  (pc) => pc.capability === call.capName && pc.status === 'pending'
+                );
                 if (c) {
                   c.status = 'error';
                   c.result = { error: errorStr };
@@ -604,10 +660,13 @@ export const useChatStore = create<ChatState>()(
           role: 'user',
           content: `${combinedResults}\n\nPlease continue your answer based on these results.`,
           timestamp: Date.now(),
-          metadata: { plugin_calls: [], isHidden: true }
+          metadata: { plugin_calls: [], isHidden: true },
         };
 
-        set((state) => { state.messages.push(quietUserMsg); state.isStreaming = true; });
+        set((state) => {
+          state.messages.push(quietUserMsg);
+          state.isStreaming = true;
+        });
 
         invoke('chat_send_message', {
           message: quietUserMsg.content,
@@ -615,20 +674,23 @@ export const useChatStore = create<ChatState>()(
           provider: get().selectedProvider,
           ui_context: getUiContext(),
           images: [],
-        }).catch(err => {
+        }).catch((err) => {
           const errorStr = extractError(err);
           toast.error(errorStr);
-          set((state) => { state.isStreaming = false; state.error = errorStr; });
+          set((state) => {
+            state.isStreaming = false;
+            state.error = errorStr;
+          });
         });
       });
     },
 
     executeToolCall: async (messageId: string, capName: string, isApproved: boolean) => {
       const state = get();
-      const assistantMsg = state.messages.find(m => m.id === messageId);
+      const assistantMsg = state.messages.find((m) => m.id === messageId);
       if (!assistantMsg || !assistantMsg.metadata) return;
 
-      const call = assistantMsg.metadata.plugin_calls.find(c => c.capability === capName);
+      const call = assistantMsg.metadata.plugin_calls.find((c) => c.capability === capName);
       if (!call || call.status !== 'pending_approval') return;
 
       const saveSession = () => {
@@ -644,9 +706,9 @@ export const useChatStore = create<ChatState>()(
 
       if (!isApproved) {
         set((s) => {
-          const msg = s.messages.find(m => m.id === messageId);
+          const msg = s.messages.find((m) => m.id === messageId);
           if (msg && msg.metadata) {
-            const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+            const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
             if (c) {
               c.status = 'error';
               c.result = { error: 'User rejected the operation.' };
@@ -660,9 +722,12 @@ export const useChatStore = create<ChatState>()(
           role: 'user',
           content: `Tool ${capName} was rejected by the user. Please reconsider your approach or ask the user for clarification.`,
           timestamp: Date.now(),
-          metadata: { plugin_calls: [], isHidden: true }
+          metadata: { plugin_calls: [], isHidden: true },
         };
-        set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+        set((s) => {
+          s.messages.push(quietUserMsg);
+          s.isStreaming = true;
+        });
 
         invoke('chat_send_message', {
           message: quietUserMsg.content,
@@ -670,35 +735,41 @@ export const useChatStore = create<ChatState>()(
           provider: get().selectedProvider,
           ui_context: getUiContext(),
           images: [],
-        }).catch(err => {
-            const errorStr = extractError(err);
-            toast.error(errorStr);
-            set((s) => { s.isStreaming = false; s.error = errorStr; });
+        }).catch((err) => {
+          const errorStr = extractError(err);
+          toast.error(errorStr);
+          set((s) => {
+            s.isStreaming = false;
+            s.error = errorStr;
           });
+        });
         return;
       }
 
       // Approved! Set to pending and execute
       set((s) => {
-        const msg = s.messages.find(m => m.id === messageId);
+        const msg = s.messages.find((m) => m.id === messageId);
         if (msg && msg.metadata) {
-          const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+          const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
           if (c) c.status = 'pending';
         }
       });
       saveSession();
 
-      usePluginStore.getState().executeCapability(call.plugin_id, capName, call.params)
-        .then(res => {
+      usePluginStore
+        .getState()
+        .executeCapability(call.plugin_id, capName, call.params)
+        .then((res) => {
           const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
 
           set((s) => {
-            const msg = s.messages.find(m => m.id === messageId);
+            const msg = s.messages.find((m) => m.id === messageId);
             if (msg && msg.metadata) {
-              const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+              const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
               if (c) {
                 c.status = 'success';
-                c.result = typeof res === 'object' ? res as Record<string, unknown> : { value: res };
+                c.result =
+                  typeof res === 'object' ? (res as Record<string, unknown>) : { value: res };
               }
             }
           });
@@ -709,9 +780,12 @@ export const useChatStore = create<ChatState>()(
             role: 'user',
             content: `Tool ${capName} returned:\n${resultStr}\n\nPlease continue your answer based on this result.`,
             timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
+            metadata: { plugin_calls: [], isHidden: true },
           };
-          set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+          set((s) => {
+            s.messages.push(quietUserMsg);
+            s.isStreaming = true;
+          });
 
           invoke('chat_send_message', {
             message: quietUserMsg.content,
@@ -719,19 +793,22 @@ export const useChatStore = create<ChatState>()(
             provider: get().selectedProvider,
             ui_context: getUiContext(),
             images: [],
-          }).catch(err => {
-              const errorStr = extractError(err);
-              toast.error(errorStr);
-              set((s) => { s.isStreaming = false; s.error = errorStr; });
+          }).catch((err) => {
+            const errorStr = extractError(err);
+            toast.error(errorStr);
+            set((s) => {
+              s.isStreaming = false;
+              s.error = errorStr;
             });
+          });
         })
-        .catch(err => {
+        .catch((err) => {
           const errorStr = extractError(err);
           toast.error(errorStr);
           set((s) => {
-            const msg = s.messages.find(m => m.id === messageId);
+            const msg = s.messages.find((m) => m.id === messageId);
             if (msg && msg.metadata) {
-              const c = msg.metadata.plugin_calls.find(pc => pc.capability === capName);
+              const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
               if (c) {
                 c.status = 'error';
                 c.result = { error: errorStr };
@@ -745,9 +822,12 @@ export const useChatStore = create<ChatState>()(
             role: 'user',
             content: `Tool ${capName} failed with error:\n${errorStr}\n\nPlease apologize and continue.`,
             timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true }
+            metadata: { plugin_calls: [], isHidden: true },
           };
-          set((s) => { s.messages.push(quietUserMsg); s.isStreaming = true; });
+          set((s) => {
+            s.messages.push(quietUserMsg);
+            s.isStreaming = true;
+          });
 
           invoke('chat_send_message', {
             message: quietUserMsg.content,
@@ -755,11 +835,14 @@ export const useChatStore = create<ChatState>()(
             provider: get().selectedProvider,
             ui_context: getUiContext(),
             images: [],
-          }).catch(err => {
-              const errorStr = extractError(err);
-              toast.error(errorStr);
-              set((s) => { s.isStreaming = false; s.error = errorStr; });
+          }).catch((err) => {
+            const errorStr = extractError(err);
+            toast.error(errorStr);
+            set((s) => {
+              s.isStreaming = false;
+              s.error = errorStr;
             });
+          });
         });
     },
 
@@ -781,12 +864,13 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    setModel: (model: string, provider?: string) => set((state) => {
-      state.selectedModel = model;
-      if (provider) {
-        state.selectedProvider = provider;
-      }
-    }),
+    setModel: (model: string, provider?: string) =>
+      set((state) => {
+        state.selectedModel = model;
+        if (provider) {
+          state.selectedProvider = provider;
+        }
+      }),
 
     setError: (error: string | null) => {
       set((state) => {
@@ -809,8 +893,16 @@ export const useChatStore = create<ChatState>()(
 
     listSessions: async () => {
       try {
-        const sessions = await invoke('chat_list_sessions') as { id: string; title: string; updated_at: number; pinned?: boolean; folder?: string }[];
-        set((state) => { state.sessions = sessions; });
+        const sessions = (await invoke('chat_list_sessions')) as {
+          id: string;
+          title: string;
+          updated_at: number;
+          pinned?: boolean;
+          folder?: string;
+        }[];
+        set((state) => {
+          state.sessions = sessions;
+        });
       } catch (err) {
         toast.error(extractError(err));
       }
@@ -818,7 +910,11 @@ export const useChatStore = create<ChatState>()(
 
     loadSession: async (id: string) => {
       try {
-        const session = await invoke('chat_load_session', { id }) as { id: string; title: string; messages: ChatMessage[] };
+        const session = (await invoke('chat_load_session', { id })) as {
+          id: string;
+          title: string;
+          messages: ChatMessage[];
+        };
         set((state) => {
           state.conversationId = session.id;
           state.conversationTitle = session.title;
@@ -830,7 +926,9 @@ export const useChatStore = create<ChatState>()(
       } catch (err) {
         const errorStr = extractError(err);
         toast.error(errorStr);
-        set((state) => { state.error = `Failed to load session: ${errorStr}`; });
+        set((state) => {
+          state.error = `Failed to load session: ${errorStr}`;
+        });
       }
     },
 
@@ -860,18 +958,23 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    updateSessionMeta: async (id: string, updates: { title?: string, pinned?: boolean, folder?: string }) => {
+    updateSessionMeta: async (
+      id: string,
+      updates: { title?: string; pinned?: boolean; folder?: string }
+    ) => {
       try {
         await invoke('chat_update_session_meta', {
           id,
           title: updates.title,
           pinned: updates.pinned,
-          folder: updates.folder
+          folder: updates.folder,
         });
 
         // Optimistically update current session title if it's the active one
         if (get().conversationId === id && updates.title !== undefined) {
-          set((state) => { state.conversationTitle = updates.title!; });
+          set((state) => {
+            state.conversationTitle = updates.title!;
+          });
         }
 
         await get().listSessions();

@@ -8,21 +8,24 @@ export function useTauriCommand<T>(command: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const execute = useCallback(async (args?: InvokeArgs) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await invoke<T>(command, args || {});
-      setData(result);
-      return result;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [command]);
+  const execute = useCallback(
+    async (args?: InvokeArgs) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await invoke<T>(command, args || {});
+        setData(result);
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [command]
+  );
 
   return { data, loading, error, execute };
 }

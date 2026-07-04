@@ -21,15 +21,50 @@ export function CommandPalette() {
 
   const actions = useMemo(
     () => [
-      { id: 'chat', label: 'Go to Chat', icon: MessageCircle, onSelect: () => setActiveView('chat') },
-      { id: 'files', label: 'Go to File Manager', icon: FolderOpen, onSelect: () => setActiveView('files') },
+      {
+        id: 'chat',
+        label: 'Go to Chat',
+        icon: MessageCircle,
+        onSelect: () => setActiveView('chat'),
+      },
+      {
+        id: 'files',
+        label: 'Go to File Manager',
+        icon: FolderOpen,
+        onSelect: () => setActiveView('files'),
+      },
       { id: 'notes', label: 'Go to Notes', icon: FileText, onSelect: () => setActiveView('notes') },
-      { id: 'knowledge', label: 'Go to Knowledge', icon: BookOpen, onSelect: () => setActiveView('knowledge') },
-      { id: 'workflows', label: 'Go to Workflows', icon: Workflow, onSelect: () => setActiveView('workflows') },
-      { id: 'canvas', label: 'Go to Canvas', icon: LayoutTemplate, onSelect: () => setActiveView('canvas') },
-      { id: 'plugins', label: 'Go to Plugins', icon: Package, onSelect: () => setActiveView('plugins') },
+      {
+        id: 'knowledge',
+        label: 'Go to Knowledge',
+        icon: BookOpen,
+        onSelect: () => setActiveView('knowledge'),
+      },
+      {
+        id: 'workflows',
+        label: 'Go to Workflows',
+        icon: Workflow,
+        onSelect: () => setActiveView('workflows'),
+      },
+      {
+        id: 'canvas',
+        label: 'Go to Canvas',
+        icon: LayoutTemplate,
+        onSelect: () => setActiveView('canvas'),
+      },
+      {
+        id: 'plugins',
+        label: 'Go to Plugins',
+        icon: Package,
+        onSelect: () => setActiveView('plugins'),
+      },
       { id: 'models', label: 'Go to Models', icon: Brain, onSelect: () => setActiveView('models') },
-      { id: 'settings', label: 'Go to Settings', icon: SettingsIcon, onSelect: () => setActiveView('settings') },
+      {
+        id: 'settings',
+        label: 'Go to Settings',
+        icon: SettingsIcon,
+        onSelect: () => setActiveView('settings'),
+      },
     ],
     [setActiveView]
   );

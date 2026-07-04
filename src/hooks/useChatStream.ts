@@ -29,7 +29,7 @@ export function useChatStream() {
         const unlisten = await listen<StreamChunk>('chat-stream-chunk', (event) => {
           if (!mounted) return;
           const { chunk, message_id, done } = event.payload;
-          
+
           if (chunk) {
             chunkBuffer += chunk;
             lastMessageId = message_id;
@@ -41,7 +41,7 @@ export function useChatStream() {
         });
 
         unlistenRef.current = unlisten;
-        
+
         // Flush buffer every 60ms to optimize React re-renders (approx 16fps)
         flushInterval = setInterval(flush, 60);
       } catch (err) {

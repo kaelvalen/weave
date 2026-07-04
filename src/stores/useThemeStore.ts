@@ -81,14 +81,16 @@ export const useThemeStore = create<ThemeState>()(
 
       setMode: (mode) => set({ mode }),
       addTheme: (theme) => set((state) => ({ themes: [...state.themes, theme] })),
-      updateTheme: (id, updates) => set((state) => ({
-        themes: state.themes.map((t) => t.id === id ? { ...t, ...updates } : t)
-      })),
-      deleteTheme: (id) => set((state) => ({
-        themes: state.themes.filter((t) => t.id !== id),
-        lightThemeId: state.lightThemeId === id ? defaultThemes[0].id : state.lightThemeId,
-        darkThemeId: state.darkThemeId === id ? defaultThemes[1].id : state.darkThemeId,
-      })),
+      updateTheme: (id, updates) =>
+        set((state) => ({
+          themes: state.themes.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        })),
+      deleteTheme: (id) =>
+        set((state) => ({
+          themes: state.themes.filter((t) => t.id !== id),
+          lightThemeId: state.lightThemeId === id ? defaultThemes[0].id : state.lightThemeId,
+          darkThemeId: state.darkThemeId === id ? defaultThemes[1].id : state.darkThemeId,
+        })),
       setLightThemeId: (id) => set({ lightThemeId: id }),
       setDarkThemeId: (id) => set({ darkThemeId: id }),
     }),

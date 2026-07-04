@@ -1,13 +1,13 @@
 import { create } from 'zustand';
-import { 
-  Node, 
-  Edge, 
-  Connection, 
-  addEdge, 
-  applyNodeChanges, 
+import {
+  Node,
+  Edge,
+  Connection,
+  addEdge,
+  applyNodeChanges,
   applyEdgeChanges,
   NodeChange,
-  EdgeChange
+  EdgeChange,
 } from '@xyflow/react';
 import { readTextFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 
@@ -42,7 +42,13 @@ const initialNodes: Node[] = [
 ];
 
 const initialEdges: Edge[] = [
-  { id: 'e1', source: 't1', target: 'a1', animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }
+  {
+    id: 'e1',
+    source: 't1',
+    target: 'a1',
+    animated: true,
+    style: { stroke: '#3b82f6', strokeWidth: 2 },
+  },
 ];
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -64,7 +70,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
   onConnect: (connection: Connection) => {
     set({
-      edges: addEdge({ ...connection, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } }, get().edges),
+      edges: addEdge(
+        { ...connection, animated: true, style: { stroke: '#3b82f6', strokeWidth: 2 } },
+        get().edges
+      ),
       dirty: true,
     });
   },
@@ -100,12 +109,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     try {
       const data = {
         nodes: get().nodes,
-        edges: get().edges
+        edges: get().edges,
       };
-      await writeTextFile('weave_workflow.json', JSON.stringify(data, null, 2), { baseDir: BaseDirectory.AppData });
+      await writeTextFile('weave_workflow.json', JSON.stringify(data, null, 2), {
+        baseDir: BaseDirectory.AppData,
+      });
       set({ dirty: false });
     } catch (e) {
       console.error('Failed to save workflow', e);
     }
-  }
+  },
 }));

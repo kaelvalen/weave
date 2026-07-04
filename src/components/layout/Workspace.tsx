@@ -53,25 +53,21 @@ export function Workspace() {
   return (
     <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-hidden relative">
       {/* Dynamic View Area */}
-      <div className="flex-1 min-h-0 overflow-hidden relative view-transition">
-        {renderView()}
-      </div>
+      <div className="flex-1 min-h-0 overflow-hidden relative view-transition">{renderView()}</div>
 
       {/* Floating AI Chat Container */}
-      <div 
+      <div
         className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 flex flex-col pointer-events-none rounded-2xl ${
           isChatExpanded
-            ? 'w-[768px] max-w-[95vw] h-[80vh] bottom-6 opacity-100 shadow-2xl' 
+            ? 'w-[768px] max-w-[95vw] h-[80vh] bottom-6 opacity-100 shadow-2xl'
             : 'w-[540px] max-w-[90vw] h-14 bottom-10 opacity-95 hover:opacity-100 shadow-xl translate-y-0'
         }`}
       >
-        <div 
-          className="w-full h-full min-w-0 max-w-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner isolate [transform:translateZ(0)] [backface-visibility:hidden]"
-        >
+        <div className="w-full h-full min-w-0 max-w-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner isolate [transform:translateZ(0)] [backface-visibility:hidden]">
           <ChatPanel isFloating={true} />
         </div>
       </div>
-      
+
       {/* StatusBar sits at the bottom of the workspace area */}
       <StatusBar />
     </main>

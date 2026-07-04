@@ -55,16 +55,28 @@ const getLanguageExtension = (path: string) => {
 const getLanguageName = (path: string): string => {
   const ext = path.split('.').pop()?.toLowerCase();
   switch (ext) {
-    case 'ts': case 'tsx': return 'typescript';
-    case 'js': case 'jsx': return 'javascript';
-    case 'json': return 'json';
-    case 'css': return 'css';
-    case 'html': return 'html';
-    case 'md': return 'markdown';
-    case 'rs': return 'rust';
-    case 'py': return 'python';
-    case 'sql': return 'sql';
-    default: return 'plaintext';
+    case 'ts':
+    case 'tsx':
+      return 'typescript';
+    case 'js':
+    case 'jsx':
+      return 'javascript';
+    case 'json':
+      return 'json';
+    case 'css':
+      return 'css';
+    case 'html':
+      return 'html';
+    case 'md':
+      return 'markdown';
+    case 'rs':
+      return 'rust';
+    case 'py':
+      return 'python';
+    case 'sql':
+      return 'sql';
+    default:
+      return 'plaintext';
   }
 };
 
@@ -78,8 +90,11 @@ export function FileEditor({ path }: FileEditorProps) {
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  
-  const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+
+  const isSystemDark =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false;
   const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
 
   const languageExt = getLanguageExtension(path);
@@ -103,14 +118,14 @@ export function FileEditor({ path }: FileEditorProps) {
           let mimeType = isImage ? `image/${ext}` : `video/${ext}`;
           if (ext === 'svg') mimeType = 'image/svg+xml';
           else if (ext === 'jpg') mimeType = 'image/jpeg';
-          
+
           const blob = new Blob([bytes], { type: mimeType });
           setMediaUrl(URL.createObjectURL(blob));
           setLoading(false);
         })
-        .catch(err => {
+        .catch((err) => {
           if (!mounted) return;
-          console.error("Failed to read media:", err);
+          console.error('Failed to read media:', err);
           // Fallback to convertFileSrc
           setMediaUrl(convertFileSrc(path));
           setLoading(false);
@@ -136,8 +151,8 @@ export function FileEditor({ path }: FileEditorProps) {
         if (mounted) setLoading(false);
       });
 
-    return () => { 
-      mounted = false; 
+    return () => {
+      mounted = false;
       if (mediaUrl && mediaUrl.startsWith('blob:')) {
         URL.revokeObjectURL(mediaUrl);
       }
@@ -146,26 +161,29 @@ export function FileEditor({ path }: FileEditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, executeCapability, isMedia, isImage, ext]);
 
-  const handleSave = useCallback(async (currentContent: string) => {
-    setSaving(true);
-    try {
-      const res = await executeCapability('com.weave.builtin.file', 'file.write', { 
-        path, 
-        content: currentContent 
-      }) as { success: boolean };
-      
-      if (res && res.success) {
-        toast.success('File saved', { description: filename });
-        setIsDirty(false);
-      } else {
-        toast.error('Failed to save file');
+  const handleSave = useCallback(
+    async (currentContent: string) => {
+      setSaving(true);
+      try {
+        const res = (await executeCapability('com.weave.builtin.file', 'file.write', {
+          path,
+          content: currentContent,
+        })) as { success: boolean };
+
+        if (res && res.success) {
+          toast.success('File saved', { description: filename });
+          setIsDirty(false);
+        } else {
+          toast.error('Failed to save file');
+        }
+      } catch (err) {
+        toast.error('Error saving file', { description: String(err) });
+      } finally {
+        setSaving(false);
       }
-    } catch (err) {
-      toast.error('Error saving file', { description: String(err) });
-    } finally {
-      setSaving(false);
-    }
-  }, [path, executeCapability, filename]);
+    },
+    [path, executeCapability, filename]
+  );
 
   // Handle Ctrl+S / Cmd+S
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -215,20 +233,36 @@ export function FileEditor({ path }: FileEditorProps) {
           </div>
         </div>
         <div className="flex-1 p-4 flex items-center justify-center overflow-auto relative">
-          <div className="absolute inset-0 bg-repeat bg-center" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '16px 16px', opacity: 0.3 }} />
-          {mediaUrl && (isImage ? (
-            <img src={mediaUrl} alt={filename} className="max-w-full max-h-full object-contain shadow-2xl rounded border border-border z-10" />
-          ) : (
-            <video src={mediaUrl} controls className="max-w-full max-h-full shadow-2xl rounded border border-border z-10" />
-          ))}
+          <div
+            className="absolute inset-0 bg-repeat bg-center"
+            style={{
+              backgroundImage: 'radial-gradient(#333 1px, transparent 1px)',
+              backgroundSize: '16px 16px',
+              opacity: 0.3,
+            }}
+          />
+          {mediaUrl &&
+            (isImage ? (
+              <img
+                src={mediaUrl}
+                alt={filename}
+                className="max-w-full max-h-full object-contain shadow-2xl rounded border border-border z-10"
+              />
+            ) : (
+              <video
+                src={mediaUrl}
+                controls
+                className="max-w-full max-h-full shadow-2xl rounded border border-border z-10"
+              />
+            ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div 
-      className="flex flex-col h-full w-full bg-background relative" 
+    <div
+      className="flex flex-col h-full w-full bg-background relative"
       onKeyDown={handleKeyDown}
       tabIndex={-1} // Allow div to receive keyboard events
     >
@@ -236,20 +270,22 @@ export function FileEditor({ path }: FileEditorProps) {
       <div className="flex items-center justify-between px-4 h-12 border-b bg-card/80 backdrop-blur-md flex-shrink-0 z-10 transition-colors">
         <div className="flex items-center gap-2 overflow-hidden">
           <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span className="text-sm font-medium truncate text-foreground/90">
-            {filename}
-          </span>
+          <span className="text-sm font-medium truncate text-foreground/90">{filename}</span>
           {isDirty && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
         </div>
-        
-        <Button 
-          size="sm" 
-          onClick={() => handleSave(content)} 
-          disabled={saving || !isDirty} 
-          variant={isDirty ? "default" : "secondary"}
+
+        <Button
+          size="sm"
+          onClick={() => handleSave(content)}
+          disabled={saving || !isDirty}
+          variant={isDirty ? 'default' : 'secondary'}
           className={`gap-2 h-8 text-xs transition-all ${isDirty ? 'shadow-sm' : 'opacity-70'}`}
         >
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {saving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
           {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
@@ -299,18 +335,29 @@ export function FileEditor({ path }: FileEditorProps) {
       {/* ── Status Bar ── */}
       <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Cursor Position">
+          <span
+            className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+            title="Cursor Position"
+          >
             Ln {cursor.line}, Col {cursor.col}
           </span>
           <span className="opacity-40">|</span>
-          <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="File Size">
+          <span
+            className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+            title="File Size"
+          >
             {(new Blob([content]).size / 1024).toFixed(1)} KB
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="hover:text-foreground transition-colors cursor-pointer" title="Encoding">UTF-8</span>
+          <span className="hover:text-foreground transition-colors cursor-pointer" title="Encoding">
+            UTF-8
+          </span>
           <span className="opacity-40">|</span>
-          <span className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold" title="Language Mode">
+          <span
+            className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold"
+            title="Language Mode"
+          >
             {languageName}
           </span>
         </div>

@@ -8,9 +8,12 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const { mode, lightThemeId, darkThemeId, themes, deleteTheme } = useThemeStore();
-  
+
   // Resolve actual mode (system to light/dark)
-  const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+  const isSystemDark =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false;
   const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
   const activeThemeId = isDark ? darkThemeId : lightThemeId;
   const activeTheme = themes.find((t) => t.id === activeThemeId) || themes[0];
@@ -57,7 +60,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         const hslValue = hexToHslString(hexValue);
         root.style.setProperty(`--${key}`, hslValue);
       });
-      
+
       // Inject structural variables (with fallbacks for legacy themes)
       root.style.setProperty('--radius', activeTheme.borderRadius || '0.5rem');
       root.style.setProperty('--border-width', activeTheme.borderWidth || '1px');
@@ -68,11 +71,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   return (
     <>
       {/* Background layer */}
-      <div 
+      <div
         className="fixed inset-0 -z-50 transition-colors duration-300"
         style={{
           backgroundColor: `hsl(var(--background))`,
-          backgroundImage: activeTheme?.backgroundImage ? `url(${activeTheme.backgroundImage})` : undefined,
+          backgroundImage: activeTheme?.backgroundImage
+            ? `url(${activeTheme.backgroundImage})`
+            : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',

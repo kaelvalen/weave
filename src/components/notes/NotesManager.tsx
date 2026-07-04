@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
-import { 
-  FileText, Plus, Search, Loader2, Save, Trash2, Calendar 
-} from 'lucide-react';
+import { FileText, Plus, Search, Loader2, Save, Trash2, Calendar } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,16 +29,22 @@ export function NotesManager() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  
+
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
 
-  const isSystemDark = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+  const isSystemDark =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false;
   const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
 
   const loadNotes = useCallback(async () => {
     try {
-      const res = await executeCapability('com.weave.builtin.note', 'note.list', {}) as { success: boolean; notes: Note[] };
+      const res = (await executeCapability('com.weave.builtin.note', 'note.list', {})) as {
+        success: boolean;
+        notes: Note[];
+      };
       if (res && res.success) {
         setNotes(res.notes);
       }
@@ -57,11 +61,11 @@ export function NotesManager() {
 
   const handleCreate = async () => {
     try {
-      const res = await executeCapability('com.weave.builtin.note', 'note.create', { 
+      const res = (await executeCapability('com.weave.builtin.note', 'note.create', {
         title: 'Untitled Note',
-        content: ''
-      }) as { success: boolean; note: Note };
-      
+        content: '',
+      })) as { success: boolean; note: Note };
+
       if (res && res.success) {
         await loadNotes();
         setSelectedNote(res.note);
@@ -75,12 +79,12 @@ export function NotesManager() {
     if (!selectedNote) return;
     setSaving(true);
     try {
-      const res = await executeCapability('com.weave.builtin.note', 'note.update', {
+      const res = (await executeCapability('com.weave.builtin.note', 'note.update', {
         id: selectedNote.id,
         title: selectedNote.title,
-        content: selectedNote.content
-      }) as { success: boolean };
-      
+        content: selectedNote.content,
+      })) as { success: boolean };
+
       if (res && res.success) {
         toast.success('Note saved');
         await loadNotes();
@@ -95,12 +99,12 @@ export function NotesManager() {
   const handleDelete = async () => {
     if (!selectedNote) return;
     if (!confirm('Are you sure you want to delete this note?')) return;
-    
+
     try {
-      const res = await executeCapability('com.weave.builtin.note', 'note.delete', {
-        id: selectedNote.id
-      }) as { success: boolean };
-      
+      const res = (await executeCapability('com.weave.builtin.note', 'note.delete', {
+        id: selectedNote.id,
+      })) as { success: boolean };
+
       if (res && res.success) {
         setSelectedNote(null);
         await loadNotes();
@@ -111,9 +115,10 @@ export function NotesManager() {
     }
   };
 
-  const filteredNotes = notes.filter(n => 
-    n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    n.content.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredNotes = notes.filter(
+    (n) =>
+      n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      n.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleEditorUpdate = useCallback((vu: ViewUpdate) => {
@@ -125,7 +130,9 @@ export function NotesManager() {
     }
   }, []);
 
-  const wordCount = selectedNote?.content ? selectedNote.content.trim().split(/\s+/).filter(Boolean).length : 0;
+  const wordCount = selectedNote?.content
+    ? selectedNote.content.trim().split(/\s+/).filter(Boolean).length
+    : 0;
 
   return (
     <div className="flex h-full w-full bg-transparent pt-16">
@@ -136,7 +143,12 @@ export function NotesManager() {
             <FileText className="w-4 h-4 text-muted-foreground" />
             <h3 className="text-xs font-semibold tracking-wide uppercase">Notes</h3>
           </div>
-          <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleCreate}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-7 h-7 text-muted-foreground"
+            onClick={handleCreate}
+          >
             <Plus className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -144,8 +156,8 @@ export function NotesManager() {
         <div className="px-3 py-3 border-b flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input 
-              placeholder="Search notes..." 
+            <Input
+              placeholder="Search notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-xs bg-background"
@@ -167,8 +179,8 @@ export function NotesManager() {
                   key={note.id}
                   onClick={() => setSelectedNote(note)}
                   className={`p-3 rounded-md cursor-pointer transition-colors border ${
-                    selectedNote?.id === note.id 
-                      ? 'bg-muted border-border' 
+                    selectedNote?.id === note.id
+                      ? 'bg-muted border-border'
                       : 'bg-transparent border-transparent hover:bg-muted/50'
                   }`}
                 >
@@ -199,16 +211,30 @@ export function NotesManager() {
                 placeholder="Note Title"
               />
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleDelete} className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
+                >
                   <Trash2 className="w-4 h-4" />
                 </Button>
-                <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2 h-8 text-xs">
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="gap-2 h-8 text-xs"
+                >
+                  {saving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
                   Save
                 </Button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full relative overflow-hidden bg-transparent">
               <CodeMirror
                 value={selectedNote.content}
@@ -246,20 +272,29 @@ export function NotesManager() {
                 }}
               />
             </div>
-            
+
             {/* ── Status Bar ── */}
             <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
               <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Cursor Position">
+                <span
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+                  title="Cursor Position"
+                >
                   Ln {cursor.line}, Col {cursor.col}
                 </span>
                 <span className="opacity-40">|</span>
-                <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer" title="Word Count">
+                <span
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+                  title="Word Count"
+                >
                   {wordCount} words
                 </span>
               </div>
               <div className="flex items-center gap-4">
-                <span className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold" title="Language Mode">
+                <span
+                  className="hover:text-foreground transition-colors cursor-pointer uppercase tracking-wider font-semibold"
+                  title="Language Mode"
+                >
                   MARKDOWN
                 </span>
               </div>

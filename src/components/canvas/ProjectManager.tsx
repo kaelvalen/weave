@@ -5,7 +5,8 @@ import { FolderOpen, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function ProjectManager() {
-  const { projects, activeProjectId, createProject, loadProject, deleteProject, renameProject } = useCanvasStore();
+  const { projects, activeProjectId, createProject, loadProject, deleteProject, renameProject } =
+    useCanvasStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
@@ -45,11 +46,16 @@ export function ProjectManager() {
           <FolderOpen className="w-4 h-4 text-primary" />
           <span>Projects</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20" onClick={handleCreate}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 hover:bg-primary/20"
+          onClick={handleCreate}
+        >
           <Plus className="w-4 h-4" />
         </Button>
       </div>
-      
+
       <ScrollArea className="flex-1">
         <div className="p-2 flex flex-col gap-1">
           {projects.length === 0 ? (
@@ -62,15 +68,18 @@ export function ProjectManager() {
                 key={project.id}
                 onClick={() => loadProject(project.id)}
                 className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors group ${
-                  activeProjectId === project.id 
-                    ? 'bg-primary/10 border border-primary/20 text-primary font-medium' 
+                  activeProjectId === project.id
+                    ? 'bg-primary/10 border border-primary/20 text-primary font-medium'
                     : 'hover:bg-muted text-foreground'
                 }`}
               >
                 {editingId === project.id ? (
-                  <div className="flex items-center gap-1 w-full" onClick={e => e.stopPropagation()}>
-                    <input 
-                      type="text" 
+                  <div
+                    className="flex items-center gap-1 w-full"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       onKeyDown={(e) => {
@@ -80,10 +89,20 @@ export function ProjectManager() {
                       className="flex-1 bg-background border border-border rounded px-2 py-1 text-sm outline-none focus:border-primary"
                       autoFocus
                     />
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-green-500 hover:text-green-600 hover:bg-green-500/10" onClick={(e) => handleSaveEdit(project.id, e)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                      onClick={(e) => handleSaveEdit(project.id, e)}
+                    >
                       <Check className="w-3 h-3" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleCancelEdit}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={handleCancelEdit}
+                    >
                       <X className="w-3 h-3" />
                     </Button>
                   </div>
@@ -91,10 +110,20 @@ export function ProjectManager() {
                   <>
                     <div className="truncate flex-1 text-sm">{project.name}</div>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-background" onClick={(e) => handleStartEdit(project.id, project.name, e)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-background"
+                        onClick={(e) => handleStartEdit(project.id, project.name, e)}
+                      >
                         <Edit2 className="w-3 h-3 text-muted-foreground" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive" onClick={(e) => handleDelete(project.id, e)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => handleDelete(project.id, e)}
+                      >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>

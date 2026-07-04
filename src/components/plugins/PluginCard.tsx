@@ -1,16 +1,26 @@
 import { useState } from 'react';
 import type { Plugin } from '@/types/plugin';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Shield, ShieldCheck, AlertTriangle, Zap,
-  Monitor, Puzzle, Code2, Brain, FolderOpen, Calculator, StickyNote,
-  Terminal, Globe, Database, GitBranch, Send, HardDrive, Info,
+  Shield,
+  ShieldCheck,
+  AlertTriangle,
+  Zap,
+  Monitor,
+  Puzzle,
+  Code2,
+  Brain,
+  FolderOpen,
+  Calculator,
+  StickyNote,
+  Terminal,
+  Globe,
+  Database,
+  GitBranch,
+  Send,
+  HardDrive,
+  Info,
 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -34,7 +44,15 @@ const PLUGIN_ICONS: Record<string, React.ElementType> = {
 };
 
 /* ── Simple toggle — replaces Radix Switch which causes WebKitGTK layout freeze ── */
-function SimpleToggle({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+function SimpleToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -73,7 +91,10 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
   const [toggling, setToggling] = useState(false);
 
   // Rust serde serializes Error(String) as { "error": "msg" } due to rename_all="lowercase"
-  const hasError = typeof plugin.state === 'object' && plugin.state !== null && 'error' in (plugin.state as Record<string, unknown>);
+  const hasError =
+    typeof plugin.state === 'object' &&
+    plugin.state !== null &&
+    'error' in (plugin.state as Record<string, unknown>);
 
   const handleToggle = async () => {
     if (plugin.is_builtin || toggling) return;
@@ -91,11 +112,17 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
   return (
     <>
       {/* ── Card ── */}
-      <div className={`flex flex-col rounded-lg border bg-card ${isLoaded ? 'border-primary/50' : ''}`}>
+      <div
+        className={`flex flex-col rounded-lg border bg-card ${isLoaded ? 'border-primary/50' : ''}`}
+      >
         {/* Header */}
         <div className="flex items-start gap-3 p-4 pb-3">
-          <div className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${isLoaded ? 'bg-primary/10' : 'bg-muted'}`}>
-            <PluginIcon className={`w-5 h-5 ${isLoaded ? 'text-primary' : 'text-muted-foreground'}`} />
+          <div
+            className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${isLoaded ? 'bg-primary/10' : 'bg-muted'}`}
+          >
+            <PluginIcon
+              className={`w-5 h-5 ${isLoaded ? 'text-primary' : 'text-muted-foreground'}`}
+            />
           </div>
 
           <div className="flex-1 min-w-0">
@@ -110,24 +137,37 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
             <p className="text-xs text-muted-foreground font-mono truncate">{plugin.id}</p>
           </div>
 
-          <span className={`flex-shrink-0 inline-flex items-center gap-1 h-5 px-2 rounded text-[10px] font-medium border ${
-            hasError ? 'bg-destructive/10 text-destructive border-destructive/20' :
-            isLoaded ? 'bg-primary/10 text-primary border-primary/20' :
-            'bg-muted text-muted-foreground border-border'
-          }`}>
-            {hasError ? <AlertTriangle className="w-3 h-3" /> : isLoaded ? <Zap className="w-3 h-3" /> : null}
+          <span
+            className={`flex-shrink-0 inline-flex items-center gap-1 h-5 px-2 rounded text-[10px] font-medium border ${
+              hasError
+                ? 'bg-destructive/10 text-destructive border-destructive/20'
+                : isLoaded
+                  ? 'bg-primary/10 text-primary border-primary/20'
+                  : 'bg-muted text-muted-foreground border-border'
+            }`}
+          >
+            {hasError ? (
+              <AlertTriangle className="w-3 h-3" />
+            ) : isLoaded ? (
+              <Zap className="w-3 h-3" />
+            ) : null}
             {hasError ? 'Error' : isLoaded ? 'Active' : 'Off'}
           </span>
         </div>
 
         {/* Body */}
         <div className="flex-1 px-4 pb-4">
-          <p className="text-sm text-foreground/80 leading-relaxed mb-3" style={{ minHeight: '2.5rem' }}>
+          <p
+            className="text-sm text-foreground/80 leading-relaxed mb-3"
+            style={{ minHeight: '2.5rem' }}
+          >
             {plugin.description}
           </p>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-            <span className="font-mono px-1.5 py-0.5 rounded bg-muted border">v{plugin.version}</span>
+            <span className="font-mono px-1.5 py-0.5 rounded bg-muted border">
+              v{plugin.version}
+            </span>
             <span className="truncate">by {plugin.author}</span>
             <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted border">
               {plugin.capabilities.provide.length} tools
@@ -143,7 +183,11 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
                 </span>
               ) : (
                 <div className="flex items-center gap-2">
-                  <SimpleToggle checked={isLoaded} onChange={handleToggle} disabled={hasError || toggling} />
+                  <SimpleToggle
+                    checked={isLoaded}
+                    onChange={handleToggle}
+                    disabled={hasError || toggling}
+                  />
                   <span className="text-xs font-medium text-foreground">
                     {toggling ? 'Loading...' : isLoaded ? 'Enabled' : 'Disabled'}
                   </span>
@@ -166,20 +210,37 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
 
       {/* ── Details Dialog — only mounted when open ── */}
       {detailsOpen && (
-        <Dialog open={true} onOpenChange={(open) => { if (!open) setDetailsOpen(false); }}>
+        <Dialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setDetailsOpen(false);
+          }}
+        >
           <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col p-0">
             <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${isLoaded ? 'bg-primary/10' : 'bg-muted'}`}>
-                  <PluginIcon className={`w-5 h-5 ${isLoaded ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div
+                  className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${isLoaded ? 'bg-primary/10' : 'bg-muted'}`}
+                >
+                  <PluginIcon
+                    className={`w-5 h-5 ${isLoaded ? 'text-primary' : 'text-muted-foreground'}`}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <DialogTitle className="text-base font-semibold leading-tight">{plugin.name}</DialogTitle>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{plugin.id}</p>
+                  <DialogTitle className="text-base font-semibold leading-tight">
+                    {plugin.name}
+                  </DialogTitle>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                    {plugin.id}
+                  </p>
                 </div>
-                <span className={`flex-shrink-0 inline-flex items-center gap-1 h-5 px-2 rounded text-[10px] font-medium border ${
-                  isLoaded ? 'bg-primary/10 text-primary border-primary/20' : 'bg-muted text-muted-foreground border-border'
-                }`}>
+                <span
+                  className={`flex-shrink-0 inline-flex items-center gap-1 h-5 px-2 rounded text-[10px] font-medium border ${
+                    isLoaded
+                      ? 'bg-primary/10 text-primary border-primary/20'
+                      : 'bg-muted text-muted-foreground border-border'
+                  }`}
+                >
                   {isLoaded ? <Zap className="w-3 h-3" /> : null}
                   {isLoaded ? 'Active' : 'Inactive'}
                 </span>
@@ -197,7 +258,11 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
                 <div className="p-2.5 rounded-md bg-muted/50 border">
                   <span className="text-muted-foreground block mb-1">Sandbox</span>
                   <span className="inline-flex items-center gap-1 font-medium">
-                    {plugin.runtime.sandbox === 'strict' ? <Shield className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                    {plugin.runtime.sandbox === 'strict' ? (
+                      <Shield className="w-3.5 h-3.5" />
+                    ) : (
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                    )}
                     {plugin.runtime.sandbox}
                   </span>
                 </div>

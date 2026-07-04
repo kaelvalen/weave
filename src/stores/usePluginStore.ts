@@ -19,7 +19,11 @@ interface PluginState {
   discoverPlugins: () => Promise<void>;
   loadPlugin: (id: string) => Promise<void>;
   unloadPlugin: (id: string) => Promise<void>;
-  executeCapability: (pluginId: string, cap: string, params: Record<string, unknown>) => Promise<unknown>;
+  executeCapability: (
+    pluginId: string,
+    cap: string,
+    params: Record<string, unknown>
+  ) => Promise<unknown>;
   getPluginIdForCapability: (cap: string) => string | undefined;
   getPluginsByCategory: (cat: PluginCategory) => Plugin[];
   setSearchQuery: (q: string) => void;
@@ -41,14 +45,17 @@ export const usePluginStore = create<PluginState>()(
       selectedCategory: null,
 
       discoverPlugins: async () => {
-        set((state) => { state.isLoading = true; state.error = null; });
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
         try {
           const plugins: Plugin[] = await invoke('plugin_discover');
 
           // Find plugins that should be auto-loaded but aren't yet
           const { autoLoadPlugins } = get();
-          const toLoad = plugins.filter(p =>
-            autoLoadPlugins.includes(p.id) && p.state !== 'active' && p.state !== 'loaded'
+          const toLoad = plugins.filter(
+            (p) => autoLoadPlugins.includes(p.id) && p.state !== 'active' && p.state !== 'loaded'
           );
 
           set((state) => {
@@ -66,41 +73,60 @@ export const usePluginStore = create<PluginState>()(
         } catch (err) {
           const msg = extractError(err);
           toast.error(`Plugin discovery failed: ${msg}`);
-          set((state) => { state.isLoading = false; state.error = `Plugin discovery failed: ${msg}`; });
+          set((state) => {
+            state.isLoading = false;
+            state.error = `Plugin discovery failed: ${msg}`;
+          });
         }
       },
 
       loadPlugin: async (id: string) => {
-        set((state) => { state.error = null; });
+        set((state) => {
+          state.error = null;
+        });
         try {
           const plugin: Plugin = await invoke('plugin_load', { pluginId: id });
           set((state) => {
             const idx = state.plugins.findIndex((p) => p.id === id);
-            if (idx >= 0) { state.plugins[idx] = plugin; }
-            if (!state.loadedPlugins.includes(id)) { state.loadedPlugins.push(id); }
-            if (!state.autoLoadPlugins.includes(id)) { state.autoLoadPlugins.push(id); }
+            if (idx >= 0) {
+              state.plugins[idx] = plugin;
+            }
+            if (!state.loadedPlugins.includes(id)) {
+              state.loadedPlugins.push(id);
+            }
+            if (!state.autoLoadPlugins.includes(id)) {
+              state.autoLoadPlugins.push(id);
+            }
           });
         } catch (err) {
           const msg = extractError(err);
           toast.error(`Failed to load ${id}: ${msg}`);
-          set((state) => { state.error = `Failed to load ${id}: ${msg}`; });
+          set((state) => {
+            state.error = `Failed to load ${id}: ${msg}`;
+          });
         }
       },
 
       unloadPlugin: async (id: string) => {
-        set((state) => { state.error = null; });
+        set((state) => {
+          state.error = null;
+        });
         try {
           await invoke('plugin_unload', { pluginId: id });
           set((state) => {
             const idx = state.plugins.findIndex((p) => p.id === id);
-            if (idx >= 0) { state.plugins[idx] = { ...state.plugins[idx], state: 'unloaded' }; }
+            if (idx >= 0) {
+              state.plugins[idx] = { ...state.plugins[idx], state: 'unloaded' };
+            }
             state.loadedPlugins = state.loadedPlugins.filter((pid) => pid !== id);
             state.autoLoadPlugins = state.autoLoadPlugins.filter((pid) => pid !== id);
           });
         } catch (err) {
           const msg = extractError(err);
           toast.error(`Failed to unload ${id}: ${msg}`);
-          set((state) => { state.error = `Failed to unload ${id}: ${msg}`; });
+          set((state) => {
+            state.error = `Failed to unload ${id}: ${msg}`;
+          });
         }
       },
 
@@ -123,11 +149,15 @@ export const usePluginStore = create<PluginState>()(
       },
 
       setSearchQuery: (q: string) => {
-        set((state) => { state.searchQuery = q; });
+        set((state) => {
+          state.searchQuery = q;
+        });
       },
 
       setCategory: (c: string | null) => {
-        set((state) => { state.selectedCategory = c; });
+        set((state) => {
+          state.selectedCategory = c;
+        });
       },
 
       refreshPlugins: async () => {
@@ -135,7 +165,9 @@ export const usePluginStore = create<PluginState>()(
       },
 
       clearError: () => {
-        set((state) => { state.error = null; });
+        set((state) => {
+          state.error = null;
+        });
       },
     })),
     {

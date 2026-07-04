@@ -13,7 +13,6 @@ function App() {
   const { setReady, setVersion } = useAppStore();
 
   useEffect(() => {
-
     invoke<string>('system_get_version')
       .then((v) => setVersion(v))
       .catch(console.error);

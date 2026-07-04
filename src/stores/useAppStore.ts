@@ -25,19 +25,27 @@ export const useAppStore = create<AppState>()(
     isChatExpanded: false,
 
     setActiveView: (view: View) => {
-      set((state) => { state.activeView = view; });
+      set((state) => {
+        state.activeView = view;
+      });
     },
 
     setReady: (ready: boolean) => {
-      set((state) => { state.isReady = ready; });
+      set((state) => {
+        state.isReady = ready;
+      });
     },
 
     setVersion: (v: string) => {
-      set((state) => { state.appVersion = v; });
+      set((state) => {
+        state.appVersion = v;
+      });
     },
 
     refreshConfig: () => {
-      set((state) => { state.lastConfigUpdate = Date.now(); });
+      set((state) => {
+        state.lastConfigUpdate = Date.now();
+      });
     },
 
     toggleChat: (expanded?: boolean) => {

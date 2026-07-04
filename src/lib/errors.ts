@@ -3,10 +3,7 @@
  * Handles strings, Error instances, Tauri error objects, and plain objects
  * with a string `error` or `message` property.
  */
-export function extractError(
-  err: unknown,
-  fallback = 'An unexpected error occurred'
-): string {
+export function extractError(err: unknown, fallback = 'An unexpected error occurred'): string {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
 

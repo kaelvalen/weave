@@ -40,15 +40,15 @@ export function TextNode({ data, selected }: TextNodeProps) {
 
   return (
     <>
-      <NodeResizer 
-        color="#8b5cf6" 
-        isVisible={selected} 
-        minWidth={50} 
+      <NodeResizer
+        color="#8b5cf6"
+        isVisible={selected}
+        minWidth={50}
         minHeight={30}
         handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
         lineStyle={{ borderWidth: 2 }}
       />
-      <div 
+      <div
         className={`relative w-full h-full group p-2 flex items-center justify-center cursor-text transition-shadow
           ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background/50' : 'hover:ring-1 hover:ring-border'}
         `}
@@ -62,36 +62,46 @@ export function TextNode({ data, selected }: TextNodeProps) {
         onDoubleClick={() => setIsEditing(true)}
       >
         {isEditing ? (
-        <textarea
-          ref={inputRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={handleBlur}
-          className="bg-transparent outline-none resize-none overflow-hidden m-0 p-0"
-          style={{
-            fontSize: data.fontSize || 16,
-            color: data.color || 'inherit',
-            fontWeight: data.fontWeight || 'normal',
-            width: '100%',
-            height: '100%'
-          }}
-        />
-      ) : (
-        <div 
-          style={{
-            fontSize: data.fontSize || 16,
-            color: data.color || 'inherit',
-            fontWeight: data.fontWeight || 'normal',
-            whiteSpace: 'pre-wrap'
-          }}
-        >
-          {text}
-        </div>
-      )}
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={handleBlur}
+            className="bg-transparent outline-none resize-none overflow-hidden m-0 p-0"
+            style={{
+              fontSize: data.fontSize || 16,
+              color: data.color || 'inherit',
+              fontWeight: data.fontWeight || 'normal',
+              width: '100%',
+              height: '100%',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: data.fontSize || 16,
+              color: data.color || 'inherit',
+              fontWeight: data.fontWeight || 'normal',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {text}
+          </div>
+        )}
 
-      <div className={`opacity-0 ${selected ? 'opacity-100' : 'group-hover:opacity-100'} transition-opacity duration-200`}>
-        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10" />
-        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10" />
+        <div
+          className={`opacity-0 ${selected ? 'opacity-100' : 'group-hover:opacity-100'} transition-opacity duration-200`}
+        >
+          <Handle
+            type="target"
+            position={Position.Left}
+            className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            className="w-3 h-3 bg-background border-2 border-foreground transition-transform hover:scale-125 z-10"
+          />
         </div>
       </div>
     </>

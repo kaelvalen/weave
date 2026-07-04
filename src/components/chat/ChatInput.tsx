@@ -12,7 +12,26 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
-import { ArrowUp, FileText, Calculator, StickyNote, RefreshCw, Search, ChevronDown, Star, Paperclip, X, Square, Sparkles, Zap, LayoutGrid, Workflow, Cpu, Code2, FolderOpen } from 'lucide-react';
+import {
+  ArrowUp,
+  FileText,
+  Calculator,
+  StickyNote,
+  RefreshCw,
+  Search,
+  ChevronDown,
+  Star,
+  Paperclip,
+  X,
+  Square,
+  Sparkles,
+  Zap,
+  LayoutGrid,
+  Workflow,
+  Cpu,
+  Code2,
+  FolderOpen,
+} from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
 import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
@@ -24,49 +43,127 @@ import opencodeDarkIcon from '@/assets/opencodedarkmode.png';
 type ModelOption = { value: string; label: string; provider: Provider };
 
 const FALLBACK_MODELS: ModelOption[] = [
-  { value: 'gpt-4o',                  label: 'GPT-4o',              provider: 'openai' },
-  { value: 'gpt-4o-mini',             label: 'GPT-4o Mini',         provider: 'openai' },
-  { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet',provider: 'anthropic' },
-  { value: 'kimi-k2-0711-preview',    label: 'Kimi K2',             provider: 'kimi' },
-  { value: 'opencode-gpt-4o',         label: 'OpenCode GPT-4o',     provider: 'opencode' },
-  { value: 'llama3.1',                label: 'Llama 3.1 (Local)',   provider: 'local' },
+  { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
+  { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet', provider: 'anthropic' },
+  { value: 'kimi-k2-0711-preview', label: 'Kimi K2', provider: 'kimi' },
+  { value: 'opencode-gpt-4o', label: 'OpenCode GPT-4o', provider: 'opencode' },
+  { value: 'llama3.1', label: 'Llama 3.1 (Local)', provider: 'local' },
 ];
 
-const PROVIDER_META: Record<string, { color: string, icon?: string, iconDark?: string }> = {
-  openai:    { color: '#10a37f', icon: openaiIcon, iconDark: openaiIcon },
+const PROVIDER_META: Record<string, { color: string; icon?: string; iconDark?: string }> = {
+  openai: { color: '#10a37f', icon: openaiIcon, iconDark: openaiIcon },
   anthropic: { color: '#d97757', icon: anthropicIcon, iconDark: anthropicIcon },
-  kimi:      { color: '#555555', icon: kimiIcon, iconDark: kimiIcon },
-  opencode:  { color: '#e67e22', icon: opencodeLightIcon, iconDark: opencodeDarkIcon },
-  local:     { color: '#9b59b6' },
+  kimi: { color: '#555555', icon: kimiIcon, iconDark: kimiIcon },
+  opencode: { color: '#e67e22', icon: opencodeLightIcon, iconDark: opencodeDarkIcon },
+  local: { color: '#9b59b6' },
 };
 
 const PLUGIN_HINTS = [
-  { keyword: 'file',    icon: FileText,   label: 'File' },
-  { keyword: 'read',    icon: FileText,   label: 'File' },
-  { keyword: 'list',    icon: FileText,   label: 'File' },
-  { keyword: 'calc',    icon: Calculator, label: 'Calc' },
-  { keyword: 'math',    icon: Calculator, label: 'Calc' },
-  { keyword: 'note',    icon: StickyNote, label: 'Note' },
+  { keyword: 'file', icon: FileText, label: 'File' },
+  { keyword: 'read', icon: FileText, label: 'File' },
+  { keyword: 'list', icon: FileText, label: 'File' },
+  { keyword: 'calc', icon: Calculator, label: 'Calc' },
+  { keyword: 'math', icon: Calculator, label: 'Calc' },
+  { keyword: 'note', icon: StickyNote, label: 'Note' },
   { keyword: 'convert', icon: Calculator, label: 'Calc' },
 ];
 
 const QUICK_ACTIONS = [
-  { label: '@File', prefix: 'Read file ', icon: FileText, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
-  { label: '/calc', prefix: 'Calculate ', icon: Calculator, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
-  { label: '+Note', prefix: 'Create a note about ', icon: StickyNote, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
-  { label: 'Canvas', prefix: 'Create a canvas layout with ', icon: LayoutGrid, color: 'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground' },
+  {
+    label: '@File',
+    prefix: 'Read file ',
+    icon: FileText,
+    color:
+      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
+  },
+  {
+    label: '/calc',
+    prefix: 'Calculate ',
+    icon: Calculator,
+    color:
+      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
+  },
+  {
+    label: '+Note',
+    prefix: 'Create a note about ',
+    icon: StickyNote,
+    color:
+      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
+  },
+  {
+    label: 'Canvas',
+    prefix: 'Create a canvas layout with ',
+    icon: LayoutGrid,
+    color:
+      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
+  },
 ];
 
 const SLASH_COMMANDS = [
-  { command: '/calc', title: 'Calculator', desc: 'Evaluate high-precision math & unit conversions', icon: Calculator, template: '/calc ' },
-  { command: '/file', title: 'File Manager', desc: 'Read, write, list, or search workspace files', icon: FileText, template: '/file ' },
-  { command: '/note', title: 'Notes', desc: 'Create or update ideas in your scratch notes', icon: StickyNote, template: '/note ' },
-  { command: '/canvas', title: 'AI Canvas', desc: 'Autonomously build visual diagram nodes', icon: LayoutGrid, template: '/canvas ' },
-  { command: '/workflow', title: 'Workflows', desc: 'Execute automated AI pipelines', icon: Workflow, template: '/workflow ' },
-  { command: '/code', title: 'Code Coder', desc: 'Refactor, debug, or write code files', icon: Code2, template: '/code ' },
-  { command: '/web', title: 'Web Fetch', desc: 'Fetch and summarize content from a URL', icon: Sparkles, template: '/web ' },
-  { command: '/search', title: 'File Search', desc: 'Search content across workspace files', icon: FolderOpen, template: '/search ' },
-  { command: '/sys', title: 'System', desc: 'Learn about Weave AI and its built-in plugins', icon: Cpu, template: '/sys ' },
+  {
+    command: '/calc',
+    title: 'Calculator',
+    desc: 'Evaluate high-precision math & unit conversions',
+    icon: Calculator,
+    template: '/calc ',
+  },
+  {
+    command: '/file',
+    title: 'File Manager',
+    desc: 'Read, write, list, or search workspace files',
+    icon: FileText,
+    template: '/file ',
+  },
+  {
+    command: '/note',
+    title: 'Notes',
+    desc: 'Create or update ideas in your scratch notes',
+    icon: StickyNote,
+    template: '/note ',
+  },
+  {
+    command: '/canvas',
+    title: 'AI Canvas',
+    desc: 'Autonomously build visual diagram nodes',
+    icon: LayoutGrid,
+    template: '/canvas ',
+  },
+  {
+    command: '/workflow',
+    title: 'Workflows',
+    desc: 'Execute automated AI pipelines',
+    icon: Workflow,
+    template: '/workflow ',
+  },
+  {
+    command: '/code',
+    title: 'Code Coder',
+    desc: 'Refactor, debug, or write code files',
+    icon: Code2,
+    template: '/code ',
+  },
+  {
+    command: '/web',
+    title: 'Web Fetch',
+    desc: 'Fetch and summarize content from a URL',
+    icon: Sparkles,
+    template: '/web ',
+  },
+  {
+    command: '/search',
+    title: 'File Search',
+    desc: 'Search content across workspace files',
+    icon: FolderOpen,
+    template: '/search ',
+  },
+  {
+    command: '/sys',
+    title: 'System',
+    desc: 'Learn about Weave AI and its built-in plugins',
+    icon: Cpu,
+    template: '/sys ',
+  },
 ];
 
 export function ChatInput() {
@@ -79,7 +176,8 @@ export function ChatInput() {
   const [searchQuery, setSearchQuery] = useState('');
   const { sendMessage, isStreaming, selectedModel, setModel } = useChatStore();
   const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
-  const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } = useModelPreferenceStore();
+  const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } =
+    useModelPreferenceStore();
   const { plugins: externalPlugins, loadedPlugins } = usePluginStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +194,10 @@ export function ChatInput() {
       .then(async () => {
         const providers = Object.keys(PROVIDER_META) as Provider[];
 
-        if (providers.length === 0) { if (!cancelled) setModels([]); return; }
+        if (providers.length === 0) {
+          if (!cancelled) setModels([]);
+          return;
+        }
 
         const results = await Promise.allSettled(
           providers.map((key) => invoke<string[]>('list_provider_models', { provider: key }))
@@ -112,10 +213,16 @@ export function ChatInput() {
         });
         if (!cancelled) setModels(merged);
       })
-      .catch(() => { if (!cancelled) setModels(FALLBACK_MODELS); })
-      .finally(() => { if (!cancelled) setModelsLoading(false); });
+      .catch(() => {
+        if (!cancelled) setModels(FALLBACK_MODELS);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [lastConfigUpdate, forceRefresh]);
 
   useEffect(() => {
@@ -160,18 +267,19 @@ export function ChatInput() {
       };
     });
 
-    const existingCmds = new Set(SLASH_COMMANDS.map(c => c.command.toLowerCase()));
-    const uniqueExternal = externalCmds.filter(c => !existingCmds.has(c.command.toLowerCase()));
+    const existingCmds = new Set(SLASH_COMMANDS.map((c) => c.command.toLowerCase()));
+    const uniqueExternal = externalCmds.filter((c) => !existingCmds.has(c.command.toLowerCase()));
 
     return [...SLASH_COMMANDS, ...uniqueExternal];
   }, [externalPlugins]);
 
   const filteredSlashCommands = useMemo(() => {
     return isSlashCommandActive
-      ? allSlashCommands.filter(cmd =>
-          cmd.command.toLowerCase().startsWith(slashSearch) ||
-          cmd.title.toLowerCase().includes(slashSearch.slice(1)) ||
-          cmd.desc.toLowerCase().includes(slashSearch.slice(1))
+      ? allSlashCommands.filter(
+          (cmd) =>
+            cmd.command.toLowerCase().startsWith(slashSearch) ||
+            cmd.title.toLowerCase().includes(slashSearch.slice(1)) ||
+            cmd.desc.toLowerCase().includes(slashSearch.slice(1))
         )
       : [];
   }, [isSlashCommandActive, slashSearch, allSlashCommands]);
@@ -183,34 +291,48 @@ export function ChatInput() {
     }
   }, []);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (isSlashCommandActive && filteredSlashCommands.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => (prev + 1) % filteredSlashCommands.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const selected = filteredSlashCommands[slashSelectedIndex] || filteredSlashCommands[0];
-        if (selected) {
-          selectSlashCommand(selected);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isSlashCommandActive && filteredSlashCommands.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSlashSelectedIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+          return;
         }
-        return;
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSlashSelectedIndex(
+            (prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length
+          );
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const selected = filteredSlashCommands[slashSelectedIndex] || filteredSlashCommands[0];
+          if (selected) {
+            selectSlashCommand(selected);
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setInput('');
+          return;
+        }
       }
-      if (e.key === 'Escape') {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        setInput('');
-        return;
+        handleSend();
       }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  }, [handleSend, isSlashCommandActive, filteredSlashCommands, slashSelectedIndex, selectSlashCommand]);
+    },
+    [
+      handleSend,
+      isSlashCommandActive,
+      filteredSlashCommands,
+      slashSelectedIndex,
+      selectSlashCommand,
+    ]
+  );
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -252,7 +374,7 @@ export function ChatInput() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          setImages(prev => [...prev, dataUrl]);
+          setImages((prev) => [...prev, dataUrl]);
         };
         img.src = result;
       }
@@ -283,7 +405,7 @@ export function ChatInput() {
   }, []);
 
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const hints = useMemo(() => {
@@ -295,17 +417,20 @@ export function ChatInput() {
 
     // 1. Check external / discovered / loaded plugins from usePluginStore
     for (const p of externalPlugins) {
-      const cleanName = p.name.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+      const cleanName = p.name
+        .replace(/\s*\(.*?\)\s*/g, '')
+        .trim()
+        .toLowerCase();
       const shortId = p.id.split('.').pop()?.toLowerCase() || '';
       const shortIdSpace = shortId.replace(/_/g, ' ');
 
       if (
         (inputLow.includes(p.name.toLowerCase()) ||
-         inputLow.includes(p.id.toLowerCase()) ||
-         (cleanName && cleanName.length > 2 && inputLow.includes(cleanName)) ||
-         (shortId && shortId.length > 2 && inputLow.includes(shortId)) ||
-         (shortIdSpace && shortIdSpace.length > 2 && inputLow.includes(shortIdSpace)) ||
-         loadedPlugins.includes(p.id)) &&
+          inputLow.includes(p.id.toLowerCase()) ||
+          (cleanName && cleanName.length > 2 && inputLow.includes(cleanName)) ||
+          (shortId && shortId.length > 2 && inputLow.includes(shortId)) ||
+          (shortIdSpace && shortIdSpace.length > 2 && inputLow.includes(shortIdSpace)) ||
+          loadedPlugins.includes(p.id)) &&
         !seen.has(p.name)
       ) {
         seen.add(p.name);
@@ -316,7 +441,10 @@ export function ChatInput() {
     // 2. Check SLASH_COMMANDS
     for (const sc of SLASH_COMMANDS) {
       const cmdWord = sc.command.replace('/', '').toLowerCase();
-      if ((inputLow.includes(sc.command.toLowerCase()) || inputLow.includes(cmdWord)) && !seen.has(sc.title)) {
+      if (
+        (inputLow.includes(sc.command.toLowerCase()) || inputLow.includes(cmdWord)) &&
+        !seen.has(sc.title)
+      ) {
         seen.add(sc.title);
         matched.push({ label: sc.title, icon: sc.icon });
       }
@@ -390,7 +518,9 @@ export function ChatInput() {
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted/80 text-muted-foreground'}`}>
+                  <div
+                    className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted/80 text-muted-foreground'}`}
+                  >
                     <Icon className="w-4 h-4 stroke-[2]" />
                   </div>
                   <div className="min-w-0">
@@ -401,7 +531,9 @@ export function ChatInput() {
                     <p className="text-[11px] text-muted-foreground line-clamp-1">{cmd.desc}</p>
                   </div>
                 </div>
-                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${isSelected ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border/60 bg-muted/40 text-muted-foreground'}`}>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${isSelected ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border/60 bg-muted/40 text-muted-foreground'}`}
+                >
                   Plugin
                 </span>
               </button>
@@ -451,21 +583,37 @@ export function ChatInput() {
             >
               {pm.icon ? (
                 <>
-                  <img src={pm.icon} alt={currentProvider} className="w-4 h-4 object-contain flex-shrink-0 dark:hidden" />
-                  {pm.iconDark && <img src={pm.iconDark} alt={currentProvider} className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block" />}
+                  <img
+                    src={pm.icon}
+                    alt={currentProvider}
+                    className="w-4 h-4 object-contain flex-shrink-0 dark:hidden"
+                  />
+                  {pm.iconDark && (
+                    <img
+                      src={pm.iconDark}
+                      alt={currentProvider}
+                      className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block"
+                    />
+                  )}
                 </>
               ) : (
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: pm.color }} />
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
+                  style={{ background: pm.color }}
+                />
               )}
               <span className="truncate max-w-[80px] sm:max-w-[130px] font-medium text-left">
                 {modelsLoading
                   ? 'Loading...'
-                  : (models.find(m => m.value === selectedModel)?.label ||
-                     (models.length === 0 ? 'No models' : 'Model'))}
+                  : models.find((m) => m.value === selectedModel)?.label ||
+                    (models.length === 0 ? 'No models' : 'Model')}
               </span>
               <ChevronDown className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[220px] rounded-2xl shadow-xl backdrop-blur-xl bg-popover/95 border-border/80 p-1" sideOffset={8}>
+            <DropdownMenuContent
+              className="w-[220px] rounded-2xl shadow-xl backdrop-blur-xl bg-popover/95 border-border/80 p-1"
+              sideOffset={8}
+            >
               <div className="flex items-center px-2.5 py-2 border-b mb-1">
                 <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                 <input
@@ -478,12 +626,17 @@ export function ChatInput() {
                 />
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); setForceRefresh(f => f + 1); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setForceRefresh((f) => f + 1);
+                  }}
                   className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted ml-1"
                   disabled={modelsLoading}
                   title="Refresh models"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${modelsLoading ? 'animate-spin text-primary' : ''}`} />
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${modelsLoading ? 'animate-spin text-primary' : ''}`}
+                  />
                 </button>
               </div>
               <div className="max-h-[220px] overflow-y-auto hide-scrollbar px-1">
@@ -491,67 +644,102 @@ export function ChatInput() {
                   <div className="px-2 py-4 text-xs text-muted-foreground text-center">
                     No models configured
                   </div>
-                ) : (() => {
-                  const filtered = models.filter(m => m.label.toLowerCase().includes(searchQuery.toLowerCase()) || m.value.toLowerCase().includes(searchQuery.toLowerCase()));
-
-                  const favs = filtered.filter(m => favoriteModels.includes(m.value));
-                  const recents = filtered.filter(m => recentModels.includes(m.value) && !favoriteModels.includes(m.value));
-                  const rest = filtered.filter(m => !favoriteModels.includes(m.value) && !recentModels.includes(m.value));
-
-                  const renderModelItem = (m: ModelOption) => {
-                    const meta = PROVIDER_META[m.provider] ?? PROVIDER_META.openai;
-                    const isFav = favoriteModels.includes(m.value);
-                    const isSelected = m.value === selectedModel;
-                    return (
-                      <DropdownMenuItem
-                        key={m.value}
-                        onClick={() => { setModel(m.value, m.provider); setDropdownOpen(false); }}
-                        className={`text-xs py-2 px-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors mb-0.5 ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/80'}`}
-                      >
-                        <div className="flex items-center gap-2.5 truncate min-w-0 flex-1 pr-2">
-                          {meta.icon ? (
-                            <>
-                              <img src={meta.icon} alt={m.provider} className="w-4 h-4 object-contain flex-shrink-0 dark:hidden" />
-                              {meta.iconDark && <img src={meta.iconDark} alt={m.provider} className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block" />}
-                            </>
-                          ) : (
-                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: meta.color }} />
-                          )}
-                          <span className="truncate">{m.label}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(m.value); }}
-                          className={`flex-shrink-0 p-1 rounded-md hover:bg-background transition-opacity ${isFav ? 'text-yellow-500 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
-                          title={isFav ? "Remove from favorites" : "Add to favorites"}
-                        >
-                          <Star className="w-3.5 h-3.5" fill={isFav ? "currentColor" : "none"} />
-                        </button>
-                      </DropdownMenuItem>
+                ) : (
+                  (() => {
+                    const filtered = models.filter(
+                      (m) =>
+                        m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        m.value.toLowerCase().includes(searchQuery.toLowerCase())
                     );
-                  };
 
-                  return (
-                    <>
-                      {favs.length > 0 && (
-                        <div className="mb-2">
-                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Favorites</div>
-                          {favs.map(renderModelItem)}
+                    const favs = filtered.filter((m) => favoriteModels.includes(m.value));
+                    const recents = filtered.filter(
+                      (m) => recentModels.includes(m.value) && !favoriteModels.includes(m.value)
+                    );
+                    const rest = filtered.filter(
+                      (m) => !favoriteModels.includes(m.value) && !recentModels.includes(m.value)
+                    );
+
+                    const renderModelItem = (m: ModelOption) => {
+                      const meta = PROVIDER_META[m.provider] ?? PROVIDER_META.openai;
+                      const isFav = favoriteModels.includes(m.value);
+                      const isSelected = m.value === selectedModel;
+                      return (
+                        <DropdownMenuItem
+                          key={m.value}
+                          onClick={() => {
+                            setModel(m.value, m.provider);
+                            setDropdownOpen(false);
+                          }}
+                          className={`text-xs py-2 px-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors mb-0.5 ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/80'}`}
+                        >
+                          <div className="flex items-center gap-2.5 truncate min-w-0 flex-1 pr-2">
+                            {meta.icon ? (
+                              <>
+                                <img
+                                  src={meta.icon}
+                                  alt={m.provider}
+                                  className="w-4 h-4 object-contain flex-shrink-0 dark:hidden"
+                                />
+                                {meta.iconDark && (
+                                  <img
+                                    src={meta.iconDark}
+                                    alt={m.provider}
+                                    className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block"
+                                  />
+                                )}
+                              </>
+                            ) : (
+                              <span
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
+                                style={{ background: meta.color }}
+                              />
+                            )}
+                            <span className="truncate">{m.label}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavoriteModel(m.value);
+                            }}
+                            className={`flex-shrink-0 p-1 rounded-md hover:bg-background transition-opacity ${isFav ? 'text-yellow-500 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <Star className="w-3.5 h-3.5" fill={isFav ? 'currentColor' : 'none'} />
+                          </button>
+                        </DropdownMenuItem>
+                      );
+                    };
+
+                    return (
+                      <>
+                        {favs.length > 0 && (
+                          <div className="mb-2">
+                            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Favorites
+                            </div>
+                            {favs.map(renderModelItem)}
+                          </div>
+                        )}
+                        {recents.length > 0 && (
+                          <div className="mb-2">
+                            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Recent
+                            </div>
+                            {recents.map(renderModelItem)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            All Models
+                          </div>
+                          {rest.map(renderModelItem)}
                         </div>
-                      )}
-                      {recents.length > 0 && (
-                        <div className="mb-2">
-                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Recent</div>
-                          {recents.map(renderModelItem)}
-                        </div>
-                      )}
-                      <div>
-                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">All Models</div>
-                        {rest.map(renderModelItem)}
-                      </div>
-                    </>
-                  );
-                })()}
+                      </>
+                    );
+                  })()
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -572,27 +760,30 @@ export function ChatInput() {
               </span>
             )}
           </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            accept="image/*" 
-            multiple 
-            className="hidden" 
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            multiple
+            className="hidden"
             onChange={(e) => {
               if (e.target.files) {
                 Array.from(e.target.files).forEach(processFile);
               }
               e.target.value = ''; // reset
-            }} 
+            }}
           />
 
           <div className="flex-1 flex flex-col min-w-0">
             {images.length > 0 && (
               <div className="flex items-center gap-2.5 px-1 pb-2 overflow-x-auto hide-scrollbar">
                 {images.map((img, idx) => (
-                  <div key={idx} className="relative group w-14 h-14 flex-shrink-0 rounded-xl overflow-hidden border border-border/80 shadow-md bg-background transition-transform hover:scale-105">
+                  <div
+                    key={idx}
+                    className="relative group w-14 h-14 flex-shrink-0 rounded-xl overflow-hidden border border-border/80 shadow-md bg-background transition-transform hover:scale-105"
+                  >
                     <img src={img} alt="attachment" className="w-full h-full object-cover" />
-                    <button 
+                    <button
                       onClick={() => removeImage(idx)}
                       className="absolute top-1 right-1 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
                       title="Remove image"
@@ -648,11 +839,13 @@ export function ChatInput() {
                 disabled={!canSend}
                 onClick={handleSend}
                 aria-label="Send"
-                title={canSend ? "Send message (Enter)" : "Type a message to send"}
+                title={canSend ? 'Send message (Enter)' : 'Type a message to send'}
                 className={[
                   'w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md',
                   'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
-                  canSend ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:scale-105 active:scale-95' : 'bg-muted text-muted-foreground'
+                  canSend
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:scale-105 active:scale-95'
+                    : 'bg-muted text-muted-foreground',
                 ].join(' ')}
               >
                 <ArrowUp className="w-4 h-4 stroke-[2.5]" />

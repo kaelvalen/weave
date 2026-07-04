@@ -36,9 +36,7 @@
         "media-src": "'self' data: asset: http://tauri.localhost",
         "style-src": "'self' 'unsafe-inline'"
       },
-      "capabilities": [
-        "default"
-      ]
+      "capabilities": ["default"]
     }
   },
   "bundle": {

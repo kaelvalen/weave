@@ -46,7 +46,7 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) =>
   const [isCopied, setIsCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
-  
+
   const handleCopy = () => {
     navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
     setIsCopied(true);
@@ -58,8 +58,17 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) =>
       <div className="relative group rounded-md overflow-hidden my-4 border border-border">
         <div className="flex items-center justify-between px-4 py-1.5 bg-muted/50 border-b border-border">
           <span className="text-xs font-mono text-muted-foreground">{lang}</span>
-          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground transition-opacity opacity-0 group-hover:opacity-100" onClick={handleCopy}>
-            {isCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground transition-opacity opacity-0 group-hover:opacity-100"
+            onClick={handleCopy}
+          >
+            {isCopied ? (
+              <Check className="w-3.5 h-3.5 text-green-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
           </Button>
         </div>
         <SyntaxHighlighter
@@ -67,7 +76,13 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) =>
           style={vscDarkPlus}
           language={lang}
           PreTag="div"
-          customStyle={{ margin: 0, padding: '1rem', background: 'transparent', fontSize: '13px', overflowX: 'auto' }}
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            background: 'transparent',
+            fontSize: '13px',
+            overflowX: 'auto',
+          }}
           wrapLines={true}
         >
           {String(children).replace(/\n$/, '')}
@@ -77,7 +92,10 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) =>
   }
 
   return (
-    <code {...props} className={`${className} bg-muted text-foreground px-1.5 py-0.5 rounded-md text-sm font-mono border border-border/50 break-all whitespace-pre-wrap`}>
+    <code
+      {...props}
+      className={`${className} bg-muted text-foreground px-1.5 py-0.5 rounded-md text-sm font-mono border border-border/50 break-all whitespace-pre-wrap`}
+    >
       {children}
     </code>
   );
@@ -93,7 +111,11 @@ function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
           : 'bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-primary border-primary/20 shadow-indigo-500/5'
       }`}
     >
-      {isUser ? <User className="w-4 h-4 stroke-[2.5]" /> : <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400 stroke-[2.5]" />}
+      {isUser ? (
+        <User className="w-4 h-4 stroke-[2.5]" />
+      ) : (
+        <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400 stroke-[2.5]" />
+      )}
     </div>
   );
 }
@@ -106,16 +128,20 @@ function InlineBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _isLast, isConsecutive }: ChatMessageProps) {
+export const ChatMessage = React.memo(function ChatMessage({
+  message,
+  isLast: _isLast,
+  isConsecutive,
+}: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
-  
-  const isStreaming = useChatStore(s => s.isStreaming);
-  const editAndResend = useChatStore(s => s.editAndResend);
-  const regenerateResponse = useChatStore(s => s.regenerateResponse);
+
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const editAndResend = useChatStore((s) => s.editAndResend);
+  const regenerateResponse = useChatStore((s) => s.regenerateResponse);
   const isAssistant = message.role === 'assistant';
-  const showCursor  = _isLast && isStreaming && isAssistant;
+  const showCursor = _isLast && isStreaming && isAssistant;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -132,26 +158,35 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
   };
 
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
-  const hasIntent      = message.metadata?.intent;
+  const hasIntent = message.metadata?.intent;
 
   // Detect raw OpenRouter tool return messages injected by backend
-  const isFakeToolUser = message.role === 'user' && message.content.startsWith('Tool ') && message.content.includes(' returned:');
+  const isFakeToolUser =
+    message.role === 'user' &&
+    message.content.startsWith('Tool ') &&
+    message.content.includes(' returned:');
   let fakeToolCall: PluginCall | null = null;
-  
+
   if (isFakeToolUser) {
-    const match = message.content.match(/^Tool ([\w.-]+) returned:\s*([\s\S]*?)\s*(?:\n*Please continue.*)?$/);
+    const match = message.content.match(
+      /^Tool ([\w.-]+) returned:\s*([\s\S]*?)\s*(?:\n*Please continue.*)?$/
+    );
     if (match) {
       const pluginId = match[1];
       const resultStr = match[2];
       let result: unknown = resultStr;
-      try { result = JSON.parse(resultStr); } catch { /* keep raw string on parse failure */ }
-      
+      try {
+        result = JSON.parse(resultStr);
+      } catch {
+        /* keep raw string on parse failure */
+      }
+
       fakeToolCall = {
         plugin_id: pluginId,
         capability: pluginId.includes('.') ? pluginId.split('.').pop()! : 'execute',
-        params: { note: "Parameters were parsed by local tool engine" },
+        params: { note: 'Parameters were parsed by local tool engine' },
         status: 'success',
-        result: result as Record<string, unknown>
+        result: result as Record<string, unknown>,
       };
     }
   }
@@ -168,7 +203,9 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
   }
 
   return (
-    <div className={`group flex items-start gap-3.5 px-4 sm:px-6 transition-colors ${isConsecutive ? 'py-1' : 'py-3 hover:bg-muted/20 rounded-2xl'}`}>
+    <div
+      className={`group flex items-start gap-3.5 px-4 sm:px-6 transition-colors ${isConsecutive ? 'py-1' : 'py-3 hover:bg-muted/20 rounded-2xl'}`}
+    >
       {/* Avatar */}
       <div className="flex-shrink-0 mt-0.5 w-8">
         {!isConsecutive && <MsgAvatar role={message.role as 'user' | 'assistant'} />}
@@ -185,39 +222,62 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
             <span className="text-[11px] text-muted-foreground/70 font-mono">
               {formatTime(message.timestamp)}
             </span>
-            {message.metadata?.model && (
-              <InlineBadge>{message.metadata.model}</InlineBadge>
-            )}
+            {message.metadata?.model && <InlineBadge>{message.metadata.model}</InlineBadge>}
 
             {/* Actions */}
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1 bg-card/80 backdrop-blur-sm border border-border/60 rounded-lg px-1 py-0.5 shadow-sm">
               {isAssistant && !isStreaming && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={() => regenerateResponse(message.id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-md hover:bg-muted"
+                      onClick={() => regenerateResponse(message.id)}
+                    >
                       <RefreshCw className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent><p>Regenerate response</p></TooltipContent>
+                  <TooltipContent>
+                    <p>Regenerate response</p>
+                  </TooltipContent>
                 </Tooltip>
               )}
               {!isAssistant && !isEditing && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={() => setIsEditing(true)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-md hover:bg-muted"
+                      onClick={() => setIsEditing(true)}
+                    >
                       <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent><p>Edit message</p></TooltipContent>
+                  <TooltipContent>
+                    <p>Edit message</p>
+                  </TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-muted" onClick={handleCopy}>
-                    {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 rounded-md hover:bg-muted"
+                    onClick={handleCopy}
+                  >
+                    {copied ? (
+                      <Check className="w-3.5 h-3.5 text-green-500" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+                    )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>{copied ? 'Copied!' : 'Copy'}</p></TooltipContent>
+                <TooltipContent>
+                  <p>{copied ? 'Copied!' : 'Copy'}</p>
+                </TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -229,12 +289,13 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
             {hasIntent && message.metadata!.intent!.confidence > 0.4 && (
               <InlineBadge>
                 <Brain className="w-3 h-3 text-purple-500 animate-pulse" />
-                {message.metadata!.intent!.intent} ({Math.round(message.metadata!.intent!.confidence * 100)}%)
+                {message.metadata!.intent!.intent} (
+                {Math.round(message.metadata!.intent!.confidence * 100)}%)
               </InlineBadge>
             )}
           </div>
         )}
-        
+
         {/* Tool Call Cards */}
         {hasPluginCalls && (
           <div className="flex flex-col gap-2 my-3">
@@ -245,41 +306,83 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
         )}
 
         {/* Incomplete Tool Call Warning */}
-        {/<\s*call\s+plugin=/i.test(message.content) && !/<\/\s*call\s*>/i.test(message.content) && (
-          <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-            <span className="leading-relaxed">Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı. <strong>Settings</strong> bölümünden max_tokens değerini artırabilir veya modele dosyayı parça parça yazmasını söyleyebilirsiniz.</span>
-          </div>
-        )}
+        {/<\s*call\s+plugin=/i.test(message.content) &&
+          !/<\/\s*call\s*>/i.test(message.content) && (
+            <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="flex-shrink-0 mt-0.5"
+              >
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+              </svg>
+              <span className="leading-relaxed">
+                Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı.{' '}
+                <strong>Settings</strong> bölümünden max_tokens değerini artırabilir veya modele
+                dosyayı parça parça yazmasını söyleyebilirsiniz.
+              </span>
+            </div>
+          )}
 
         {/* Message Body */}
-        <div className={`text-sm text-foreground leading-relaxed break-words ${
-          message.role === 'user' && !isEditing
-            ? 'inline-block bg-primary/5 dark:bg-muted/40 border border-primary/10 dark:border-border/60 rounded-2xl px-4 py-3 shadow-sm font-sans'
-            : 'w-full'
-        }`}>
+        <div
+          className={`text-sm text-foreground leading-relaxed break-words ${
+            message.role === 'user' && !isEditing
+              ? 'inline-block bg-primary/5 dark:bg-muted/40 border border-primary/10 dark:border-border/60 rounded-2xl px-4 py-3 shadow-sm font-sans'
+              : 'w-full'
+          }`}
+        >
           {message.images && message.images.length > 0 && (
             <div className="flex flex-wrap gap-2.5 mb-3">
               {message.images.map((img, idx) => (
-                <div key={idx} className="overflow-hidden rounded-xl border border-border shadow-md max-w-[300px] max-h-[300px] bg-background">
-                  <img src={img} alt="attachment" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
+                <div
+                  key={idx}
+                  className="overflow-hidden rounded-xl border border-border shadow-md max-w-[300px] max-h-[300px] bg-background"
+                >
+                  <img
+                    src={img}
+                    alt="attachment"
+                    className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
+                  />
                 </div>
               ))}
             </div>
           )}
           {isEditing ? (
             <div className="mt-2 flex flex-col gap-2.5 w-full">
-              <Textarea 
-                value={editContent} 
-                onChange={(e) => setEditContent(e.target.value)} 
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
                 className="min-h-[100px] font-sans rounded-xl border-primary/40 focus-visible:ring-primary shadow-inner p-3"
                 autoFocus
               />
               <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" size="sm" className="rounded-xl h-8 px-3 text-xs" onClick={() => { setIsEditing(false); setEditContent(message.content); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl h-8 px-3 text-xs"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditContent(message.content);
+                  }}
+                >
                   Cancel
                 </Button>
-                <Button size="sm" className="rounded-xl h-8 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm" onClick={handleEditSave} disabled={!editContent.trim() || isStreaming}>
+                <Button
+                  size="sm"
+                  className="rounded-xl h-8 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  onClick={handleEditSave}
+                  disabled={!editContent.trim() || isStreaming}
+                >
                   Save & Submit
                 </Button>
               </div>
@@ -294,8 +397,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, isLast: _i
                 {message.content
                   .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
                   .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-                  .replace(/\\\((.*?)\\\)/g, '$$$1$$')
-                }
+                  .replace(/\\\((.*?)\\\)/g, '$$$1$$')}
               </ReactMarkdown>
             </div>
           )}

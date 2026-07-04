@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/input';
 import { usePluginStore } from '@/stores/usePluginStore';
 
 export function SearchInput() {
-  const searchQuery = usePluginStore(s => s.searchQuery);
-  const setSearchQuery = usePluginStore(s => s.setSearchQuery);
+  const searchQuery = usePluginStore((s) => s.searchQuery);
+  const setSearchQuery = usePluginStore((s) => s.setSearchQuery);
   const [local, setLocal] = useState(searchQuery);
 
   useEffect(() => {

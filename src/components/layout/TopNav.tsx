@@ -1,21 +1,31 @@
 import { useAppStore } from '@/stores/useAppStore';
-import { MessageCircle, Package, FolderOpen, Settings, FileText, Database, Cpu, GitBranch, PenTool } from 'lucide-react';
+import {
+  MessageCircle,
+  Package,
+  FolderOpen,
+  Settings,
+  FileText,
+  Database,
+  Cpu,
+  GitBranch,
+  PenTool,
+} from 'lucide-react';
 import type { View } from '@/types/app';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems: { view: View; label: string; icon: typeof MessageCircle }[] = [
-  { view: 'chat',      label: 'Chat',      icon: MessageCircle },
-  { view: 'files',     label: 'Files',     icon: FolderOpen },
-  { view: 'notes',     label: 'Notes',     icon: FileText },
+  { view: 'chat', label: 'Chat', icon: MessageCircle },
+  { view: 'files', label: 'Files', icon: FolderOpen },
+  { view: 'notes', label: 'Notes', icon: FileText },
   { view: 'knowledge', label: 'Knowledge', icon: Database },
-  { view: 'models',    label: 'Models',    icon: Cpu },
+  { view: 'models', label: 'Models', icon: Cpu },
   { view: 'workflows', label: 'Workflows', icon: GitBranch },
-  { view: 'canvas',    label: 'Canvas',    icon: PenTool },
-  { view: 'plugins',   label: 'Plugins',   icon: Package },
+  { view: 'canvas', label: 'Canvas', icon: PenTool },
+  { view: 'plugins', label: 'Plugins', icon: Package },
 ];
 
 export function TopNav() {
-  const activeView   = useAppStore((s) => s.activeView);
+  const activeView = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
   const isChatExpanded = useAppStore((s) => s.isChatExpanded);
   const toggleChat = useAppStore((s) => s.toggleChat);
@@ -24,9 +34,11 @@ export function TopNav() {
     <header
       className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between gap-4 h-12 px-2 select-none rounded-full bg-card/80 border border-border backdrop-blur-md shadow-sm"
       data-tauri-drag-region
-      style={{
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
+      style={
+        {
+          WebkitAppRegion: 'drag',
+        } as React.CSSProperties
+      }
     >
       {/* ── Nav Links ── */}
       <nav
@@ -42,11 +54,13 @@ export function TopNav() {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => isChatButton ? toggleChat() : setActiveView(item.view)}
+                  onClick={() => (isChatButton ? toggleChat() : setActiveView(item.view))}
                   className={[
                     'relative flex items-center justify-center w-8 h-8 rounded-full',
                     'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isActive ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    isActive
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                   ].join(' ')}
                 >
                   <Icon className="w-4 h-4" />
@@ -69,7 +83,9 @@ export function TopNav() {
               className={[
                 'relative flex items-center justify-center w-8 h-8 rounded-full',
                 'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                activeView === 'settings' ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                activeView === 'settings'
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               ].join(' ')}
             >
               <Settings className="w-4 h-4" />

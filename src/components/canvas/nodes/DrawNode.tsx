@@ -12,7 +12,13 @@ interface DrawNodeProps {
 }
 
 export function DrawNode({ data, selected }: DrawNodeProps) {
-  const { points = [], strokeColor = '#000', strokeWidth = 3, fillColor = 'none', opacity = 100 } = data;
+  const {
+    points = [],
+    strokeColor = '#000',
+    strokeWidth = 3,
+    fillColor = 'none',
+    opacity = 100,
+  } = data;
 
   if (!points || points.length === 0) return null;
 
@@ -24,27 +30,27 @@ export function DrawNode({ data, selected }: DrawNodeProps) {
 
   return (
     <>
-      <NodeResizer 
-        color="#8b5cf6" 
-        isVisible={selected} 
+      <NodeResizer
+        color="#8b5cf6"
+        isVisible={selected}
         handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
         lineStyle={{ borderWidth: 2 }}
       />
-      
+
       {/* We need the div to stretch to its bounds. Drawing bounds calculation must be handled before creating the node. 
           Assuming the points are relative to the bounding box of the node (0,0 is top-left). */}
-      <div 
+      <div
         className={`relative w-full h-full group ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background/50' : ''}`}
         style={{ opacity: opacity / 100 }}
       >
-        <svg 
-          className="absolute inset-0 w-full h-full pointer-events-none" 
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
           style={{ overflow: 'visible' }}
         >
-          <path 
-            d={d} 
-            stroke={strokeColor} 
-            strokeWidth={strokeWidth} 
+          <path
+            d={d}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
             fill={fillColor}
             strokeLinecap="round"
             strokeLinejoin="round"

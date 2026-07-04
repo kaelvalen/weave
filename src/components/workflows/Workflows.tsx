@@ -1,12 +1,12 @@
 import { useEffect, useMemo } from 'react';
-import { 
-  ReactFlow, 
-  Controls, 
-  Background, 
-  MiniMap, 
+import {
+  ReactFlow,
+  Controls,
+  Background,
+  MiniMap,
   NodeTypes,
   BackgroundVariant,
-  Panel
+  Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GitBranch, Play, Zap, Bot, Code, FileText, Send, Clock, Save } from 'lucide-react';
@@ -20,18 +20,29 @@ import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
 
 export function Workflows() {
-  const { 
-    nodes, edges, onNodesChange, onEdgesChange, onConnect, 
-    addNode, loadWorkflow, saveWorkflow 
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    loadWorkflow,
+    saveWorkflow,
   } = useWorkflowStore();
-  
-  const themeMode = useThemeStore(s => s.mode);
-  const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-  const nodeTypes: NodeTypes = useMemo(() => ({ 
-    triggerNode: TriggerNode,
-    actionNode: ActionNode
-  }), []);
+  const themeMode = useThemeStore((s) => s.mode);
+  const isDark =
+    themeMode === 'dark' ||
+    (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      triggerNode: TriggerNode,
+      actionNode: ActionNode,
+    }),
+    []
+  );
 
   // Poll for external AI modifications, but don't overwrite active edits
   useEffect(() => {
@@ -56,26 +67,34 @@ export function Workflows() {
   const handleExecute = async () => {
     try {
       toast.info('Initiating automated workflow execution...');
-      const actionNodes = nodes.filter(n => n.type === 'actionNode');
+      const actionNodes = nodes.filter((n) => n.type === 'actionNode');
       const steps = actionNodes.map((node, index) => {
         let capability = 'shell.run';
         let params: Record<string, unknown> = { command: 'echo "Executing AI Action"' };
-        
-        if (node.data.label === 'AI Agent' || (node.data.description as string)?.toLowerCase().includes('ai')) {
+
+        if (
+          node.data.label === 'AI Agent' ||
+          (node.data.description as string)?.toLowerCase().includes('ai')
+        ) {
           capability = 'memory.store';
           params = { key: `ai_step_${index}`, value: 'Agent context processed' };
         } else if (node.data.label === 'Send to Chat') {
           capability = 'note.create';
-          params = { title: `Workflow Output ${index}`, content: 'Automated workflow execution report.' };
+          params = {
+            title: `Workflow Output ${index}`,
+            content: 'Automated workflow execution report.',
+          };
         }
 
         return {
           id: node.id,
-          plugin_id: capability.split('.')[0] ? `com.weave.builtin.${capability.split('.')[0]}` : 'com.weave.builtin.shell',
+          plugin_id: capability.split('.')[0]
+            ? `com.weave.builtin.${capability.split('.')[0]}`
+            : 'com.weave.builtin.shell',
           capability: capability,
           params: params,
           timeout_ms: 10000,
-          continue_on_error: true
+          continue_on_error: true,
         };
       });
 
@@ -99,7 +118,6 @@ export function Workflows() {
 
   return (
     <div className="flex h-full w-full bg-background pt-12 overflow-hidden selection:bg-primary/20">
-      
       {/* Premium Glassmorphic Sidebar Tools */}
       <div className="w-72 border-r border-border/40 bg-card/40 backdrop-blur-xl flex flex-col z-10 shadow-2xl relative">
         <div className="p-5 border-b border-border/30 flex items-center justify-between">
@@ -113,7 +131,7 @@ export function Workflows() {
             </div>
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-5 space-y-8 scrollbar-thin">
           {/* Triggers Section */}
           <div className="animate-in fade-in slide-in-from-left-4 duration-500">
@@ -121,21 +139,21 @@ export function Workflows() {
               <Zap className="w-3.5 h-3.5 text-amber-500" /> Triggers
             </h3>
             <div className="grid gap-2">
-              <div 
+              <div
                 className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-amber-500/10 hover:border-amber-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('triggerNode', 'Schedule (Cron)', 'Run on a specific time.')}
               >
                 <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-amber-500 transition-colors">
-                  <Clock className="w-4 h-4 text-amber-500" /> 
+                  <Clock className="w-4 h-4 text-amber-500" />
                   <span>Schedule</span>
                 </div>
               </div>
-              <div 
+              <div
                 className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-amber-500/10 hover:border-amber-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('triggerNode', 'On File Event', 'Run when a file changes.')}
               >
                 <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-amber-500 transition-colors">
-                  <FileText className="w-4 h-4 text-amber-500" /> 
+                  <FileText className="w-4 h-4 text-amber-500" />
                   <span>File Event</span>
                 </div>
               </div>
@@ -148,30 +166,30 @@ export function Workflows() {
               <Play className="w-3.5 h-3.5 text-blue-500" /> Actions
             </h3>
             <div className="grid gap-2">
-              <div 
+              <div
                 className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'AI Agent', 'Pass context to an AI agent.')}
               >
                 <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
-                  <Bot className="w-4 h-4 text-blue-500" /> 
+                  <Bot className="w-4 h-4 text-blue-500" />
                   <span>AI Agent</span>
                 </div>
               </div>
-              <div 
+              <div
                 className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'Run Command', 'Execute a shell command.')}
               >
                 <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
-                  <Code className="w-4 h-4 text-blue-500" /> 
+                  <Code className="w-4 h-4 text-blue-500" />
                   <span>Shell Script</span>
                 </div>
               </div>
-              <div 
+              <div
                 className="group p-3 border border-border/50 rounded-xl bg-card/50 hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
                 onClick={() => addNode('actionNode', 'Send Output', 'Send result to Chat.')}
               >
                 <div className="flex items-center gap-2 font-medium text-sm text-foreground group-hover:text-blue-500 transition-colors">
-                  <Send className="w-4 h-4 text-blue-500" /> 
+                  <Send className="w-4 h-4 text-blue-500" />
                   <span>Send to Chat</span>
                 </div>
               </div>
@@ -193,28 +211,36 @@ export function Workflows() {
           colorMode={isDark ? 'dark' : 'light'}
           className="bg-transparent"
         >
-          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color={isDark ? '#ffffff10' : '#00000015'} />
-          <Controls position="bottom-right" className="mb-4 mr-4 !bg-card/80 backdrop-blur-md !border-border/50 shadow-lg rounded-xl overflow-hidden" />
-          <MiniMap 
-            nodeColor={isDark ? '#4b5563' : '#e5e7eb'} 
-            maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'} 
-            position="bottom-left" 
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={28}
+            size={1.5}
+            color={isDark ? '#ffffff10' : '#00000015'}
+          />
+          <Controls
+            position="bottom-right"
+            className="mb-4 mr-4 !bg-card/80 backdrop-blur-md !border-border/50 shadow-lg rounded-xl overflow-hidden"
+          />
+          <MiniMap
+            nodeColor={isDark ? '#4b5563' : '#e5e7eb'}
+            maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
+            position="bottom-left"
             className="mb-4 ml-4 !bg-card/80 backdrop-blur-md rounded-2xl shadow-xl !border-border/40 overflow-hidden"
           />
 
           {/* Premium Floating Panel */}
           <Panel position="top-right" className="flex items-center gap-3 mt-6 mr-6">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-9 px-4 shadow-sm border-border/50 bg-card/60 backdrop-blur-md hover:bg-card/80 transition-all" 
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-4 shadow-sm border-border/50 bg-card/60 backdrop-blur-md hover:bg-card/80 transition-all"
               onClick={handleSave}
             >
               <Save className="w-4 h-4 mr-2 text-muted-foreground" /> Save
             </Button>
-            <Button 
-              size="sm" 
-              className="h-9 px-5 shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105" 
+            <Button
+              size="sm"
+              className="h-9 px-5 shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105"
               onClick={handleExecute}
             >
               <Play className="w-4 h-4 mr-2" /> Execute
@@ -222,7 +248,6 @@ export function Workflows() {
           </Panel>
         </ReactFlow>
       </div>
-
     </div>
   );
 }

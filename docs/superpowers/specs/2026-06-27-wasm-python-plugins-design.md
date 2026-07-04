@@ -44,12 +44,12 @@ sağlayacak şekilde backend’i tamamlamayı amaçlar.
 
 ## 3. Mevcut Durum
 
-| Runtime | Durum | Notlar |
-|---|---|---|
-| `builtin` | ✅ Çalışıyor | 10 adet Rust plugin `PluginManager`’da kayıtlı |
-| `python` | ⚠️ Yarım | `subprocess` ile sistem `python3` çağrılıyor; bağımlılık yönetimi yok |
-| `wasm` | ❌ Stub | `wasmtime` engine oluşturuluyor; `load_module`/`execute_function` boş |
-| `nodejs` | ❌ Yok | Enum’da tanımlı ama kod yok |
+| Runtime   | Durum        | Notlar                                                                |
+| --------- | ------------ | --------------------------------------------------------------------- |
+| `builtin` | ✅ Çalışıyor | 10 adet Rust plugin `PluginManager`’da kayıtlı                        |
+| `python`  | ⚠️ Yarım     | `subprocess` ile sistem `python3` çağrılıyor; bağımlılık yönetimi yok |
+| `wasm`    | ❌ Stub      | `wasmtime` engine oluşturuluyor; `load_module`/`execute_function` boş |
+| `nodejs`  | ❌ Yok       | Enum’da tanımlı ama kod yok                                           |
 
 Önemli dosyalar:
 
@@ -296,13 +296,13 @@ src-tauri/tests/fixtures/
 
 ## 6. Riskler ve Azaltma Yolları
 
-| Risk | Etki | Azaltma |
-|---|---|---|
-| PyO3 build karmaşası (Python header, sürüm uyumsuzluğu) | Yüksek | Geliştirme ortamında Python 3.10+ zorunlu; `PYO3_PYTHON` ortam değişkeni belgelenecek |
-| Binary boyutu artışı (libpython) | Orta | `pyo3` dinamik link opsiyonları değerlendirilecek; ilk aşamada statik link kabul edilebilir |
-| Cross-platform venv/pip davranışı | Orta | Testler Linux/macOS/Windows’te çalıştırılacak; pip hataları ayrıntılı loglanacak |
-| WASM modül ABI uyumsuzluğu | Orta | Test fixture’ı ve README güncellemesi ile belgeli ABI sabitlenir |
-| Güvenlik (arbitrary code execution) | Orta-Yüksek | İlk aşamada yetenek başına izin modeli korunur; ileride OS sandbox ayrı tasarımla ele alınır |
+| Risk                                                    | Etki        | Azaltma                                                                                      |
+| ------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| PyO3 build karmaşası (Python header, sürüm uyumsuzluğu) | Yüksek      | Geliştirme ortamında Python 3.10+ zorunlu; `PYO3_PYTHON` ortam değişkeni belgelenecek        |
+| Binary boyutu artışı (libpython)                        | Orta        | `pyo3` dinamik link opsiyonları değerlendirilecek; ilk aşamada statik link kabul edilebilir  |
+| Cross-platform venv/pip davranışı                       | Orta        | Testler Linux/macOS/Windows’te çalıştırılacak; pip hataları ayrıntılı loglanacak             |
+| WASM modül ABI uyumsuzluğu                              | Orta        | Test fixture’ı ve README güncellemesi ile belgeli ABI sabitlenir                             |
+| Güvenlik (arbitrary code execution)                     | Orta-Yüksek | İlk aşamada yetenek başına izin modeli korunur; ileride OS sandbox ayrı tasarımla ele alınır |
 
 ---
 

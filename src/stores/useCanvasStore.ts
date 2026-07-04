@@ -14,13 +14,13 @@ export interface CanvasProject {
 interface CanvasState {
   projects: CanvasProject[];
   activeProjectId: string | null;
-  
+
   createProject: (name?: string) => string;
   loadProject: (id: string) => void;
   saveProject: (id: string, nodes: Node[], edges: Edge[]) => void;
   renameProject: (id: string, name: string) => void;
   deleteProject: (id: string) => void;
-  
+
   getActiveProject: () => CanvasProject | undefined;
 }
 
@@ -52,7 +52,7 @@ export const useCanvasStore = create<CanvasState>()(
 
       loadProject: (id) => {
         set((state) => {
-          if (state.projects.some(p => p.id === id)) {
+          if (state.projects.some((p) => p.id === id)) {
             state.activeProjectId = id;
           }
         });

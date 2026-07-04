@@ -1,7 +1,24 @@
-import { 
-  MousePointer2, Hand, Square, Circle, Diamond, Image as ImageIcon, 
-  Layout, Type, StickyNote, FileCode, Pencil, ArrowUpRight, 
-  Minus, Hexagon, Star, Crop, Spline, ChevronLeft, Download, Upload
+import {
+  MousePointer2,
+  Hand,
+  Square,
+  Circle,
+  Diamond,
+  Image as ImageIcon,
+  Layout,
+  Type,
+  StickyNote,
+  FileCode,
+  Pencil,
+  ArrowUpRight,
+  Minus,
+  Hexagon,
+  Star,
+  Crop,
+  Spline,
+  ChevronLeft,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,10 +27,28 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import { useState, useEffect } from 'react';
 
-export type ToolMode = 'select' | 'pan' | 'rectangle' | 'circle' | 'diamond' | 'text' | 'note' | 'code' | 'image' | 'frame' | 'section' | 'slice' | 'line' | 'arrow' | 'polygon' | 'star' | 'pen' | 'pencil';
+export type ToolMode =
+  | 'select'
+  | 'pan'
+  | 'rectangle'
+  | 'circle'
+  | 'diamond'
+  | 'text'
+  | 'note'
+  | 'code'
+  | 'image'
+  | 'frame'
+  | 'section'
+  | 'slice'
+  | 'line'
+  | 'arrow'
+  | 'polygon'
+  | 'star'
+  | 'pen'
+  | 'pencil';
 
 interface CanvasToolbarProps {
   activeTool: ToolMode;
@@ -22,7 +57,12 @@ interface CanvasToolbarProps {
   onImport?: () => void;
 }
 
-export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }: CanvasToolbarProps) {
+export function CanvasToolbar({
+  activeTool,
+  setActiveTool,
+  onExport,
+  onImport,
+}: CanvasToolbarProps) {
   // To remember the last used tool in a category
   const [activeShape, setActiveShape] = useState<ToolMode>('rectangle');
   const [activeFrame, setActiveFrame] = useState<ToolMode>('frame');
@@ -32,7 +72,11 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
   // This is derived-state synchronization for the toolbar dropdown previews.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (['rectangle', 'circle', 'diamond', 'line', 'arrow', 'polygon', 'star', 'image'].includes(activeTool)) {
+    if (
+      ['rectangle', 'circle', 'diamond', 'line', 'arrow', 'polygon', 'star', 'image'].includes(
+        activeTool
+      )
+    ) {
       setActiveShape(activeTool);
     }
     if (['frame', 'section', 'slice'].includes(activeTool)) {
@@ -48,19 +92,19 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
     { type: 'single', id: 'select', icon: MousePointer2, label: 'Move (V)' },
     { type: 'single', id: 'pan', icon: Hand, label: 'Hand tool (H)' },
     { type: 'divider' },
-    { 
-      type: 'dropdown', 
+    {
+      type: 'dropdown',
       id: 'frame-group',
       activeSubTool: activeFrame,
       items: [
         { id: 'frame', icon: Layout, label: 'Frame (F)' },
         { id: 'section', icon: Square, label: 'Section (Shift+S)' },
         { id: 'slice', icon: Crop, label: 'Slice (S)' },
-      ]
+      ],
     },
     { type: 'divider' },
-    { 
-      type: 'dropdown', 
+    {
+      type: 'dropdown',
       id: 'shape-group',
       activeSubTool: activeShape,
       items: [
@@ -72,16 +116,16 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
         { id: 'star', icon: Star, label: 'Star' },
         { id: 'diamond', icon: Diamond, label: 'Diamond (D)' },
         { id: 'image', icon: ImageIcon, label: 'Image/video (Ctrl+Shift+K)' },
-      ]
+      ],
     },
-    { 
-      type: 'dropdown', 
+    {
+      type: 'dropdown',
       id: 'draw-group',
       activeSubTool: activeDraw,
       items: [
         { id: 'pen', icon: Spline, label: 'Pen (P)' },
         { id: 'pencil', icon: Pencil, label: 'Pencil (Shift+P)' },
-      ]
+      ],
     },
     { type: 'single', id: 'text', icon: Type, label: 'Text (T)' },
     { type: 'divider' },
@@ -95,7 +139,7 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
         if (group.type === 'divider') {
           return <div key={`div-${i}`} className="w-6 h-[1px] bg-border mx-1" />;
         }
-        
+
         if (group.type === 'single') {
           const Icon = group.icon!;
           const isActive = activeTool === group.id;
@@ -112,7 +156,11 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
                   <Icon className="w-5 h-5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+              <TooltipContent
+                side="left"
+                sideOffset={12}
+                className="text-xs px-2 py-1 font-medium bg-foreground text-background"
+              >
                 {group.label}
               </TooltipContent>
             </Tooltip>
@@ -120,9 +168,10 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
         }
 
         if (group.type === 'dropdown') {
-          const activeItem = group.items!.find(item => item.id === group.activeSubTool) || group.items![0];
+          const activeItem =
+            group.items!.find((item) => item.id === group.activeSubTool) || group.items![0];
           const ActiveIcon = activeItem.icon;
-          const isActive = group.items!.some(item => item.id === activeTool);
+          const isActive = group.items!.some((item) => item.id === activeTool);
 
           return (
             <DropdownMenu key={group.id}>
@@ -138,15 +187,19 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
                       <ActiveIcon className="w-5 h-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+                  <TooltipContent
+                    side="left"
+                    sideOffset={12}
+                    className="text-xs px-2 py-1 font-medium bg-foreground text-background"
+                  >
                     {activeItem.label}
                   </TooltipContent>
                 </Tooltip>
-                
+
                 <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="absolute -left-3 w-4 h-4 rounded-full opacity-0 group-hover/dropdown:opacity-100 hover:bg-muted focus:opacity-100 transition-opacity p-0 z-20"
                   >
                     <ChevronLeft className="w-3 h-3" />
@@ -154,13 +207,18 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
                 </DropdownMenuTrigger>
               </div>
 
-              <DropdownMenuContent side="left" sideOffset={8} align="center" className="min-w-[180px] p-1 bg-card/95 backdrop-blur-xl border-border/50 shadow-2xl rounded-xl">
-                {group.items!.map(item => {
+              <DropdownMenuContent
+                side="left"
+                sideOffset={8}
+                align="center"
+                className="min-w-[180px] p-1 bg-card/95 backdrop-blur-xl border-border/50 shadow-2xl rounded-xl"
+              >
+                {group.items!.map((item) => {
                   const ItemIcon = item.icon;
                   const isItemSelected = item.id === activeTool;
                   return (
-                    <DropdownMenuItem 
-                      key={item.id} 
+                    <DropdownMenuItem
+                      key={item.id}
                       className={`flex items-center gap-3 px-3 py-2 cursor-pointer rounded-lg text-sm ${isItemSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'}`}
                       onClick={() => setActiveTool(item.id as ToolMode)}
                     >
@@ -191,7 +249,11 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
                 <Upload className="w-5 h-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+            <TooltipContent
+              side="left"
+              sideOffset={12}
+              className="text-xs px-2 py-1 font-medium bg-foreground text-background"
+            >
               Import Canvas (.weave)
             </TooltipContent>
           </Tooltip>
@@ -207,7 +269,11 @@ export function CanvasToolbar({ activeTool, setActiveTool, onExport, onImport }:
                 <Download className="w-5 h-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="left" sideOffset={12} className="text-xs px-2 py-1 font-medium bg-foreground text-background">
+            <TooltipContent
+              side="left"
+              sideOffset={12}
+              className="text-xs px-2 py-1 font-medium bg-foreground text-background"
+            >
               Export Canvas (.weave)
             </TooltipContent>
           </Tooltip>

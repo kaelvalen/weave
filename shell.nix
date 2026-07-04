@@ -9,6 +9,7 @@ pkgs.mkShell {
     cargo
     cargo-tauri
     nodejs
+    python3
     rustc
   ];
 

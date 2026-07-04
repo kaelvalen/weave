@@ -52,12 +52,12 @@ export function LocalModels() {
     /* eslint-disable react-hooks/set-state-in-effect */
     // Standard data-fetch on mount: load installed models and poll system stats.
     fetchModels();
-    
+
     // Poll stats
     fetchStats();
     const interval = setInterval(fetchStats, 2000);
     /* eslint-enable react-hooks/set-state-in-effect */
-    
+
     // Listen to download progress
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {
       setActiveDownload(event.payload);
@@ -74,7 +74,7 @@ export function LocalModels() {
 
     return () => {
       clearInterval(interval);
-      unlisten.then(f => f());
+      unlisten.then((f) => f());
     };
   }, []);
 
@@ -83,7 +83,7 @@ export function LocalModels() {
       toast.error('URL must point to a .gguf file');
       return;
     }
-    
+
     const urlParts = downloadUrl.split('/');
     const filename = urlParts[urlParts.length - 1].split('?')[0];
 
@@ -118,7 +118,6 @@ export function LocalModels() {
   return (
     <div className="flex flex-col h-full w-full bg-background pt-16">
       <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
-        
         {/* Header */}
         <div className="flex items-center justify-between py-8 flex-shrink-0">
           <div>
@@ -126,13 +125,15 @@ export function LocalModels() {
               <Cpu className="w-6 h-6 text-primary" />
               Local Models Manager
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">Download and run open-source models completely offline.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Download and run open-source models completely offline.
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Input 
-              placeholder="Paste HuggingFace .gguf URL..." 
+            <Input
+              placeholder="Paste HuggingFace .gguf URL..."
               value={downloadUrl}
-              onChange={e => setDownloadUrl(e.target.value)}
+              onChange={(e) => setDownloadUrl(e.target.value)}
               className="w-72"
             />
             <Button className="gap-2" onClick={handleDownload} disabled={!!activeDownload}>
@@ -143,27 +144,32 @@ export function LocalModels() {
 
         {/* Body */}
         <div className="flex-1 grid grid-cols-3 gap-6 mb-12 min-h-0">
-          
           {/* Main List */}
           <div className="col-span-2 border rounded-xl bg-card overflow-hidden flex flex-col">
             <div className="border-b px-6 py-4 bg-muted/20 flex justify-between items-center">
               <h3 className="font-semibold">Installed Models</h3>
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">{models.length} Models</span>
+              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                {models.length} Models
+              </span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              
               {activeDownload && !activeDownload.done && (
                 <div className="border border-primary/30 bg-primary/5 rounded-lg p-4 flex flex-col gap-2 relative overflow-hidden">
                   <div className="flex justify-between items-center z-10">
                     <span className="font-medium text-sm">{activeDownload.filename}</span>
                     <span className="text-xs text-muted-foreground">
-                      {formatBytes(activeDownload.downloaded)} / {activeDownload.total ? formatBytes(activeDownload.total) : '?'}
+                      {formatBytes(activeDownload.downloaded)} /{' '}
+                      {activeDownload.total ? formatBytes(activeDownload.total) : '?'}
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden z-10">
-                    <div 
-                      className="h-full bg-primary transition-all duration-300" 
-                      style={{ width: activeDownload.total ? `${(activeDownload.downloaded / activeDownload.total) * 100}%` : '5%' }}
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{
+                        width: activeDownload.total
+                          ? `${(activeDownload.downloaded / activeDownload.total) * 100}%`
+                          : '5%',
+                      }}
                     ></div>
                   </div>
                 </div>
@@ -178,8 +184,11 @@ export function LocalModels() {
                   </p>
                 </div>
               ) : (
-                models.map(m => (
-                  <div key={m.name} className="flex justify-between items-center p-4 border rounded-lg hover:bg-muted/30 transition-colors">
+                models.map((m) => (
+                  <div
+                    key={m.name}
+                    className="flex justify-between items-center p-4 border rounded-lg hover:bg-muted/30 transition-colors"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center">
                         <Cpu className="w-5 h-5 text-muted-foreground" />
@@ -189,7 +198,12 @@ export function LocalModels() {
                         <p className="text-xs text-muted-foreground">{formatBytes(m.size_bytes)}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" onClick={() => handleDelete(m.name)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      onClick={() => handleDelete(m.name)}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -210,14 +224,15 @@ export function LocalModels() {
               </span>
             </div>
             <div className="p-6 space-y-6">
-              
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-muted-foreground font-medium">RAM Usage</span>
-                  <span className="font-mono text-xs">{formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}</span>
+                  <span className="font-mono text-xs">
+                    {formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}
+                  </span>
                 </div>
                 <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-primary/80 transition-all duration-500"
                     style={{ width: `${(stats.ram_usage / stats.ram_total) * 100}%` }}
                   ></div>
@@ -231,12 +246,9 @@ export function LocalModels() {
                   <p className="text-xs text-muted-foreground font-mono">Server is stopped.</p>
                 </div>
               </div>
-
             </div>
           </div>
-
         </div>
-
       </div>
     </div>
   );

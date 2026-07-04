@@ -11,13 +11,14 @@ Weave is a universal workspace where AI orchestrates plugins to help you read fi
 
 ## Philosophy
 
-> *"An empty canvas, infinite capabilities."*
+> _"An empty canvas, infinite capabilities."_
 
 Weave starts as a clean workspace. As you express what you want to do, AI discovers and coordinates the right plugins to get it done. Over time, it learns your patterns and automates your workflows.
 
 ## Features
 
 ### Core
+
 - **AI Chat** — Conversational interface with streaming support
 - **Plugin System** — `.wpk` based plugin format with manifest declarations
 - **Built-in Plugins** — File manager, Calculator, Notes (always available)
@@ -26,13 +27,15 @@ Weave starts as a clean workspace. As you express what you want to do, AI discov
 - **Workflow Engine** — Chain multiple plugins together for complex tasks
 
 ### Built-in Plugins
-| Plugin | Capabilities |
-|--------|-------------|
-| **File** | `file.read`, `file.write`, `file.list`, `file.search` |
-| **Calc** | `calc.eval`, `calc.convert` (supports 50+ unit conversions) |
+
+| Plugin   | Capabilities                                                         |
+| -------- | -------------------------------------------------------------------- |
+| **File** | `file.read`, `file.write`, `file.list`, `file.search`                |
+| **Calc** | `calc.eval`, `calc.convert` (supports 50+ unit conversions)          |
 | **Note** | `note.create`, `note.list`, `note.get`, `note.update`, `note.delete` |
 
 ### Architecture
+
 ```
 Tauri GUI (React + TypeScript + Tailwind)
     |
@@ -49,17 +52,18 @@ Plugin Runtime (WASM / Python / JS)
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
+| Layer    | Technology                                       |
+| -------- | ------------------------------------------------ |
 | Frontend | React 18 + TypeScript + Tailwind CSS + shadcn/ui |
-| Backend | Tauri v2 + Rust |
-| AI | OpenAI API / Anthropic API / Ollama (local) |
-| State | Zustand |
-| Icons | Lucide React |
+| Backend  | Tauri v2 + Rust                                  |
+| AI       | OpenAI API / Anthropic API / Ollama (local)      |
+| State    | Zustand                                          |
+| Icons    | Lucide React                                     |
 
 ## Getting Started
 
 ### Prerequisites
+
 - [Rust](https://rustup.rs/) (1.70+)
 - [Node.js](https://nodejs.org/) (18+)
 - Tauri CLI: `cargo install tauri-cli`
@@ -102,6 +106,7 @@ Place `.wpk` files or plugin directories with `manifest.toml` in `~/.weave/plugi
 ```
 
 Example `manifest.toml`:
+
 ```toml
 [plugin]
 id = "com.example.my-plugin"
@@ -123,6 +128,7 @@ entry = "engine/main.wasm"
 Weave plugins declare their capabilities in a TOML manifest. The engine matches user intents with plugin capabilities to automatically invoke the right tool.
 
 ### Capability System
+
 Plugins declare what they **provide**. The AI and intent engine determine what's **needed**.
 
 ```toml
@@ -131,6 +137,7 @@ provide = ["file.read", "file.write", "chart.bar"]
 ```
 
 ### Runtime Types
+
 - `builtin` — Compiled into Weave (Rust)
 - `wasm` — WebAssembly sandbox (any language that compiles to WASM)
 - `python` — Python runtime (PyO3 bridge)

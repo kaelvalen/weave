@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, createElement } from 'react';
-import { 
-  FolderOpen, FileText, ChevronRight, ChevronDown, 
-  Search, HardDrive, File as FileIcon, FileCode, FileImage, FileJson, Loader2, FileVideo, RefreshCw
+import {
+  FolderOpen,
+  FileText,
+  ChevronRight,
+  ChevronDown,
+  Search,
+  HardDrive,
+  File as FileIcon,
+  FileCode,
+  FileImage,
+  FileJson,
+  Loader2,
+  FileVideo,
+  RefreshCw,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -14,9 +25,34 @@ import { FileEditor } from './FileEditor';
 // Helper to pick icon
 function getFileIcon(name: string) {
   const lower = name.toLowerCase();
-  if (lower.endsWith('.ts') || lower.endsWith('.tsx') || lower.endsWith('.js') || lower.endsWith('.rs') || lower.endsWith('.css') || lower.endsWith('.html')) return FileCode;
-  if (lower.endsWith('.svg') || lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.ico')) return FileImage;
-  if (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg') || lower.endsWith('.mov') || lower.endsWith('.avi') || lower.endsWith('.mkv')) return FileVideo;
+  if (
+    lower.endsWith('.ts') ||
+    lower.endsWith('.tsx') ||
+    lower.endsWith('.js') ||
+    lower.endsWith('.rs') ||
+    lower.endsWith('.css') ||
+    lower.endsWith('.html')
+  )
+    return FileCode;
+  if (
+    lower.endsWith('.svg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.ico')
+  )
+    return FileImage;
+  if (
+    lower.endsWith('.mp4') ||
+    lower.endsWith('.webm') ||
+    lower.endsWith('.ogg') ||
+    lower.endsWith('.mov') ||
+    lower.endsWith('.avi') ||
+    lower.endsWith('.mkv')
+  )
+    return FileVideo;
   if (lower.endsWith('.json')) return FileJson;
   return FileText;
 }
@@ -33,18 +69,18 @@ interface FSNode {
   isLoading?: boolean;
 }
 
-function FileTreeItem({ 
-  item, 
-  depth = 0, 
-  selectedPath, 
-  onSelect, 
+function FileTreeItem({
+  item,
+  depth = 0,
+  selectedPath,
+  onSelect,
   onToggle,
-  query
-}: { 
-  item: FSNode; 
-  depth?: number; 
-  selectedPath?: string; 
-  onSelect: (item: FSNode) => void; 
+  query,
+}: {
+  item: FSNode;
+  depth?: number;
+  selectedPath?: string;
+  onSelect: (item: FSNode) => void;
   onToggle: (item: FSNode) => void;
   query: string;
 }) {
@@ -59,27 +95,35 @@ function FileTreeItem({
 
   return (
     <div>
-      <div 
+      <div
         onClick={() => {
           if (isFolder) onToggle(item);
           onSelect(item);
         }}
         className={`group flex items-center gap-2 py-1 px-2 rounded cursor-pointer transition-colors ${
-          isSelected 
-            ? 'bg-muted text-foreground font-medium' 
+          isSelected
+            ? 'bg-muted text-foreground font-medium'
             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
         }`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        <span className={`w-4 h-4 flex items-center justify-center transition-transform ${isFolder ? 'opacity-70 hover:opacity-100' : 'opacity-0'}`}>
-          {isFolder && (
-            item.isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
-            item.isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />
-          )}
+        <span
+          className={`w-4 h-4 flex items-center justify-center transition-transform ${isFolder ? 'opacity-70 hover:opacity-100' : 'opacity-0'}`}
+        >
+          {isFolder &&
+            (item.isLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : item.isOpen ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            ))}
         </span>
-        
+
         {isFolder ? (
-          <FolderOpen className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`} />
+          <FolderOpen
+            className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`}
+          />
         ) : (
           createElement(getFileIcon(item.name), {
             className: `w-4 h-4 flex-shrink-0 ${isSelected ? 'text-foreground' : 'opacity-70'}`,
@@ -87,16 +131,16 @@ function FileTreeItem({
         )}
         <span className="text-sm truncate select-none">{item.name}</span>
       </div>
-      
+
       {isFolder && item.isOpen && visibleChildren && visibleChildren.length > 0 && (
         <div>
           {visibleChildren.map((child) => (
-            <FileTreeItem 
-              key={child.path} 
-              item={child} 
-              depth={depth + 1} 
-              selectedPath={selectedPath} 
-              onSelect={onSelect} 
+            <FileTreeItem
+              key={child.path}
+              item={child}
+              depth={depth + 1}
+              selectedPath={selectedPath}
+              onSelect={onSelect}
               onToggle={onToggle}
               query={query}
             />
@@ -117,31 +161,45 @@ export function FileManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const { executeCapability } = usePluginStore();
 
-  const loadDirectory = useCallback(async (dirPath: string): Promise<FSNode[]> => {
-    try {
-      const res = await executeCapability('com.weave.builtin.file', 'file.list', { directory: dirPath }) as
-        | { success: true; entries: Array<{ name: string; path: string; type: FSNode['type']; size?: number; modified?: number }> }
-        | undefined;
-      if (res?.success) {
-        return res.entries.map((e) => ({
-          name: e.name,
-          path: e.path,
-          type: e.type,
-          size: e.size,
-          modified: e.modified,
-          isOpen: false,
-          children: undefined
-        }));
+  const loadDirectory = useCallback(
+    async (dirPath: string): Promise<FSNode[]> => {
+      try {
+        const res = (await executeCapability('com.weave.builtin.file', 'file.list', {
+          directory: dirPath,
+        })) as
+          | {
+              success: true;
+              entries: Array<{
+                name: string;
+                path: string;
+                type: FSNode['type'];
+                size?: number;
+                modified?: number;
+              }>;
+            }
+          | undefined;
+        if (res?.success) {
+          return res.entries.map((e) => ({
+            name: e.name,
+            path: e.path,
+            type: e.type,
+            size: e.size,
+            modified: e.modified,
+            isOpen: false,
+            children: undefined,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to list dir', err);
       }
-    } catch (err) {
-      console.error('Failed to list dir', err);
-    }
-    return [];
-  }, [executeCapability]);
+      return [];
+    },
+    [executeCapability]
+  );
 
   // Load root on mount
   useEffect(() => {
-    loadDirectory(currentRoot).then(nodes => {
+    loadDirectory(currentRoot).then((nodes) => {
       setRootNodes(nodes);
       setIsLoading(false);
     });
@@ -157,7 +215,7 @@ export function FileManager() {
   // Listen for auto-refresh events (e.g. from Coder Plugin)
   useEffect(() => {
     const handleRefresh = () => {
-      loadDirectory(currentRoot).then(nodes => setRootNodes(nodes));
+      loadDirectory(currentRoot).then((nodes) => setRootNodes(nodes));
     };
     window.addEventListener('weave-fs-refresh', handleRefresh);
     return () => window.removeEventListener('weave-fs-refresh', handleRefresh);
@@ -186,36 +244,48 @@ export function FileManager() {
   // Handle nested toggle
   const handleToggle = async (node: FSNode) => {
     if (node.type !== 'directory') return;
-    
+
     // Toggle close
     if (node.isOpen) {
-      const updateTree = (nodes: FSNode[]): FSNode[] => nodes.map(n => 
-        n.path === node.path ? { ...n, isOpen: false } : { ...n, children: n.children ? updateTree(n.children) : undefined }
-      );
-      setRootNodes(prev => updateTree(prev));
+      const updateTree = (nodes: FSNode[]): FSNode[] =>
+        nodes.map((n) =>
+          n.path === node.path
+            ? { ...n, isOpen: false }
+            : { ...n, children: n.children ? updateTree(n.children) : undefined }
+        );
+      setRootNodes((prev) => updateTree(prev));
       return;
     }
 
     // Toggle open & load if needed
     if (!node.children) {
       // Set loading
-      const setLoad = (nodes: FSNode[]): FSNode[] => nodes.map(n => 
-        n.path === node.path ? { ...n, isLoading: true } : { ...n, children: n.children ? setLoad(n.children) : undefined }
-      );
-      setRootNodes(prev => setLoad(prev));
+      const setLoad = (nodes: FSNode[]): FSNode[] =>
+        nodes.map((n) =>
+          n.path === node.path
+            ? { ...n, isLoading: true }
+            : { ...n, children: n.children ? setLoad(n.children) : undefined }
+        );
+      setRootNodes((prev) => setLoad(prev));
 
       const children = await loadDirectory(node.path);
 
-      const setChildren = (nodes: FSNode[]): FSNode[] => nodes.map(n => 
-        n.path === node.path ? { ...n, isLoading: false, isOpen: true, children } : { ...n, children: n.children ? setChildren(n.children) : undefined }
-      );
-      setRootNodes(prev => setChildren(prev));
+      const setChildren = (nodes: FSNode[]): FSNode[] =>
+        nodes.map((n) =>
+          n.path === node.path
+            ? { ...n, isLoading: false, isOpen: true, children }
+            : { ...n, children: n.children ? setChildren(n.children) : undefined }
+        );
+      setRootNodes((prev) => setChildren(prev));
     } else {
       // Just toggle
-      const setOpen = (nodes: FSNode[]): FSNode[] => nodes.map(n => 
-        n.path === node.path ? { ...n, isOpen: true } : { ...n, children: n.children ? setOpen(n.children) : undefined }
-      );
-      setRootNodes(prev => setOpen(prev));
+      const setOpen = (nodes: FSNode[]): FSNode[] =>
+        nodes.map((n) =>
+          n.path === node.path
+            ? { ...n, isOpen: true }
+            : { ...n, children: n.children ? setOpen(n.children) : undefined }
+        );
+      setRootNodes((prev) => setOpen(prev));
     }
   };
 
@@ -232,15 +302,30 @@ export function FileManager() {
         <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
           <div className="flex items-center gap-2 overflow-hidden mr-2">
             <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <h3 className="text-xs font-semibold tracking-wide truncate" title={currentRoot === '.' ? 'Local Files' : currentRoot}>
+            <h3
+              className="text-xs font-semibold tracking-wide truncate"
+              title={currentRoot === '.' ? 'Local Files' : currentRoot}
+            >
               {currentRoot === '.' ? 'Local Files' : currentRoot.split('/').pop() || currentRoot}
             </h3>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleManualRefresh} title="Refresh Directory">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-7 h-7 text-muted-foreground"
+              onClick={handleManualRefresh}
+              title="Refresh Directory"
+            >
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground" onClick={handleOpenFolder} title="Open Folder">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-7 h-7 text-muted-foreground"
+              onClick={handleOpenFolder}
+              title="Open Folder"
+            >
               <FolderOpen className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -249,8 +334,8 @@ export function FileManager() {
         <div className="px-3 py-3 border-b flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input 
-              placeholder="Search files..." 
+            <Input
+              placeholder="Search files..."
               className="pl-8 h-8 text-xs bg-background"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -269,11 +354,11 @@ export function FileManager() {
             </div>
           ) : (
             filteredRootNodes.map((item) => (
-              <FileTreeItem 
-                key={item.path} 
-                item={item} 
-                selectedPath={selectedFile?.path} 
-                onSelect={setSelectedFile} 
+              <FileTreeItem
+                key={item.path}
+                item={item}
+                selectedPath={selectedFile?.path}
+                onSelect={setSelectedFile}
                 onToggle={handleToggle}
                 query={searchQuery}
               />
@@ -298,7 +383,7 @@ export function FileManager() {
                 <span className="text-xs font-medium">{selectedFile.name}</span>
               </div>
             </div>
-            
+
             <div className="flex-1 flex flex-col min-h-0 bg-transparent">
               {selectedFile.type === 'directory' ? (
                 <div className="flex-1 p-8 flex flex-col items-center justify-center text-center">

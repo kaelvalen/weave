@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { 
-  ReactFlow, 
-  Controls, 
-  Background, 
-  MiniMap, 
-  useNodesState, 
-  useEdgesState, 
+import {
+  ReactFlow,
+  Controls,
+  Background,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
   addEdge,
   Connection,
   NodeTypes,
@@ -14,7 +14,7 @@ import {
   useReactFlow,
   ReactFlowProvider,
   SelectionMode,
-  ConnectionLineType
+  ConnectionLineType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useThemeStore } from '@/stores/useThemeStore';
@@ -37,8 +37,10 @@ import { ContextMenu } from './ContextMenu';
 
 function CanvasInner() {
   const { mode: themeMode } = useThemeStore();
-  const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  
+  const isDark =
+    themeMode === 'dark' ||
+    (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   const { activeProjectId, getActiveProject, saveProject } = useCanvasStore();
   const project = getActiveProject();
 
@@ -48,7 +50,7 @@ function CanvasInner() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPoints, setCurrentPoints] = useState<{x: number, y: number}[]>([]);
+  const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
 
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
@@ -59,7 +61,7 @@ function CanvasInner() {
     isOpen: false,
     x: 0,
     y: 0,
-    targetNodeId: null
+    targetNodeId: null,
   });
 
   const [overlayOffset, setOverlayOffset] = useState({ left: 0, top: 0 });
@@ -90,17 +92,23 @@ function CanvasInner() {
     return () => clearTimeout(timeout);
   }, [nodes, edges, activeProjectId, saveProject]);
 
-  const nodeTypes: NodeTypes = useMemo(() => ({ 
-    noteNode: NoteNode,
-    codeNode: CodeNode,
-    shapeNode: ShapeNode,
-    textNode: TextNode,
-    imageNode: ImageNode,
-    frameNode: FrameNode,
-    drawNode: DrawNode
-  }), []);
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      noteNode: NoteNode,
+      codeNode: CodeNode,
+      shapeNode: ShapeNode,
+      textNode: TextNode,
+      imageNode: ImageNode,
+      frameNode: FrameNode,
+      drawNode: DrawNode,
+    }),
+    []
+  );
 
-  const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
+    [setEdges]
+  );
 
   const onPaneClick = useCallback(() => {
     // We handle creation in onPointerUp now.
@@ -118,37 +126,45 @@ function CanvasInner() {
     }
   }, []);
 
-  const updateNode = useCallback((id: string, updates: Partial<Node>) => {
-    setNodes((nds) => nds.map((node) => {
-      if (node.id === id) {
-        return { 
-          ...node, 
-          ...updates, 
-          style: { ...node.style, ...(updates.style || {}) }, 
-          data: { ...node.data, ...(updates.data || {}) } 
-        };
-      }
-      return node;
-    }));
-  }, [setNodes]);
+  const updateNode = useCallback(
+    (id: string, updates: Partial<Node>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            return {
+              ...node,
+              ...updates,
+              style: { ...node.style, ...(updates.style || {}) },
+              data: { ...node.data, ...(updates.data || {}) },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
+  );
 
-  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
-    event.preventDefault();
-    setContextMenu({
-      isOpen: true,
-      x: event.clientX,
-      y: event.clientY,
-      targetNodeId: node.id
-    });
-    
-    // Auto-select node if it isn't already selected (avoids clearing a multi-selection)
-    setNodes(nds => {
-      const isAlreadySelected = nds.find(n => n.id === node.id)?.selected;
-      if (isAlreadySelected) return nds;
-      return nds.map(n => ({...n, selected: n.id === node.id}));
-    });
-    setSelectedNodeId(node.id);
-  }, [setNodes]);
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setContextMenu({
+        isOpen: true,
+        x: event.clientX,
+        y: event.clientY,
+        targetNodeId: node.id,
+      });
+
+      // Auto-select node if it isn't already selected (avoids clearing a multi-selection)
+      setNodes((nds) => {
+        const isAlreadySelected = nds.find((n) => n.id === node.id)?.selected;
+        if (isAlreadySelected) return nds;
+        return nds.map((n) => ({ ...n, selected: n.id === node.id }));
+      });
+      setSelectedNodeId(node.id);
+    },
+    [setNodes]
+  );
 
   const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
     event.preventDefault();
@@ -156,22 +172,22 @@ function CanvasInner() {
       isOpen: true,
       x: event.clientX,
       y: event.clientY,
-      targetNodeId: null
+      targetNodeId: null,
     });
   }, []);
-
-
 
   const handleExport = useCallback(async () => {
     try {
       const data = JSON.stringify({ nodes, edges }, null, 2);
       if ('__TAURI__' in window) {
         const filePath = await save({
-          filters: [{
-            name: 'Weave Canvas',
-            extensions: ['weave', 'json']
-          }],
-          defaultPath: `weave_canvas_${Date.now()}.weave`
+          filters: [
+            {
+              name: 'Weave Canvas',
+              extensions: ['weave', 'json'],
+            },
+          ],
+          defaultPath: `weave_canvas_${Date.now()}.weave`,
         });
         if (filePath) {
           await writeTextFile(filePath, data);
@@ -188,7 +204,7 @@ function CanvasInner() {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.error("Failed to export:", err);
+      console.error('Failed to export:', err);
     }
   }, [nodes, edges]);
 
@@ -196,11 +212,13 @@ function CanvasInner() {
     try {
       if ('__TAURI__' in window) {
         const filePath = await open({
-          filters: [{
-            name: 'Weave Canvas',
-            extensions: ['weave', 'json']
-          }],
-          multiple: false
+          filters: [
+            {
+              name: 'Weave Canvas',
+              extensions: ['weave', 'json'],
+            },
+          ],
+          multiple: false,
         });
         if (filePath && typeof filePath === 'string') {
           const content = await readTextFile(filePath);
@@ -227,7 +245,7 @@ function CanvasInner() {
                 setEdges(parsed.edges);
               }
             } catch (err) {
-              console.error("Failed to parse file", err);
+              console.error('Failed to parse file', err);
             }
           };
           reader.readAsText(file);
@@ -235,40 +253,47 @@ function CanvasInner() {
         input.click();
       }
     } catch (err) {
-      console.error("Failed to import:", err);
+      console.error('Failed to import:', err);
     }
   }, [setNodes, setEdges]);
 
   const handleBringToFront = useCallback(() => {
-    setNodes(nds => {
+    setNodes((nds) => {
       let maxZ = 0;
-      nds.forEach(n => { if ((n.zIndex || 0) > maxZ) maxZ = n.zIndex || 0; });
-      return nds.map(n => n.selected ? { ...n, zIndex: maxZ + 1 } : n);
+      nds.forEach((n) => {
+        if ((n.zIndex || 0) > maxZ) maxZ = n.zIndex || 0;
+      });
+      return nds.map((n) => (n.selected ? { ...n, zIndex: maxZ + 1 } : n));
     });
-    setContextMenu(prev => ({ ...prev, isOpen: false }));
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
   }, [setNodes]);
 
   const handleSendToBack = useCallback(() => {
-    setNodes(nds => {
+    setNodes((nds) => {
       let minZ = 0;
-      nds.forEach(n => { if ((n.zIndex || 0) < minZ) minZ = n.zIndex || 0; });
-      return nds.map(n => n.selected ? { ...n, zIndex: minZ - 1 } : n);
+      nds.forEach((n) => {
+        if ((n.zIndex || 0) < minZ) minZ = n.zIndex || 0;
+      });
+      return nds.map((n) => (n.selected ? { ...n, zIndex: minZ - 1 } : n));
     });
-    setContextMenu(prev => ({ ...prev, isOpen: false }));
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
   }, [setNodes]);
 
-  const selectedNode = useMemo(() => nodes.find(n => n.id === selectedNodeId) || null, [nodes, selectedNodeId]);
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) || null,
+    [nodes, selectedNodeId]
+  );
 
   const deleteSelectedNode = useCallback(() => {
-    const nodesToDelete = nodes.filter(n => n.selected);
+    const nodesToDelete = nodes.filter((n) => n.selected);
     if (nodesToDelete.length > 0) {
-      const idsToDelete = nodesToDelete.map(n => n.id);
+      const idsToDelete = nodesToDelete.map((n) => n.id);
       setNodes((nds) => nds.filter((n) => !idsToDelete.includes(n.id)));
       if (selectedNodeId && idsToDelete.includes(selectedNodeId)) {
         setSelectedNodeId(null);
       }
     }
-    setContextMenu(prev => ({ ...prev, isOpen: false }));
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
   }, [nodes, selectedNodeId, setNodes]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -281,21 +306,21 @@ function CanvasInner() {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDrawing) return;
-    setCurrentPoints(prev => [...prev, { x: e.clientX, y: e.clientY }]);
+    setCurrentPoints((prev) => [...prev, { x: e.clientX, y: e.clientY }]);
   };
 
   const handlePointerUp = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
-    
+
     if (currentPoints.length === 0) return;
 
     const startPoint = currentPoints[0];
     const endPoint = currentPoints[currentPoints.length - 1];
 
-    const flowPoints = currentPoints.map(p => screenToFlowPosition({ x: p.x, y: p.y }));
-    const xs = flowPoints.map(p => p.x);
-    const ys = flowPoints.map(p => p.y);
+    const flowPoints = currentPoints.map((p) => screenToFlowPosition({ x: p.x, y: p.y }));
+    const xs = flowPoints.map((p) => p.x);
+    const ys = flowPoints.map((p) => p.y);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
@@ -307,18 +332,23 @@ function CanvasInner() {
         setCurrentPoints([]);
         return;
       }
-      const normalizedPoints = flowPoints.map(p => ({
+      const normalizedPoints = flowPoints.map((p) => ({
         x: p.x - minX,
-        y: p.y - minY
+        y: p.y - minY,
       }));
       const newNode: Node = {
         id: `draw_${Date.now()}`,
         type: 'drawNode',
         position: { x: minX, y: minY },
         style: { width: Math.max(maxX - minX, 20), height: Math.max(maxY - minY, 20) },
-        data: { points: normalizedPoints, strokeColor: isDark ? '#ffffff' : '#000000', strokeWidth: 3, fillColor: 'none' }
+        data: {
+          points: normalizedPoints,
+          strokeColor: isDark ? '#ffffff' : '#000000',
+          strokeWidth: 3,
+          fillColor: 'none',
+        },
       };
-      setNodes(nds => [...nds, newNode]);
+      setNodes((nds) => [...nds, newNode]);
       setCurrentPoints([]);
       return;
     }
@@ -326,7 +356,7 @@ function CanvasInner() {
     // For other tools (shapes, frames, text), calculate width/height
     const flowStart = screenToFlowPosition({ x: startPoint.x, y: startPoint.y });
     const flowEnd = screenToFlowPosition({ x: endPoint.x, y: endPoint.y });
-    
+
     let width = Math.abs(flowEnd.x - flowStart.x);
     let height = Math.abs(flowEnd.y - flowStart.y);
     const x = Math.min(flowStart.x, flowEnd.x);
@@ -335,19 +365,26 @@ function CanvasInner() {
     // If clicked without dragging (or dragged very little), use default sizes
     if (width < 10 && height < 10) {
       if (['rectangle', 'circle', 'diamond', 'polygon', 'star'].includes(activeTool)) {
-        width = 120; height = 120;
+        width = 120;
+        height = 120;
       } else if (activeTool === 'line' || activeTool === 'arrow') {
-        width = 150; height = 20;
+        width = 150;
+        height = 20;
       } else if (activeTool === 'text') {
-        width = 120; height = 50;
+        width = 120;
+        height = 50;
       } else if (activeTool === 'note') {
-        width = 250; height = 250;
+        width = 250;
+        height = 250;
       } else if (activeTool === 'code') {
-        width = 300; height = 200;
+        width = 300;
+        height = 200;
       } else if (activeTool === 'image') {
-        width = 300; height = 200;
+        width = 300;
+        height = 200;
       } else if (['frame', 'section', 'slice'].includes(activeTool)) {
-        width = 400; height = 300;
+        width = 400;
+        height = 300;
       }
     }
 
@@ -356,12 +393,16 @@ function CanvasInner() {
       type: 'shapeNode',
       position: { x, y },
       style: { width, height },
-      data: {}
+      data: {},
     };
 
     if (['rectangle', 'circle', 'diamond', 'polygon', 'star'].includes(activeTool)) {
       newNode.type = 'shapeNode';
-      newNode.data = { shapeType: activeTool, backgroundColor: activeTool === 'rectangle' ? '#3b82f6' : activeTool === 'circle' ? '#ec4899' : '#f59e0b' };
+      newNode.data = {
+        shapeType: activeTool,
+        backgroundColor:
+          activeTool === 'rectangle' ? '#3b82f6' : activeTool === 'circle' ? '#ec4899' : '#f59e0b',
+      };
     } else if (activeTool === 'line' || activeTool === 'arrow') {
       newNode.type = 'shapeNode';
       newNode.data = { shapeType: activeTool, backgroundColor: isDark ? '#aaaaaa' : '#333333' };
@@ -390,43 +431,64 @@ function CanvasInner() {
 
   // Listen for AI Plugin commands
   useEffect(() => {
-    const unlisten = listen<{ action: string; payload: Record<string, unknown> }>('canvas-action', (event) => {
-      const { action, payload } = event.payload;
-      if (action === 'add_node') {
-        setNodes((nds) => [...nds, {
-          id: (payload.id as string) || `ai_node_${Date.now()}`,
-          type: payload.type as string,
-          position: (payload.position as { x: number; y: number }) || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-          data: (payload.data as Record<string, unknown>) || {}
-        }]);
-      } else if (action === 'update_node') {
-        setNodes((nds) => nds.map((node) => 
-          node.id === (payload.id as string) ? { ...node, data: { ...node.data, ...(payload.data as Record<string, unknown>) } } : node
-        ));
-      } else if (action === 'delete_node') {
-        setNodes((nds) => nds.filter((node) => node.id !== (payload.id as string)));
-        setEdges((eds) => eds.filter((edge) => edge.source !== (payload.id as string) && edge.target !== (payload.id as string)));
-      } else if (action === 'connect_nodes') {
-        setEdges((eds) => [...eds, {
-          id: (payload.id as string) || `ai_edge_${payload.source}_${payload.target}`,
-          source: payload.source as string,
-          target: payload.target as string,
-          label: (payload.label as string) || '',
-          animated: true,
-          style: { stroke: '#3b82f6', strokeWidth: 2 }
-        }]);
-      } else if (action === 'clear') {
-        setNodes([]);
-        setEdges([]);
-      } else if (action === 'export') {
-        handleExport();
-      } else if (action === 'import') {
-        handleImport();
+    const unlisten = listen<{ action: string; payload: Record<string, unknown> }>(
+      'canvas-action',
+      (event) => {
+        const { action, payload } = event.payload;
+        if (action === 'add_node') {
+          setNodes((nds) => [
+            ...nds,
+            {
+              id: (payload.id as string) || `ai_node_${Date.now()}`,
+              type: payload.type as string,
+              position: (payload.position as { x: number; y: number }) || {
+                x: Math.random() * 200 + 100,
+                y: Math.random() * 200 + 100,
+              },
+              data: (payload.data as Record<string, unknown>) || {},
+            },
+          ]);
+        } else if (action === 'update_node') {
+          setNodes((nds) =>
+            nds.map((node) =>
+              node.id === (payload.id as string)
+                ? { ...node, data: { ...node.data, ...(payload.data as Record<string, unknown>) } }
+                : node
+            )
+          );
+        } else if (action === 'delete_node') {
+          setNodes((nds) => nds.filter((node) => node.id !== (payload.id as string)));
+          setEdges((eds) =>
+            eds.filter(
+              (edge) =>
+                edge.source !== (payload.id as string) && edge.target !== (payload.id as string)
+            )
+          );
+        } else if (action === 'connect_nodes') {
+          setEdges((eds) => [
+            ...eds,
+            {
+              id: (payload.id as string) || `ai_edge_${payload.source}_${payload.target}`,
+              source: payload.source as string,
+              target: payload.target as string,
+              label: (payload.label as string) || '',
+              animated: true,
+              style: { stroke: '#3b82f6', strokeWidth: 2 },
+            },
+          ]);
+        } else if (action === 'clear') {
+          setNodes([]);
+          setEdges([]);
+        } else if (action === 'export') {
+          handleExport();
+        } else if (action === 'import') {
+          handleImport();
+        }
       }
-    });
+    );
 
     return () => {
-      unlisten.then(f => f());
+      unlisten.then((f) => f());
     };
   }, [setNodes, setEdges, handleExport, handleImport]);
 
@@ -450,7 +512,7 @@ function CanvasInner() {
       if (key === 'f') setActiveTool('frame');
       if (key === 's') setActiveTool('slice');
       if (key === 'p') setActiveTool('pen');
-      
+
       if (key === 'delete' || key === 'backspace') {
         if (selectedNodeId) {
           setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
@@ -465,10 +527,15 @@ function CanvasInner() {
   return (
     <div className="flex w-full h-full relative" ref={reactFlowWrapper}>
       <ProjectManager />
-      
+
       <div className="flex-1 h-full relative">
-        <CanvasToolbar activeTool={activeTool} setActiveTool={setActiveTool} onExport={handleExport} onImport={handleImport} />
-        
+        <CanvasToolbar
+          activeTool={activeTool}
+          setActiveTool={setActiveTool}
+          onExport={handleExport}
+          onImport={handleImport}
+        />
+
         {activeProjectId ? (
           <ReactFlow
             nodes={nodes}
@@ -495,16 +562,24 @@ function CanvasInner() {
             defaultEdgeOptions={{
               type: 'smoothstep',
               animated: false,
-              style: { strokeWidth: 2, stroke: isDark ? '#555' : '#aaa' }
+              style: { strokeWidth: 2, stroke: isDark ? '#555' : '#aaa' },
             }}
             connectionLineType={ConnectionLineType.SmoothStep}
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
-            <Controls position="bottom-right" className="mb-4 mr-4 shadow-xl border-border border bg-card/80 backdrop-blur-md rounded-lg overflow-hidden" />
-            <MiniMap 
-              nodeColor={isDark ? '#444' : '#eee'} 
-              maskColor={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'} 
-              position="bottom-left" 
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={20}
+              size={1}
+              color={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}
+            />
+            <Controls
+              position="bottom-right"
+              className="mb-4 mr-4 shadow-xl border-border border bg-card/80 backdrop-blur-md rounded-lg overflow-hidden"
+            />
+            <MiniMap
+              nodeColor={isDark ? '#444' : '#eee'}
+              maskColor={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'}
+              position="bottom-left"
               className="mb-4 ml-4 rounded-xl shadow-xl border-border border bg-card/80 backdrop-blur-md"
             />
           </ReactFlow>
@@ -519,18 +594,22 @@ function CanvasInner() {
 
         {/* Drawing Overlay */}
         {activeTool !== 'select' && activeTool !== 'pan' && activeProjectId && (
-          <div 
+          <div
             className="absolute inset-0 z-40 cursor-crosshair touch-none"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
           >
-            {isDrawing && currentPoints.length > 0 && (
-              (activeTool === 'pencil' || activeTool === 'pen') ? (
+            {isDrawing &&
+              currentPoints.length > 0 &&
+              (activeTool === 'pencil' || activeTool === 'pen' ? (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <path 
-                    d={currentPoints.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')}
+                  <path
+                    d={currentPoints.reduce(
+                      (acc, p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`),
+                      ''
+                    )}
                     stroke={isDark ? '#ffffff' : '#000000'}
                     strokeWidth={3}
                     fill="none"
@@ -540,32 +619,41 @@ function CanvasInner() {
                   />
                 </svg>
               ) : (
-                <div 
+                <div
                   className="absolute border-2 border-primary border-dashed bg-primary/10 pointer-events-none"
                   style={{
-                    left: Math.min(currentPoints[0].x, currentPoints[currentPoints.length - 1].x) - overlayOffset.left,
-                    top: Math.min(currentPoints[0].y, currentPoints[currentPoints.length - 1].y) - overlayOffset.top,
+                    left:
+                      Math.min(currentPoints[0].x, currentPoints[currentPoints.length - 1].x) -
+                      overlayOffset.left,
+                    top:
+                      Math.min(currentPoints[0].y, currentPoints[currentPoints.length - 1].y) -
+                      overlayOffset.top,
                     width: Math.abs(currentPoints[currentPoints.length - 1].x - currentPoints[0].x),
-                    height: Math.abs(currentPoints[currentPoints.length - 1].y - currentPoints[0].y)
+                    height: Math.abs(
+                      currentPoints[currentPoints.length - 1].y - currentPoints[0].y
+                    ),
                   }}
                 />
-              )
-            )}
+              ))}
           </div>
         )}
       </div>
 
-      <PropertiesPanel selectedNode={selectedNode} updateNode={updateNode} deleteNode={deleteSelectedNode} />
-      
-      <ContextMenu 
+      <PropertiesPanel
+        selectedNode={selectedNode}
+        updateNode={updateNode}
+        deleteNode={deleteSelectedNode}
+      />
+
+      <ContextMenu
         isOpen={contextMenu.isOpen}
         position={{ x: contextMenu.x, y: contextMenu.y }}
-        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setContextMenu((prev) => ({ ...prev, isOpen: false }))}
         onBringToFront={handleBringToFront}
         onSendToBack={handleSendToBack}
         onDelete={deleteSelectedNode}
         targetNodeId={contextMenu.targetNodeId}
-        selectedNodesCount={nodes.filter(n => n.selected).length}
+        selectedNodesCount={nodes.filter((n) => n.selected).length}
       />
     </div>
   );
