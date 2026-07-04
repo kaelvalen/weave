@@ -9,6 +9,7 @@ import {
   Cpu,
   GitBranch,
   PenTool,
+  User,
 } from 'lucide-react';
 import type { View } from '@/types/app';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -74,6 +75,27 @@ export function TopNav() {
         })}
 
         <div className="w-px h-4 bg-border mx-1" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setActiveView('profile')}
+              className={[
+                'relative flex items-center justify-center w-8 h-8 rounded-full',
+                'transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                activeView === 'profile'
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              ].join(' ')}
+            >
+              <User className="w-4 h-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={8}>
+            <p>Profile & AI Memory</p>
+          </TooltipContent>
+        </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>

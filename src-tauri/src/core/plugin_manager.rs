@@ -164,6 +164,8 @@ impl PluginManager {
                 .capability("memory.recall", r#"{"key":"..."}"#, "Recall a value by key (omit key to get all)")
                 .capability("memory.delete", r#"{"key":"..."}"#, "Delete a stored key")
                 .capability("memory.list", r#"{}"#, "List all stored memory keys")
+                .capability("memory.get_profile", r#"{}"#, "Get the user profile information and preferences")
+                .capability("memory.update_profile", r#"{"profile":{"name":"...","role":"...","bio":"...","tech_stack":[],"ai_directives":"..."}}"#, "Update the user profile and AI preferences")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.coder", "Coder AI")
@@ -459,7 +461,8 @@ impl PluginManager {
         prompt.push_str("3. **Multi-step Planning**: Break down complex requests. Think step-by-step. Implement one part, run tests/checks, then move to the next.\n");
         prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
         prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n");
-        prompt.push_str("6. **Note Organization**: Use `note.create`, `note.update`, `note.toggle_pin`, and `note.search` to actively document findings, pin important architecture notes, and organize research with tags.\n\n");
+        prompt.push_str("6. **Note Organization**: Use `note.create`, `note.update`, `note.toggle_pin`, and `note.search` to actively document findings, pin important architecture notes, and organize research with tags.\n");
+        prompt.push_str("7. **User Memory & Learning**: Actively use `memory.store` to remember important user preferences, coding style rules, or tech stack details discovered during conversations. Check existing user facts with `memory.recall` when making architectural decisions.\n\n");
         prompt.push_str("## Tool Usage Rules\n");
         prompt.push_str("- Output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call> when using a tool.\n");
         prompt.push_str("- You will receive the tool result in the next turn.\n");
@@ -479,6 +482,42 @@ impl PluginManager {
             }
         }
 
+        if let Ok(memory) = MemoryPlugin::read_memory() {
+            let profile = memory.get("_user_profile").cloned().unwrap_or_else(MemoryPlugin::default_profile);
+            prompt.push_str("\n## User Profile & Learned Memory Context\n");
+            let name = profile.get("name").and_then(|v| v.as_str()).unwrap_or("Weave User");
+            let role = profile.get("role").and_then(|v| v.as_str()).unwrap_or("Developer");
+            let bio = profile.get("bio").and_then(|v| v.as_str()).unwrap_or("");
+            let directives = profile.get("ai_directives").and_then(|v| v.as_str()).unwrap_or("");
+            prompt.push_str(&format!("- **User Identity**: {} ({})\n", name, role));
+            if !bio.is_empty() {
+                prompt.push_str(&format!("- **Bio/About**: {}\n", bio));
+            }
+            if let Some(stack) = profile.get("tech_stack").and_then(|v| v.as_array()) {
+                let stack_str: Vec<&str> = stack.iter().filter_map(|s| s.as_str()).collect();
+                if !stack_str.is_empty() {
+                    prompt.push_str(&format!("- **Tech Stack & Preferences**: {}\n", stack_str.join(", ")));
+                }
+            }
+            if !directives.is_empty() {
+                prompt.push_str(&format!("- **Custom AI Directives**: {}\n", directives));
+            }
+
+            let mut facts = Vec::new();
+            for (k, v) in &memory {
+                if !k.starts_with('_') {
+                    facts.push(format!("  - `{}`: {}", k, v));
+                }
+            }
+            if !facts.is_empty() {
+                prompt.push_str("- **Learned Facts & Rules**:\n");
+                for fact in facts {
+                    prompt.push_str(&format!("{}\n", fact));
+                }
+            }
+            prompt.push_str("\n");
+        }
+
         prompt.push_str("\n## Example Flow\n");
         prompt.push_str("User: Fix the bug in auth.ts\n");
         prompt.push_str("You: <call plugin=\"coder.read_file\">{\"path\":\"src/auth.ts\"}</call>\n");
@@ -491,3 +530,4 @@ impl PluginManager {
         prompt
     }
 }
+

@@ -9,6 +9,7 @@ import { KnowledgeBase } from '@/components/knowledge/KnowledgeBase';
 import { LocalModels } from '@/components/models/LocalModels';
 import { Workflows } from '@/components/workflows/Workflows';
 import { Canvas } from '@/components/canvas/Canvas';
+import { ProfilePanel } from '@/components/profile/ProfilePanel';
 import { useEffect } from 'react';
 
 export function Workspace() {
@@ -21,6 +22,8 @@ export function Workspace() {
         return <PluginMarket />;
       case 'settings':
         return <SettingsPanel />;
+      case 'profile':
+        return <ProfilePanel />;
       case 'files':
         return <FileManager />;
       case 'notes':

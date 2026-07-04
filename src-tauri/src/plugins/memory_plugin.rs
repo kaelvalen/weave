@@ -22,6 +22,8 @@ impl MemoryPlugin {
             "memory.recall" => Self::recall(params),
             "memory.delete" => Self::delete(params),
             "memory.list" => Self::list_keys(),
+            "memory.get_profile" => Self::get_profile(),
+            "memory.update_profile" => Self::update_profile(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
         }
     }
@@ -31,7 +33,7 @@ impl MemoryPlugin {
         Ok(dir.join("memory.json"))
     }
 
-    fn read_memory() -> Result<HashMap<String, Value>, WeaveError> {
+    pub fn read_memory() -> Result<HashMap<String, Value>, WeaveError> {
         let file_path = Self::get_memory_file()?;
         if !file_path.exists() { return Ok(HashMap::new()); }
         let content = std::fs::read_to_string(&file_path)?;
@@ -91,5 +93,34 @@ impl MemoryPlugin {
         let keys: Vec<&String> = memory.keys().collect();
         info!("Listed {} memory keys", keys.len());
         Ok(json!({"keys": keys, "count": keys.len(), "success": true}))
+    }
+
+    pub fn default_profile() -> Value {
+        json!({
+            "name": "Weave User",
+            "role": "Software Architect & Developer",
+            "bio": "Building autonomous agentic coding workflows.",
+            "tech_stack": ["TypeScript", "Rust", "React", "Tauri", "NixOS", "Python"],
+            "ai_directives": "Be concise, precise, and helpful. Always verify code changes before completing tasks."
+        })
+    }
+
+    pub fn get_profile() -> Result<Value, WeaveError> {
+        let memory = Self::read_memory()?;
+        let profile = memory.get("_user_profile").cloned().unwrap_or_else(Self::default_profile);
+        Ok(json!({"profile": profile, "success": true}))
+    }
+
+    pub fn update_profile(params: Value) -> Result<Value, WeaveError> {
+        let profile = if let Some(p) = params.get("profile") {
+            p.clone()
+        } else {
+            params.clone()
+        };
+        let mut memory = Self::read_memory()?;
+        memory.insert("_user_profile".to_string(), profile.clone());
+        Self::write_memory(&memory)?;
+        info!("Updated user profile in memory");
+        Ok(json!({"profile": profile, "success": true}))
     }
 }

@@ -9,7 +9,8 @@ export type View =
   | 'knowledge'
   | 'models'
   | 'workflows'
-  | 'canvas';
+  | 'canvas'
+  | 'profile';
 
 export interface ProviderConfig {
   api_key: string;
