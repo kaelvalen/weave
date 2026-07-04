@@ -506,7 +506,17 @@ impl PluginManager {
             let mut facts = Vec::new();
             for (k, v) in &memory {
                 if !k.starts_with('_') {
-                    facts.push(format!("  - `{}`: {}", k, v));
+                    if let Some(obj) = v.as_object() {
+                        let content = obj.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                        let source = obj.get("source").and_then(|s| s.as_str()).unwrap_or("conversation");
+                        let conf = obj.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.85);
+                        let tags = obj.get("tags").and_then(|t| t.as_array())
+                            .map(|arr| arr.iter().filter_map(|val| val.as_str()).collect::<Vec<_>>().join(", "))
+                            .unwrap_or_else(|| "general".to_string());
+                        facts.push(format!("  - [{:.0}% confidence, from {}] `{}`: {} (tags: {})", conf * 100.0, source, k, content, tags));
+                    } else {
+                        facts.push(format!("  - `{}`: {}", k, v));
+                    }
                 }
             }
             if !facts.is_empty() {

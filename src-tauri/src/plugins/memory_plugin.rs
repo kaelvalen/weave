@@ -37,7 +37,36 @@ impl MemoryPlugin {
         let file_path = Self::get_memory_file()?;
         if !file_path.exists() { return Ok(HashMap::new()); }
         let content = std::fs::read_to_string(&file_path)?;
-        let memory: HashMap<String, Value> = serde_json::from_str(&content).unwrap_or_default();
+        let mut memory: HashMap<String, Value> = serde_json::from_str(&content).unwrap_or_default();
+        for (key, val) in memory.iter_mut() {
+            if !key.starts_with('_') {
+                if let Some(obj) = val.as_object() {
+                    if obj.contains_key("content") && obj.contains_key("source") && obj.contains_key("confidence") {
+                        continue;
+                    }
+                }
+                let content_str = match val {
+                    Value::String(ref s) => s.clone(),
+                    _ => if let Some(obj) = val.as_object() {
+                        obj.get("content").and_then(|v| v.as_str()).map(|s| s.to_string())
+                            .unwrap_or_else(|| serde_json::to_string(&val).unwrap_or_default())
+                    } else {
+                        serde_json::to_string(&val).unwrap_or_default()
+                    }
+                };
+                let now_iso = chrono::Utc::now().to_rfc3339();
+                let id_hash = format!("mem_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() % 100000);
+                *val = json!({
+                    "id": id_hash,
+                    "key": key,
+                    "content": content_str,
+                    "source": "conversation",
+                    "confidence": 0.85,
+                    "timestamp": now_iso,
+                    "tags": ["general"]
+                });
+            }
+        }
         Ok(memory)
     }
 
@@ -52,14 +81,68 @@ impl MemoryPlugin {
     fn store(params: Value) -> Result<Value, WeaveError> {
         let key = params.get("key").and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'key' parameter".to_string()))?;
-        let value = params.get("value")
-            .ok_or_else(|| WeaveError::PluginError("Missing 'value' parameter".to_string()))?;
         let mut memory = Self::read_memory()?;
         let is_update = memory.contains_key(key);
-        memory.insert(key.to_string(), value.clone());
+        
+        let stored_val = if key.starts_with('_') {
+            params.get("value").cloned().unwrap_or(Value::Null)
+        } else {
+            let existing_obj = memory.get(key).and_then(|v| v.as_object());
+            let value_param = params.get("value");
+            
+            let content_str = if let Some(c) = params.get("content").and_then(|v| v.as_str()) {
+                c.to_string()
+            } else if let Some(v) = value_param {
+                match v {
+                    Value::String(ref s) => s.clone(),
+                    _ => if let Some(obj) = v.as_object() {
+                        obj.get("content").and_then(|c| c.as_str()).map(|s| s.to_string())
+                            .unwrap_or_else(|| serde_json::to_string(v).unwrap_or_default())
+                    } else {
+                        serde_json::to_string(v).unwrap_or_default()
+                    }
+                }
+            } else if let Some(existing) = existing_obj {
+                existing.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string()
+            } else {
+                "".to_string()
+            };
+
+            let id = params.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
+                .or_else(|| existing_obj.and_then(|e| e.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())))
+                .unwrap_or_else(|| format!("mem_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() % 100000));
+                
+            let source = params.get("source").and_then(|v| v.as_str())
+                .or_else(|| existing_obj.and_then(|e| e.get("source").and_then(|v| v.as_str())))
+                .unwrap_or("conversation");
+                
+            let confidence = params.get("confidence").and_then(|v| v.as_f64())
+                .or_else(|| existing_obj.and_then(|e| e.get("confidence").and_then(|v| v.as_f64())))
+                .unwrap_or(0.85);
+                
+            let timestamp = params.get("timestamp").and_then(|v| v.as_str()).map(|s| s.to_string())
+                .or_else(|| existing_obj.and_then(|e| e.get("timestamp").and_then(|v| v.as_str()).map(|s| s.to_string())))
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+                
+            let tags = params.get("tags").cloned()
+                .or_else(|| existing_obj.and_then(|e| e.get("tags").cloned()))
+                .unwrap_or_else(|| json!(["general"]));
+
+            json!({
+                "id": id,
+                "key": key,
+                "content": content_str,
+                "source": source,
+                "confidence": confidence,
+                "timestamp": timestamp,
+                "tags": tags
+            })
+        };
+
+        memory.insert(key.to_string(), stored_val.clone());
         Self::write_memory(&memory)?;
         info!("Stored memory key: {} ({})", key, if is_update { "updated" } else { "created" });
-        Ok(json!({"key": key, "action": if is_update { "updated" } else { "created" }, "success": true}))
+        Ok(json!({"key": key, "action": if is_update { "updated" } else { "created" }, "value": stored_val, "success": true}))
     }
 
     fn recall(params: Value) -> Result<Value, WeaveError> {
