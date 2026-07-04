@@ -98,6 +98,7 @@ impl PluginManager {
                 .capability("note.update", r#"{"id":"...","title":"...","content":"..."}"#, "Update an existing note")
                 .capability("note.delete", r#"{"id":"..."}"#, "Delete a note by ID")
                 .capability("note.search", r#"{"query":"..."}"#, "Search notes by title, content, or tags")
+                .capability("note.toggle_pin", r#"{"id":"..."}"#, "Toggle pinned status of a note")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.sys", "System & OS")
@@ -457,7 +458,8 @@ impl PluginManager {
         prompt.push_str("2. **Context Gathering**: Always start by understanding the environment. Use `coder.list_dir` or `coder.read_file` to analyze the project structure and existing code BEFORE writing code.\n");
         prompt.push_str("3. **Multi-step Planning**: Break down complex requests. Think step-by-step. Implement one part, run tests/checks, then move to the next.\n");
         prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
-        prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n\n");
+        prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n");
+        prompt.push_str("6. **Note Organization**: Use `note.create`, `note.update`, `note.toggle_pin`, and `note.search` to actively document findings, pin important architecture notes, and organize research with tags.\n\n");
         prompt.push_str("## Tool Usage Rules\n");
         prompt.push_str("- Output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call> when using a tool.\n");
         prompt.push_str("- You will receive the tool result in the next turn.\n");

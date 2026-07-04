@@ -18,6 +18,8 @@ pub struct Note {
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 pub struct NotePlugin;
@@ -37,6 +39,7 @@ impl NotePlugin {
             "note.update" => Self::update(params),
             "note.delete" => Self::delete(params),
             "note.search" => Self::search(params),
+            "note.toggle_pin" => Self::toggle_pin(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
         }
     }
@@ -46,6 +49,7 @@ impl NotePlugin {
             "id": note.id, "title": note.title, "content": note.content,
             "created_at": note.created_at.timestamp(), "updated_at": note.updated_at.timestamp(),
             "tags": note.tags,
+            "pinned": note.pinned,
         })
     }
 
@@ -55,12 +59,13 @@ impl NotePlugin {
         let tags: Vec<String> = params.get("tags").and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
             .unwrap_or_default();
+        let pinned = params.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
 
         let notes_dir = AppConfig::notes_dir()?;
         std::fs::create_dir_all(&notes_dir)?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
-        let note = Note { id: id.clone(), title: title.to_string(), content: content.to_string(), created_at: now, updated_at: now, tags };
+        let note = Note { id: id.clone(), title: title.to_string(), content: content.to_string(), created_at: now, updated_at: now, tags, pinned };
         let file_path = notes_dir.join(format!("{}.json", id));
         let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, note_json)?;
@@ -99,10 +104,31 @@ impl NotePlugin {
         if let Some(tags) = params.get("tags").and_then(|v| v.as_array()) {
             note.tags = tags.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
         }
+        if let Some(p) = params.get("pinned").and_then(|v| v.as_bool()) {
+            note.pinned = p;
+        }
         note.updated_at = Utc::now();
         let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, note_json)?;
         info!("Updated note: {} ({})", note.title, id);
+        Ok(json!({"note": Self::note_to_json(&note), "success": true}))
+    }
+
+    fn toggle_pin(params: Value) -> Result<Value, WeaveError> {
+        let id = params.get("id").and_then(|v| v.as_str())
+            .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
+        let notes_dir = AppConfig::notes_dir()?;
+        let file_path = notes_dir.join(format!("{}.json", id));
+        if !file_path.exists() { return Err(WeaveError::PluginError(format!("Note not found: {}", id))); }
+        let content = std::fs::read_to_string(&file_path)?;
+        let mut note: Note = serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        
+        note.pinned = !note.pinned;
+        note.updated_at = Utc::now();
+        
+        let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        std::fs::write(&file_path, note_json)?;
+        info!("Toggled pin for note: {} ({}) -> pinned={}", note.title, id, note.pinned);
         Ok(json!({"note": Self::note_to_json(&note), "success": true}))
     }
 
@@ -147,7 +173,13 @@ impl NotePlugin {
                 }
             }
         }
-        notes.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        notes.sort_by(|a, b| {
+            match (a.pinned, b.pinned) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => b.updated_at.cmp(&a.updated_at),
+            }
+        });
         Ok(notes)
     }
 }
