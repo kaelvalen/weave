@@ -1,15 +1,11 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Zap } from 'lucide-react';
+import type { WorkflowNode } from '@/stores/useWorkflowStore';
 
-interface TriggerNodeProps {
-  data: {
-    label: string;
-    description: string;
-  };
-  selected: boolean;
-}
+type TriggerNodeProps = NodeProps<WorkflowNode>;
 
 export function TriggerNode({ data, selected }: TriggerNodeProps) {
+  const d = data as WorkflowNode['data'];
   return (
     <div
       className={`
@@ -33,8 +29,8 @@ export function TriggerNode({ data, selected }: TriggerNodeProps) {
       </div>
 
       <div className="p-4 bg-gradient-to-b from-transparent to-muted/10">
-        <h4 className="font-semibold text-sm mb-1.5 text-foreground">{data.label}</h4>
-        <p className="text-xs text-muted-foreground leading-relaxed">{data.description}</p>
+        <h4 className="font-semibold text-sm mb-1.5 text-foreground">{d.label}</h4>
+        <p className="text-xs text-muted-foreground leading-relaxed">{d.description}</p>
       </div>
 
       <Handle

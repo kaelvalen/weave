@@ -326,9 +326,9 @@ export const ChatMessage = React.memo(function ChatMessage({
                 <path d="M12 17h.01" />
               </svg>
               <span className="leading-relaxed">
-                Modelin yanıtı (max_tokens sınırı nedeniyle) yarıda kesildi. İşlem tamamlanamadı.{' '}
-                <strong>Settings</strong> bölümünden max_tokens değerini artırabilir veya modele
-                dosyayı parça parça yazmasını söyleyebilirsiniz.
+                The model's response was truncated (likely due to max_tokens), so the operation did
+                not complete. Increase <strong>max_tokens</strong> in Settings, or ask the model to
+                write the file in smaller chunks.
               </span>
             </div>
           )}

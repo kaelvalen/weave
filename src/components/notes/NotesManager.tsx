@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // CodeMirror imports
 import CodeMirror from '@uiw/react-codemirror';
@@ -29,6 +30,7 @@ export function NotesManager() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
@@ -98,7 +100,6 @@ export function NotesManager() {
 
   const handleDelete = async () => {
     if (!selectedNote) return;
-    if (!confirm('Are you sure you want to delete this note?')) return;
 
     try {
       const res = (await executeCapability('com.weave.builtin.note', 'note.delete', {
@@ -114,6 +115,20 @@ export function NotesManager() {
       toast.error('Failed to delete note');
     }
   };
+
+  // Ctrl/Cmd+S to save the current note
+  useEffect(() => {
+    if (!selectedNote) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNote]);
 
   const filteredNotes = notes.filter(
     (n) =>
@@ -214,7 +229,7 @@ export function NotesManager() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmDeleteOpen(true)}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -309,6 +324,16 @@ export function NotesManager() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Delete note?"
+        description="This note will be permanently removed. This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

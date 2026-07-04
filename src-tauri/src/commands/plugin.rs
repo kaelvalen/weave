@@ -13,6 +13,67 @@ pub async fn plugin_discover(
     app_state.plugin_manager.discover()
 }
 
+/// Install a plugin from a local `.wpk` file by copying it into the plugin directory
+/// and re-running discovery. Returns the freshly discovered plugin list.
+#[tauri::command]
+pub async fn plugin_install_from_file(
+    source_path: String,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<Plugin>, WeaveError> {
+    let source = std::path::PathBuf::from(&source_path);
+    if !source.exists() {
+        return Err(WeaveError::PluginError(format!(
+            "Source file does not exist: {}",
+            source_path
+        )));
+    }
+
+    // Validate extension — accept .wpk (zipped) or a directory containing manifest.toml.
+    let is_wpk = source.extension().and_then(|s| s.to_str()) == Some("wpk");
+    let is_dir_with_manifest = source.is_dir() && source.join("manifest.toml").exists();
+    if !is_wpk && !is_dir_with_manifest {
+        return Err(WeaveError::PluginError(
+            "Path must point to a .wpk file or a directory containing manifest.toml".to_string(),
+        ));
+    }
+
+    let plugin_dir = crate::utils::config::AppConfig::plugin_dir()?;
+    std::fs::create_dir_all(&plugin_dir)?;
+
+    let dest_filename = source
+        .file_name()
+        .ok_or_else(|| WeaveError::PluginError("Could not determine file name".to_string()))?
+        .to_string_lossy()
+        .to_string();
+    let dest = plugin_dir.join(&dest_filename);
+
+    if is_wpk {
+        std::fs::copy(&source, &dest)?;
+        info!("Installed .wpk plugin from {} to {:?}", source_path, dest);
+    } else {
+        // Copy directory recursively (simple implementation)
+        copy_dir_recursive(&source, &dest)?;
+        info!("Installed plugin directory from {} to {:?}", source_path, dest);
+    }
+
+    app_state.plugin_manager.discover()
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<(), WeaveError> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            std::fs::copy(&path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn plugin_load(
     plugin_id: String,

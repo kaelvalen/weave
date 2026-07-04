@@ -15,13 +15,13 @@ import {
   Workflow,
   Cpu,
   Loader2,
+  ArrowDown,
 } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
 import { Button } from '@/components/ui/button';
 import { PlayCircle } from 'lucide-react';
-
 const SUGGESTED_PROMPTS = [
   {
     category: 'Filesystem',
@@ -71,16 +71,32 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   const { messages, isStreaming, startNewSession } = useChatStore();
   const isChatExpanded = useAppStore((s) => s.isChatExpanded);
   const [showHistory, setShowHistory] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
 
   useChatStream();
 
+  // Track whether the user is near the bottom of the scroll area.
+  // While streaming, we only auto-scroll if the user hasn't scrolled up to read history.
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsPinnedToBottom(distanceFromBottom < 80);
+  };
+
   useEffect(() => {
+    if (bottomRef.current && isPinnedToBottom) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isStreaming, isPinnedToBottom]);
+
+  const scrollToBottom = () => {
+    setIsPinnedToBottom(true);
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isStreaming]);
+  };
 
   useEffect(() => {
     useChatStore.getState().loadHistory();
@@ -154,8 +170,12 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
           </div>
 
           {/* ── Messages ── */}
-          <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-            <div className="flex flex-col max-w-4xl mx-auto w-full min-w-0 max-w-full pr-3 sm:pr-4">
+          <ScrollArea className="flex-1 min-h-0">
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex flex-col max-w-4xl mx-auto w-full min-w-0 pr-3 sm:pr-4"
+            >
               {!hasMessages ? (
                 <EmptyState />
               ) : (
@@ -211,6 +231,21 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
               )}
             </div>
           </ScrollArea>
+
+          {/* Scroll-to-bottom button — only when the user has scrolled up during/after streaming */}
+          {!isPinnedToBottom && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                aria-label="Scroll to latest message"
+                title="Scroll to latest"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-card border border-border shadow-lg text-foreground hover:bg-muted transition-colors"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Approval Banner ── */}

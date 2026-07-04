@@ -1,6 +1,7 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use tokio::process::Child;
 use tracing::info;
 
 pub mod commands;
@@ -25,6 +26,7 @@ pub struct AppState {
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
     pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
+    pub local_server: Arc<tokio::sync::Mutex<Option<Child>>>,
 }
 
 impl AppState {
@@ -68,6 +70,7 @@ impl AppState {
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),
             canvas_tx,
+            local_server: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
 }

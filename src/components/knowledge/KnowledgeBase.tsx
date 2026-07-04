@@ -1,9 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
-import { Database, UploadCloud, FileText, Trash2, Search, HardDrive } from 'lucide-react';
+import {
+  Database,
+  UploadCloud,
+  FileText,
+  Trash2,
+  Search,
+  HardDrive,
+  Loader2,
+  Sparkles,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface KnowledgeFile {
   id: string;
@@ -12,26 +25,112 @@ interface KnowledgeFile {
   created_at: number;
 }
 
+interface IndexProgress {
+  filename: string;
+  processed: number;
+  total: number;
+  done: boolean;
+  error: string | null;
+}
+
+interface IndexStatus {
+  chunks: unknown[];
+  built_at: number;
+  file_count: number;
+}
+
+interface SearchResult {
+  filename: string;
+  snippet: string;
+  score: number;
+}
+
 export function KnowledgeBase() {
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [indexing, setIndexing] = useState(false);
+  const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
+  const [ragQuery, setRagQuery] = useState('');
+  const [ragResults, setRagResults] = useState<SearchResult[]>([]);
+  const [ragSearching, setRagSearching] = useState(false);
 
   const fetchFiles = async () => {
     try {
       const data = await invoke<KnowledgeFile[]>('list_knowledge_files');
       setFiles(data);
     } catch (e) {
-      toast.error(String(e));
+      toast.error(`Failed to load knowledge files: ${extractError(e)}`);
+    }
+  };
+
+  const fetchIndexStatus = async () => {
+    try {
+      const data = await invoke<IndexStatus>('get_knowledge_index_status');
+      setIndexStatus(data);
+    } catch (e) {
+      console.warn('Failed to fetch index status', e);
     }
   };
 
   useEffect(() => {
     // Standard data-fetch on mount: populate knowledge base file list.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFiles();
+    fetchIndexStatus();
+
+    const unlisten = listen<IndexProgress>('knowledge-index-progress', (event) => {
+      setIndexProgress(event.payload);
+      if (event.payload.done) {
+        setIndexing(false);
+        if (event.payload.error) {
+          toast.error(`Indexing failed: ${event.payload.error}`);
+        } else {
+          toast.success('Knowledge base indexed successfully.');
+        }
+        setTimeout(() => setIndexProgress(null), 1500);
+        fetchIndexStatus();
+      }
+    });
+
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
+
+  const handleIndex = async () => {
+    setIndexing(true);
+    setIndexProgress({ filename: '', processed: 0, total: files.length, done: false, error: null });
+    try {
+      await invoke('index_knowledge_files');
+    } catch (e) {
+      setIndexing(false);
+      setIndexProgress(null);
+      toast.error(`Indexing failed: ${extractError(e)}`);
+    }
+  };
+
+  const handleRagSearch = async () => {
+    const q = ragQuery.trim();
+    if (!q) {
+      setRagResults([]);
+      return;
+    }
+    setRagSearching(true);
+    try {
+      const results = await invoke<SearchResult[]>('search_knowledge', { query: q, limit: 8 });
+      setRagResults(results);
+      if (results.length === 0) {
+        toast.info('No matching snippets found. Try indexing your files first.');
+      }
+    } catch (e) {
+      toast.error(`Search failed: ${extractError(e)}`);
+    } finally {
+      setRagSearching(false);
+    }
+  };
 
   const handleFileUpload = async (uploadFiles: FileList | File[]) => {
     for (let i = 0; i < uploadFiles.length; i++) {
@@ -44,10 +143,11 @@ export function KnowledgeBase() {
         });
         toast.success(`${file.name} uploaded to Knowledge Base.`);
       } catch (e) {
-        toast.error(`Failed to upload ${file.name}: ${e}`);
+        toast.error(`Failed to upload ${file.name}: ${extractError(e)}`);
       }
     }
     fetchFiles();
+    fetchIndexStatus();
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -63,8 +163,9 @@ export function KnowledgeBase() {
       await invoke('delete_knowledge_file', { filename });
       toast.success('File deleted.');
       fetchFiles();
+      fetchIndexStatus();
     } catch (e) {
-      toast.error(String(e));
+      toast.error(extractError(e));
     }
   };
 
@@ -118,7 +219,7 @@ export function KnowledgeBase() {
         </div>
 
         {/* Body */}
-        <div className="flex-1 grid grid-cols-3 gap-6 mb-12 min-h-0">
+        <div className="flex-1 grid grid-cols-3 gap-6 pb-32 min-h-0">
           {/* Main List */}
           <div className="col-span-2 border rounded-xl bg-card overflow-hidden flex flex-col">
             <div className="border-b px-6 py-4 bg-muted/20 flex justify-between items-center">
@@ -177,7 +278,7 @@ export function KnowledgeBase() {
                       variant="ghost"
                       size="icon"
                       className="text-red-500 hover:text-red-600 hover:bg-red-500/10 flex-shrink-0"
-                      onClick={() => handleDelete(f.filename)}
+                      onClick={() => setFileToDelete(f.filename)}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -204,26 +305,139 @@ export function KnowledgeBase() {
                   <div
                     className="h-full bg-primary/80 transition-all"
                     style={{
-                      width: `${Math.min(100, (files.reduce((acc, f) => acc + f.size_bytes, 0) / 100000000) * 100)}%`,
+                      width: `${Math.min(100, files.length * 5)}%`,
                     }}
                   ></div>
                 </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  {files.length} file{files.length !== 1 ? 's' : ''} indexed
+                </p>
               </div>
 
               <div className="pt-6 border-t">
-                <h4 className="text-sm font-semibold mb-2">Vector Database</h4>
-                <p className="text-xs text-muted-foreground">
-                  Embedding models will process your files and index them into a local vector
-                  database for instant AI retrieval.
+                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  Keyword Index
+                </h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Index your files into a local keyword database so the AI can retrieve relevant
+                  snippets during conversations.
                 </p>
-                <div className="mt-4 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 p-3 rounded-lg text-xs font-medium text-center">
-                  Indexing is paused.
+
+                {indexStatus && indexStatus.built_at > 0 ? (
+                  <div className="text-[11px] text-muted-foreground mb-3 space-y-0.5">
+                    <p>
+                      <span className="font-semibold text-foreground">
+                        {indexStatus.file_count}
+                      </span>{' '}
+                      file{indexStatus.file_count !== 1 ? 's' : ''} indexed
+                    </p>
+                    <p>Last built: {new Date(indexStatus.built_at).toLocaleString()}</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground mb-3 italic">Not indexed yet.</p>
+                )}
+
+                {indexing && indexProgress && (
+                  <div className="mb-3">
+                    <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                      <span className="truncate mr-2">
+                        {indexProgress.filename || 'Preparing…'}
+                      </span>
+                      <span className="font-mono flex-shrink-0">
+                        {indexProgress.processed}/{indexProgress.total}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{
+                          width: `${
+                            indexProgress.total > 0
+                              ? (indexProgress.processed / indexProgress.total) * 100
+                              : 5
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={handleIndex}
+                  disabled={indexing || files.length === 0}
+                >
+                  {indexing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {indexing ? 'Indexing…' : 'Build Index'}
+                </Button>
+
+                <div className="mt-4">
+                  <Label>Test retrieval</Label>
+                  <div className="flex gap-2 mt-1.5">
+                    <Input
+                      placeholder="Ask something…"
+                      value={ragQuery}
+                      onChange={(e) => setRagQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRagSearch();
+                      }}
+                      className="h-8 text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2"
+                      onClick={handleRagSearch}
+                      disabled={ragSearching || !ragQuery.trim()}
+                    >
+                      {ragSearching ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Search className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                  {ragResults.length > 0 && (
+                    <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                      {ragResults.map((r, i) => (
+                        <div key={i} className="border rounded-md p-2 bg-background/60">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-semibold truncate">{r.filename}</span>
+                            <span className="text-[9px] text-muted-foreground font-mono flex-shrink-0 ml-2">
+                              {r.score.toFixed(2)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-3">
+                            {r.snippet}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!fileToDelete}
+        onOpenChange={(open) => !open && setFileToDelete(null)}
+        title="Delete file?"
+        description="This file will be permanently removed from your knowledge base. This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (fileToDelete) handleDelete(fileToDelete);
+        }}
+      />
     </div>
   );
 }

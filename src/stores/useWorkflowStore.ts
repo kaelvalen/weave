@@ -9,7 +9,18 @@ import {
   NodeChange,
   EdgeChange,
 } from '@xyflow/react';
-import { readTextFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile, stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+
+export interface WorkflowNodeData {
+  label: string;
+  description: string;
+  capability?: string;
+  params?: Record<string, unknown>;
+  plugin_id?: string;
+  [key: string]: unknown;
+}
+
+export type WorkflowNode = Node<WorkflowNodeData>;
 
 export interface WorkflowState {
   nodes: Node[];
@@ -19,6 +30,7 @@ export interface WorkflowState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (type: 'triggerNode' | 'actionNode', label: string, description: string) => void;
+  updateNodeData: (id: string, patch: Partial<WorkflowNodeData>) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
   loadWorkflow: () => Promise<void>;
@@ -50,6 +62,9 @@ const initialEdges: Edge[] = [
     style: { stroke: '#3b82f6', strokeWidth: 2 },
   },
 ];
+
+// Last-known mtime (seconds) of the workflow file; used to skip redundant reloads.
+let lastLoadedMtime = 0;
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   nodes: initialNodes,
@@ -83,9 +98,23 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       id: `node_${Date.now()}`,
       type,
       position: { x: Math.random() * 200 + 200, y: Math.random() * 200 + 200 },
-      data: { label, description },
+      data: {
+        label,
+        description,
+        // Sensible defaults so action nodes are executable without opening the inspector.
+        ...(type === 'actionNode'
+          ? { capability: 'shell.exec', params: { command: 'echo "Hello from workflow"' } }
+          : {}),
+      },
     };
     set({ nodes: [...get().nodes, newNode], dirty: true });
+  },
+
+  updateNodeData: (id, patch) => {
+    set({
+      nodes: get().nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+      dirty: true,
+    });
   },
 
   setNodes: (nodes) => set({ nodes }),
@@ -95,6 +124,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   loadWorkflow: async () => {
     try {
+      // Skip re-reading if the file hasn't changed since the last load.
+      try {
+        const info = await stat('weave_workflow.json', { baseDir: BaseDirectory.AppData });
+        const mtime = info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0;
+        if (mtime && mtime === lastLoadedMtime) return;
+        lastLoadedMtime = mtime;
+      } catch {
+        // File doesn't exist yet; fall through to defaults.
+        lastLoadedMtime = 0;
+      }
       const content = await readTextFile('weave_workflow.json', { baseDir: BaseDirectory.AppData });
       const data = JSON.parse(content);
       if (data.nodes && data.edges) {
@@ -106,17 +145,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   saveWorkflow: async () => {
+    const data = {
+      nodes: get().nodes,
+      edges: get().edges,
+    };
+    await writeTextFile('weave_workflow.json', JSON.stringify(data, null, 2), {
+      baseDir: BaseDirectory.AppData,
+    });
+    // Refresh mtime cache so the next poll doesn't immediately reload our own write.
     try {
-      const data = {
-        nodes: get().nodes,
-        edges: get().edges,
-      };
-      await writeTextFile('weave_workflow.json', JSON.stringify(data, null, 2), {
-        baseDir: BaseDirectory.AppData,
-      });
-      set({ dirty: false });
-    } catch (e) {
-      console.error('Failed to save workflow', e);
+      const info = await stat('weave_workflow.json', { baseDir: BaseDirectory.AppData });
+      lastLoadedMtime = info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0;
+    } catch {
+      // ignore
     }
+    set({ dirty: false });
   },
 }));

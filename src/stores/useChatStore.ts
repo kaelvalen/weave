@@ -583,8 +583,19 @@ export const useChatStore = create<ChatState>()(
         }
       });
 
-      // Execute tools autonomously without requiring step-by-step approval
-      const requiresApproval = false;
+      // File/system-modifying capabilities require explicit user approval before running.
+      // Non-destructive tools (read, list, calc, search, etc.) execute autonomously.
+      const DESTRUCTIVE_CAPS = new Set([
+        'file.write',
+        'file.delete',
+        'coder.write_file',
+        'coder.apply_diff',
+        'coder.revert_file',
+        'shell.exec',
+        'shell.run',
+        'note.delete',
+      ]);
+      const requiresApproval = validCalls.some((c) => DESTRUCTIVE_CAPS.has(c.capName));
 
       // Attach tool calls to assistant message
       set((state) => {

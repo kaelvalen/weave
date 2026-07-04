@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Trash2, Copy, BringToFront, SendToBack, Layers } from 'lucide-react';
+import { Trash2, Copy as CopyIcon, BringToFront, SendToBack, Layers } from 'lucide-react';
 
 export interface ContextMenuProps {
   isOpen: boolean;
@@ -8,7 +8,7 @@ export interface ContextMenuProps {
   onBringToFront: () => void;
   onSendToBack: () => void;
   onDelete: () => void;
-  onCopy?: () => void;
+  onDuplicate?: () => void;
   targetNodeId: string | null;
   selectedNodesCount: number;
 }
@@ -20,7 +20,7 @@ export function ContextMenu({
   onBringToFront,
   onSendToBack,
   onDelete,
-  onCopy,
+  onDuplicate,
   targetNodeId,
   selectedNodesCount,
 }: ContextMenuProps) {
@@ -53,11 +53,11 @@ export function ContextMenu({
       {(targetNodeId || selectedNodesCount > 0) && (
         <>
           <MenuItem
-            icon={<Copy size={14} />}
-            label="Copy"
-            shortcut="Ctrl+C"
-            onClick={onCopy || (() => {})}
-            disabled={true}
+            icon={<CopyIcon size={14} />}
+            label="Duplicate"
+            shortcut="Ctrl+D"
+            onClick={onDuplicate || (() => {})}
+            disabled={!onDuplicate}
           />
 
           <div className="h-[1px] w-full bg-border/50 my-1"></div>

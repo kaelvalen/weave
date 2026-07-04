@@ -22,7 +22,7 @@ export function StatusBar() {
 
   return (
     <footer
-      className="h-7 flex items-center gap-0 px-4 flex-shrink-0 select-none"
+      className="h-7 flex items-center gap-0 px-4 flex-shrink-0 select-none relative z-50"
       style={{
         background: 'hsl(var(--background) / 0.65)',
         backdropFilter: 'blur(12px)',

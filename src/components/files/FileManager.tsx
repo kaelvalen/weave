@@ -21,6 +21,7 @@ import { usePluginStore } from '@/stores/usePluginStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { FileEditor } from './FileEditor';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Helper to pick icon
 function getFileIcon(name: string) {
@@ -159,6 +160,9 @@ export function FileManager() {
   const [selectedFile, setSelectedFile] = useState<FSNode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [pendingSelect, setPendingSelect] = useState<FSNode | null>(null);
+  const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false);
   const { executeCapability } = usePluginStore();
 
   const loadDirectory = useCallback(
@@ -295,6 +299,15 @@ export function FileManager() {
     return rootNodes.filter((node) => node.name.toLowerCase().includes(q));
   }, [rootNodes, searchQuery]);
 
+  const handleSelect = (item: FSNode) => {
+    if (editorDirty && selectedFile && item.path !== selectedFile.path) {
+      setPendingSelect(item);
+      setConfirmSwitchOpen(true);
+      return;
+    }
+    setSelectedFile(item);
+  };
+
   return (
     <div className="flex h-full w-full bg-transparent pt-16">
       {/* ── Sidebar: File Tree ── */}
@@ -358,7 +371,7 @@ export function FileManager() {
                 key={item.path}
                 item={item}
                 selectedPath={selectedFile?.path}
-                onSelect={setSelectedFile}
+                onSelect={handleSelect}
                 onToggle={handleToggle}
                 query={searchQuery}
               />
@@ -397,7 +410,7 @@ export function FileManager() {
                 </div>
               ) : (
                 <div className="flex-1 w-full flex flex-col min-h-0 relative">
-                  <FileEditor path={selectedFile.path} />
+                  <FileEditor path={selectedFile.path} onDirtyChange={setEditorDirty} />
                 </div>
               )}
             </div>
@@ -411,6 +424,19 @@ export function FileManager() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmSwitchOpen}
+        onOpenChange={setConfirmSwitchOpen}
+        title="Discard unsaved changes?"
+        description="The current file has unsaved edits. Switching files will discard those changes."
+        confirmLabel="Discard & switch"
+        destructive
+        onConfirm={() => {
+          if (pendingSelect) setSelectedFile(pendingSelect);
+          setPendingSelect(null);
+        }}
+      />
     </div>
   );
 }

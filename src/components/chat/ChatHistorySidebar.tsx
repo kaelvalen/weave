@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
   const {
@@ -48,6 +49,7 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
     oldName: string;
     newName: string;
   } | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     listSessions();
@@ -121,9 +123,8 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
         onClick={() => {
           if (isEditing) return;
           loadSession(session.id);
-          if (onClose && window.innerWidth < 768) {
-            onClose();
-          }
+          // Sidebar is an overlay; close it after picking a session so the chat is fully visible.
+          onClose?.();
         }}
       >
         <div className="flex items-center gap-2 overflow-hidden flex-1">
@@ -201,7 +202,7 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
               variant="ghost"
               size="icon"
               className="h-6 w-6 hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-              onClick={() => deleteSession(session.id)}
+              onClick={() => setSessionToDelete(session.id)}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
@@ -212,7 +213,7 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <div className="w-72 h-full border-r bg-muted/30 flex flex-col flex-shrink-0 rounded-l-2xl overflow-hidden">
+    <div className="absolute inset-y-0 left-0 z-20 w-72 h-full border-r bg-card/95 backdrop-blur-xl flex flex-col flex-shrink-0 rounded-l-2xl overflow-hidden shadow-2xl">
       <div className="p-3 flex items-center justify-between border-b bg-card/40 rounded-tl-2xl">
         <button
           type="button"
@@ -385,6 +386,18 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!sessionToDelete}
+        onOpenChange={(open) => !open && setSessionToDelete(null)}
+        title="Delete chat session?"
+        description="This conversation will be permanently removed. This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (sessionToDelete) deleteSession(sessionToDelete);
+        }}
+      />
     </div>
   );
 }

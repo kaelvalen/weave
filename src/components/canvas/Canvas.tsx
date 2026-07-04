@@ -34,6 +34,8 @@ import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { PropertiesPanel } from './PropertiesPanel';
 import { ProjectManager } from './ProjectManager';
 import { ContextMenu } from './ContextMenu';
+import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
 
 function CanvasInner() {
   const { mode: themeMode } = useThemeStore();
@@ -204,7 +206,7 @@ function CanvasInner() {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.error('Failed to export:', err);
+      toast.error(`Failed to export canvas: ${extractError(err)}`);
     }
   }, [nodes, edges]);
 
@@ -245,7 +247,7 @@ function CanvasInner() {
                 setEdges(parsed.edges);
               }
             } catch (err) {
-              console.error('Failed to parse file', err);
+              toast.error(`Failed to parse file: ${extractError(err)}`);
             }
           };
           reader.readAsText(file);
@@ -253,7 +255,7 @@ function CanvasInner() {
         input.click();
       }
     } catch (err) {
-      console.error('Failed to import:', err);
+      toast.error(`Failed to import canvas: ${extractError(err)}`);
     }
   }, [setNodes, setEdges]);
 
@@ -293,6 +295,19 @@ function CanvasInner() {
         setSelectedNodeId(null);
       }
     }
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
+  }, [nodes, selectedNodeId, setNodes]);
+
+  const duplicateSelectedNodes = useCallback(() => {
+    const selected = nodes.filter((n) => n.selected || n.id === selectedNodeId);
+    if (selected.length === 0) return;
+    const duplicates = selected.map((n) => ({
+      ...n,
+      id: `dup_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      position: { x: (n.position?.x || 0) + 40, y: (n.position?.y || 0) + 40 },
+      selected: false,
+    }));
+    setNodes((nds) => [...nds, ...duplicates]);
     setContextMenu((prev) => ({ ...prev, isOpen: false }));
   }, [nodes, selectedNodeId, setNodes]);
 
@@ -514,10 +529,18 @@ function CanvasInner() {
       if (key === 'p') setActiveTool('pen');
 
       if (key === 'delete' || key === 'backspace') {
-        if (selectedNodeId) {
-          setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
-          setSelectedNodeId(null);
-        }
+        // Delete every selected node (supports multi-selection), not just the last-clicked one.
+        setNodes((nds) => {
+          const hasSelection = nds.some((n) => n.selected);
+          if (!hasSelection && !selectedNodeId) return nds;
+          const next = nds.filter((n) => !(n.selected || n.id === selectedNodeId));
+          return next.length === nds.length ? nds : next;
+        });
+        setSelectedNodeId(null);
+      }
+
+      if (key === 'escape') {
+        setActiveTool('select');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -595,7 +618,7 @@ function CanvasInner() {
         {/* Drawing Overlay */}
         {activeTool !== 'select' && activeTool !== 'pan' && activeProjectId && (
           <div
-            className="absolute inset-0 z-40 cursor-crosshair touch-none"
+            className="absolute inset-0 z-30 cursor-crosshair touch-none"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -652,6 +675,7 @@ function CanvasInner() {
         onBringToFront={handleBringToFront}
         onSendToBack={handleSendToBack}
         onDelete={deleteSelectedNode}
+        onDuplicate={duplicateSelectedNodes}
         targetNodeId={contextMenu.targetNodeId}
         selectedNodesCount={nodes.filter((n) => n.selected).length}
       />

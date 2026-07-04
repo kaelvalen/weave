@@ -1,13 +1,21 @@
 'use client';
 
 import { Toaster as Sonner } from 'sonner';
+import { useThemeStore } from '@/stores/useThemeStore';
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const mode = useThemeStore((s) => s.mode);
+  const isDark =
+    mode === 'dark' ||
+    (mode === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   return (
     <Sonner
-      theme="system"
+      theme={isDark ? 'dark' : 'light'}
       className="toaster group"
       toastOptions={{
         classNames: {

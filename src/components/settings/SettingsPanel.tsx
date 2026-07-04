@@ -13,9 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, Server, Monitor, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Save, Server, Monitor, Eye, EyeOff, Trash2, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
 import { useThemeStore, BorderRadius, BorderWidth, FontFamily } from '@/stores/useThemeStore';
+import { Skeleton } from '@/components/ui/skeleton';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 export function SettingsPanel() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -46,7 +49,7 @@ export function SettingsPanel() {
   useEffect(() => {
     invoke<AppConfig>('system_get_config')
       .then(setConfig)
-      .catch((e) => toast.error('Failed to load settings', { description: String(e) }));
+      .catch((e) => toast.error('Failed to load settings', { description: extractError(e) }));
   }, []);
 
   const handleSave = async () => {
@@ -56,11 +59,35 @@ export function SettingsPanel() {
       refreshConfig();
       toast.success('Settings saved successfully');
     } catch (e) {
-      toast.error('Failed to save settings', { description: String(e) });
+      toast.error('Failed to save settings', { description: extractError(e) });
     }
   };
 
-  if (!config) return null;
+  if (!config) {
+    return (
+      <div className="flex flex-col h-full w-full bg-transparent pt-16">
+        <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
+          <div className="flex items-center justify-between py-8 flex-shrink-0">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-40" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <Skeleton className="h-10 w-32" />
+          </div>
+          <div className="flex-1 flex flex-col min-h-0 bg-card rounded-t-xl border-x border-t shadow-sm">
+            <div className="border-b px-4">
+              <Skeleton className="h-14 w-64" />
+            </div>
+            <div className="flex-1 p-6 lg:p-10 space-y-6">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full w-full bg-transparent pt-16">
@@ -595,7 +622,40 @@ export function SettingsPanel() {
                   desc="Configure where Weave looks for plugins and data."
                 >
                   <FieldLabel label="Plugins Directory">
-                    <Input value={config.plugins.directory} disabled />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={config.plugins.directory}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            plugins: { ...config.plugins, directory: e.target.value },
+                          })
+                        }
+                        placeholder="~/.weave/plugins"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="flex-shrink-0"
+                        title="Browse for folder"
+                        onClick={async () => {
+                          try {
+                            const selected = await openDialog({ directory: true, multiple: false });
+                            if (selected && typeof selected === 'string') {
+                              setConfig({
+                                ...config,
+                                plugins: { ...config.plugins, directory: selected },
+                              });
+                            }
+                          } catch (e) {
+                            toast.error(`Failed to open folder dialog: ${extractError(e)}`);
+                          }
+                        }}
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </FieldLabel>
                 </SectionCard>
               </TabsContent>

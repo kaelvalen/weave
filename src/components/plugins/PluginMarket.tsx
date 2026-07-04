@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { PluginCard } from './PluginCard';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,10 @@ import {
   Zap,
   AlertCircle,
   X,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 const CATEGORIES = [
   { value: null, label: 'All', icon: Layers },
@@ -39,20 +41,31 @@ export function PluginMarket() {
   const clearError = usePluginStore((s) => s.clearError);
   const loadPlugin = usePluginStore((s) => s.loadPlugin);
   const unloadPlugin = usePluginStore((s) => s.unloadPlugin);
+  const installFromFile = usePluginStore((s) => s.installFromFile);
 
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(clearError, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error, clearError]);
+  const [installing, setInstalling] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await discoverPlugins();
     setRefreshing(false);
+  };
+
+  const handleInstall = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        filters: [{ name: 'Weave Plugin', extensions: ['wpk'] }],
+      });
+      if (!selected || typeof selected !== 'string') return;
+      setInstalling(true);
+      await installFromFile(selected);
+    } catch {
+      // user cancelled or dialog failed — nothing to surface
+    } finally {
+      setInstalling(false);
+    }
   };
 
   const filteredPlugins = plugins.filter((p) => {
@@ -92,14 +105,26 @@ export function PluginMarket() {
             </p>
           </div>
 
-          <Button
-            onClick={handleRefresh}
-            disabled={refreshing || isLoading}
-            className="gap-2 shadow-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleInstall}
+              disabled={installing || isLoading}
+              variant="outline"
+              className="gap-2 shadow-sm"
+              title="Install a plugin from a .wpk file"
+            >
+              <Download className={`w-4 h-4 ${installing ? 'animate-spin' : ''}`} />
+              Install
+            </Button>
+            <Button
+              onClick={handleRefresh}
+              disabled={refreshing || isLoading}
+              className="gap-2 shadow-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* ── Body ── */}

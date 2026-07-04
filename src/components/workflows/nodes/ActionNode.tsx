@@ -1,15 +1,11 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Play } from 'lucide-react';
+import type { WorkflowNode } from '@/stores/useWorkflowStore';
 
-interface ActionNodeProps {
-  data: {
-    label: string;
-    description: string;
-  };
-  selected: boolean;
-}
+type ActionNodeProps = NodeProps<WorkflowNode>;
 
 export function ActionNode({ data, selected }: ActionNodeProps) {
+  const d = data as WorkflowNode['data'];
   return (
     <div
       className={`
@@ -39,8 +35,8 @@ export function ActionNode({ data, selected }: ActionNodeProps) {
       </div>
 
       <div className="p-4 bg-gradient-to-b from-transparent to-muted/10">
-        <h4 className="font-semibold text-sm mb-1.5 text-foreground">{data.label}</h4>
-        <p className="text-xs text-muted-foreground leading-relaxed">{data.description}</p>
+        <h4 className="font-semibold text-sm mb-1.5 text-foreground">{d.label}</h4>
+        <p className="text-xs text-muted-foreground leading-relaxed">{d.description}</p>
       </div>
 
       <Handle

@@ -12,6 +12,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
+import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
 import {
   ArrowUp,
   FileText,
@@ -246,7 +248,7 @@ export function ChatInput() {
     try {
       await invoke('chat_abort_generation');
     } catch (err) {
-      console.error('Failed to abort generation', err);
+      toast.error(`Failed to abort generation: ${extractError(err)}`);
     }
   }, []);
 
@@ -807,7 +809,6 @@ export function ChatInput() {
                 if (!isChatExpanded) toggleChat(true);
               }}
               placeholder="Ask anything, attach images, or trigger tools..."
-              disabled={isStreaming}
               rows={1}
               className={[
                 'flex-1 min-h-[36px] max-h-[180px] py-2 px-1 text-sm leading-relaxed resize-none font-sans',

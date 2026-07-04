@@ -1,4 +1,4 @@
-import { useEffect, ReactNode } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { hexToHslString } from '@/lib/utils';
 
@@ -9,12 +9,23 @@ interface ThemeProviderProps {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const { mode, lightThemeId, darkThemeId, themes, deleteTheme } = useThemeStore();
 
-  // Resolve actual mode (system to light/dark)
-  const isSystemDark =
+  // Track the live system theme so `activeTheme` (and the CSS variables it injects)
+  // stay reactive when the OS dark/light preference changes at runtime.
+  const [systemDark, setSystemDark] = useState(
     typeof window !== 'undefined'
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      : false;
-  const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const isDark = mode === 'system' ? systemDark : mode === 'dark';
   const activeThemeId = isDark ? darkThemeId : lightThemeId;
   const activeTheme = themes.find((t) => t.id === activeThemeId) || themes[0];
 
@@ -36,21 +47,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
     };
 
-    if (mode === 'system') {
-      applyMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-      const handleChange = (e: MediaQueryListEvent) => {
-        if (useThemeStore.getState().mode === 'system') {
-          applyMode(e.matches);
-        }
-      };
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    } else {
-      applyMode(mode === 'dark');
-    }
-  }, [mode]);
+    applyMode(isDark);
+  }, [isDark]);
 
   // Inject Custom Colors
   useEffect(() => {

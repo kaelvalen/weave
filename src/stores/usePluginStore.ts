@@ -17,6 +17,7 @@ interface PluginState {
   selectedCategory: string | null;
 
   discoverPlugins: () => Promise<void>;
+  installFromFile: (sourcePath: string) => Promise<void>;
   loadPlugin: (id: string) => Promise<void>;
   unloadPlugin: (id: string) => Promise<void>;
   executeCapability: (
@@ -76,6 +77,33 @@ export const usePluginStore = create<PluginState>()(
           set((state) => {
             state.isLoading = false;
             state.error = `Plugin discovery failed: ${msg}`;
+          });
+        }
+      },
+
+      installFromFile: async (sourcePath: string) => {
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const plugins: Plugin[] = await invoke('plugin_install_from_file', {
+            sourcePath,
+          });
+          set((state) => {
+            state.plugins = plugins;
+            state.loadedPlugins = plugins
+              .filter((p) => p.state === 'active' || p.state === 'loaded')
+              .map((p) => p.id);
+            state.isLoading = false;
+          });
+          toast.success('Plugin installed successfully');
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Plugin install failed: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `Plugin install failed: ${msg}`;
           });
         }
       },

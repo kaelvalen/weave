@@ -13,11 +13,13 @@ import { GitBranch, Play, Zap, Bot, Code, FileText, Send, Clock, Save } from 'lu
 import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
 import { useWorkflowStore } from '@/stores/useWorkflowStore';
 import { invoke } from '@tauri-apps/api/core';
 
 import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
+import { WorkflowPropertyPanel } from './WorkflowPropertyPanel';
 
 export function Workflows() {
   const {
@@ -64,60 +66,83 @@ export function Workflows() {
     return () => clearInterval(interval);
   }, [loadWorkflow]);
 
+  // Delete selected nodes via keyboard (matches Canvas behaviour)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'delete' || e.key === 'backspace') {
+        const target = e.target as HTMLElement | null;
+        // Don't intercept while typing in inputs/textareas/contenteditable.
+        if (
+          target &&
+          (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        ) {
+          return;
+        }
+        const state = useWorkflowStore.getState();
+        const hasSelection = state.nodes.some((n) => n.selected);
+        if (!hasSelection) return;
+        e.preventDefault();
+        state.setNodes(state.nodes.filter((n) => !n.selected));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleExecute = async () => {
     try {
       toast.info('Initiating automated workflow execution...');
       const actionNodes = nodes.filter((n) => n.type === 'actionNode');
-      const steps = actionNodes.map((node, index) => {
-        let capability = 'shell.run';
-        let params: Record<string, unknown> = { command: 'echo "Executing AI Action"' };
+      if (actionNodes.length === 0) {
+        toast.warning('No action nodes found in workflow. Add an action node to execute.');
+        return;
+      }
 
-        if (
-          node.data.label === 'AI Agent' ||
-          (node.data.description as string)?.toLowerCase().includes('ai')
-        ) {
-          capability = 'memory.store';
-          params = { key: `ai_step_${index}`, value: 'Agent context processed' };
-        } else if (node.data.label === 'Send to Chat') {
-          capability = 'note.create';
-          params = {
-            title: `Workflow Output ${index}`,
-            content: 'Automated workflow execution report.',
-          };
-        }
+      const steps = actionNodes.map((node) => {
+        const data = node.data as {
+          label?: string;
+          capability?: string;
+          params?: Record<string, unknown>;
+          plugin_id?: string;
+        };
+        const capability = data.capability || 'shell.exec';
+        const params =
+          data.params && Object.keys(data.params).length > 0
+            ? data.params
+            : { command: `echo "${data.label || 'Action'}"` };
+        const pluginId =
+          data.plugin_id || `com.weave.builtin.${capability.split('.')[0] || 'shell'}`;
 
         return {
           id: node.id,
-          plugin_id: capability.split('.')[0]
-            ? `com.weave.builtin.${capability.split('.')[0]}`
-            : 'com.weave.builtin.shell',
-          capability: capability,
-          params: params,
+          plugin_id: pluginId,
+          capability,
+          params,
           timeout_ms: 10000,
           continue_on_error: true,
         };
       });
 
-      if (steps.length === 0) {
-        toast.warning('No action nodes found in workflow. Add an action node to execute.');
-        return;
-      }
-
       await invoke('workflow_execute_chain', { steps });
       toast.success('Automated workflow pipeline executed successfully!');
     } catch (err) {
+      const errorMsg = extractError(err);
       console.error('Workflow execution failed:', err);
-      toast.error(`Workflow execution failed: ${err}`);
+      toast.error(`Workflow execution failed: ${errorMsg}`);
     }
   };
 
   const handleSave = async () => {
-    await saveWorkflow();
-    toast.success('Workflow saved successfully.');
+    try {
+      await saveWorkflow();
+      toast.success('Workflow saved successfully.');
+    } catch (err) {
+      toast.error(`Failed to save workflow: ${extractError(err)}`);
+    }
   };
 
   return (
-    <div className="flex h-full w-full bg-background pt-12 overflow-hidden selection:bg-primary/20">
+    <div className="flex h-full w-full bg-background pt-16 overflow-hidden selection:bg-primary/20">
       {/* Premium Glassmorphic Sidebar Tools */}
       <div className="w-72 border-r border-border/40 bg-card/40 backdrop-blur-xl flex flex-col z-10 shadow-2xl relative">
         <div className="p-5 border-b border-border/30 flex items-center justify-between">
@@ -248,6 +273,8 @@ export function Workflows() {
           </Panel>
         </ReactFlow>
       </div>
+
+      <WorkflowPropertyPanel />
     </div>
   );
 }

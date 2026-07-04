@@ -1,10 +1,12 @@
-import { Cpu, Download, Activity, Trash2, StopCircle, HardDrive } from 'lucide-react';
+import { Cpu, Download, Activity, Trash2, StopCircle, HardDrive, Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { extractError } from '@/lib/errors';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface LocalModelInfo {
   name: string;
@@ -24,18 +26,28 @@ interface DownloadProgress {
   error: string | null;
 }
 
+interface LocalServerStatus {
+  running: boolean;
+  url: string;
+  pid: number | null;
+  message: string;
+}
+
 export function LocalModels() {
   const [models, setModels] = useState<LocalModelInfo[]>([]);
   const [stats, setStats] = useState<SystemStats>({ ram_usage: 0, ram_total: 16_000_000_000 });
   const [downloadUrl, setDownloadUrl] = useState('');
   const [activeDownload, setActiveDownload] = useState<DownloadProgress | null>(null);
+  const [modelToDelete, setModelToDelete] = useState<string | null>(null);
+  const [serverStatus, setServerStatus] = useState<LocalServerStatus | null>(null);
+  const [serverBusy, setServerBusy] = useState(false);
 
   const fetchModels = async () => {
     try {
       const data = await invoke<LocalModelInfo[]>('list_local_models');
       setModels(data);
     } catch (e) {
-      console.error(e);
+      toast.error(`Failed to load local models: ${extractError(e)}`);
     }
   };
 
@@ -44,19 +56,56 @@ export function LocalModels() {
       const data = await invoke<SystemStats>('get_system_stats');
       setStats(data);
     } catch (e) {
-      console.error(e);
+      // Stats are polled every 2s; toast on every failure would be noisy.
+      console.warn('Failed to fetch system stats', e);
+    }
+  };
+
+  const fetchServerStatus = async () => {
+    try {
+      const data = await invoke<LocalServerStatus>('local_server_status');
+      setServerStatus(data);
+    } catch (e) {
+      console.warn('Failed to fetch local server status', e);
+    }
+  };
+
+  const handleStartServer = async () => {
+    setServerBusy(true);
+    try {
+      const data = await invoke<LocalServerStatus>('local_server_start');
+      setServerStatus(data);
+      toast.success(data.message);
+      // Give Ollama a moment, then re-probe for accurate reachability.
+      setTimeout(fetchServerStatus, 1500);
+    } catch (e) {
+      toast.error(`Failed to start server: ${extractError(e)}`);
+    } finally {
+      setServerBusy(false);
+    }
+  };
+
+  const handleStopServer = async () => {
+    setServerBusy(true);
+    try {
+      const data = await invoke<LocalServerStatus>('local_server_stop');
+      setServerStatus(data);
+      toast.success(data.message);
+    } catch (e) {
+      toast.error(`Failed to stop server: ${extractError(e)}`);
+    } finally {
+      setServerBusy(false);
     }
   };
 
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
     // Standard data-fetch on mount: load installed models and poll system stats.
     fetchModels();
+    fetchServerStatus();
 
     // Poll stats
     fetchStats();
     const interval = setInterval(fetchStats, 2000);
-    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Listen to download progress
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {
@@ -79,20 +128,26 @@ export function LocalModels() {
   }, []);
 
   const handleDownload = async () => {
-    if (!downloadUrl.includes('.gguf')) {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(downloadUrl);
+    } catch {
+      toast.error('Please enter a valid URL');
+      return;
+    }
+    if (!parsedUrl.pathname.toLowerCase().endsWith('.gguf')) {
       toast.error('URL must point to a .gguf file');
       return;
     }
 
-    const urlParts = downloadUrl.split('/');
-    const filename = urlParts[urlParts.length - 1].split('?')[0];
+    const filename = parsedUrl.pathname.split('/').pop() || 'model.gguf';
 
     try {
       setActiveDownload({ filename, downloaded: 0, total: null, done: false, error: null });
       await invoke('download_local_model', { url: downloadUrl, filename });
       setDownloadUrl('');
     } catch (e) {
-      toast.error(String(e));
+      toast.error(extractError(e));
       setActiveDownload(null);
     }
   };
@@ -103,7 +158,7 @@ export function LocalModels() {
       toast.success('Model deleted');
       fetchModels();
     } catch (e) {
-      toast.error(String(e));
+      toast.error(extractError(e));
     }
   };
 
@@ -143,7 +198,7 @@ export function LocalModels() {
         </div>
 
         {/* Body */}
-        <div className="flex-1 grid grid-cols-3 gap-6 mb-12 min-h-0">
+        <div className="flex-1 grid grid-cols-3 gap-6 pb-32 min-h-0">
           {/* Main List */}
           <div className="col-span-2 border rounded-xl bg-card overflow-hidden flex flex-col">
             <div className="border-b px-6 py-4 bg-muted/20 flex justify-between items-center">
@@ -202,7 +257,7 @@ export function LocalModels() {
                       variant="ghost"
                       size="icon"
                       className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                      onClick={() => handleDelete(m.name)}
+                      onClick={() => setModelToDelete(m.name)}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -241,15 +296,69 @@ export function LocalModels() {
 
               <div className="pt-6 border-t">
                 <h4 className="text-sm font-semibold mb-4">Active Server</h4>
-                <div className="bg-muted/30 rounded-lg p-4 border text-center flex flex-col items-center justify-center gap-2">
-                  <StopCircle className="w-8 h-8 text-muted-foreground/40" />
-                  <p className="text-xs text-muted-foreground font-mono">Server is stopped.</p>
+                <div className="bg-muted/30 rounded-lg p-4 border flex flex-col items-center justify-center gap-3">
+                  {serverStatus?.running ? (
+                    <>
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                        </span>
+                        <span className="text-xs font-mono">Server running</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono text-center break-all">
+                        {serverStatus.url}
+                        {serverStatus.pid ? ` (pid ${serverStatus.pid})` : ''}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-2 mt-1"
+                        onClick={handleStopServer}
+                        disabled={serverBusy}
+                      >
+                        <Square className="w-3.5 h-3.5" /> Stop
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <StopCircle className="w-8 h-8 text-muted-foreground/40" />
+                      <p className="text-xs text-muted-foreground font-mono text-center">
+                        {serverStatus?.message || 'Server is stopped.'}
+                      </p>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8 gap-2 mt-1"
+                        onClick={handleStartServer}
+                        disabled={serverBusy}
+                      >
+                        <Play className="w-3.5 h-3.5" /> Start Server
+                      </Button>
+                      <p className="text-[10px] text-muted-foreground text-center max-w-[200px]">
+                        Starts <code className="font-mono">ollama serve</code> locally. Install
+                        Ollama first if you haven't.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!modelToDelete}
+        onOpenChange={(open) => !open && setModelToDelete(null)}
+        title="Delete model?"
+        description="This model file will be permanently deleted and its disk space freed. This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (modelToDelete) handleDelete(modelToDelete);
+        }}
+      />
     </div>
   );
 }

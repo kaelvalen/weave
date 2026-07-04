@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { Save, Loader2, AlertCircle, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { sql } from '@codemirror/lang-sql';
 
 interface FileEditorProps {
   path: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const getLanguageExtension = (path: string) => {
@@ -80,7 +81,7 @@ const getLanguageName = (path: string): string => {
   }
 };
 
-export function FileEditor({ path }: FileEditorProps) {
+export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -90,12 +91,19 @@ export function FileEditor({ path }: FileEditorProps) {
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
 
   const isSystemDark =
     typeof window !== 'undefined'
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
       : false;
   const isDark = mode === 'system' ? isSystemDark : mode === 'dark';
+
+  // Notify parent whenever dirty state changes so it can prompt before switching files.
+  useEffect(() => {
+    onDirtyChangeRef.current?.(isDirty);
+  }, [isDirty]);
 
   const languageExt = getLanguageExtension(path);
   const languageName = getLanguageName(path);
@@ -271,7 +279,13 @@ export function FileEditor({ path }: FileEditorProps) {
         <div className="flex items-center gap-2 overflow-hidden">
           <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-medium truncate text-foreground/90">{filename}</span>
-          {isDirty && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+          {isDirty && (
+            <span
+              className="w-2 h-2 rounded-full bg-primary flex-shrink-0"
+              aria-label="Unsaved changes"
+              role="status"
+            />
+          )}
         </div>
 
         <Button
