@@ -61,8 +61,8 @@ export function Workspace() {
       {/* Dynamic View Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative view-transition">{renderView()}</div>
 
-      {/* Floating AI Chat Container (Only when not already in full-screen Chat Command Center) */}
-      {activeView !== 'chat' && (
+      {/* Standard Floating AI Chat Container (For all non-chat and non-files views like Profile, Notes, Settings, etc.) */}
+      {activeView !== 'chat' && activeView !== 'files' && (
         <div
           className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 flex flex-col pointer-events-none rounded-2xl ${
             isChatExpanded
@@ -71,7 +71,7 @@ export function Workspace() {
           }`}
         >
           <div className="w-full h-full min-w-0 max-w-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner isolate [transform:translateZ(0)] [backface-visibility:hidden]">
-            <ChatPanel isFloating={true} />
+            <ChatPanel isFloating={true} isAgentVariant={false} />
           </div>
         </div>
       )}

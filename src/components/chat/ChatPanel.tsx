@@ -20,6 +20,13 @@ import {
   ShieldQuestion,
   Check,
   Minimize2,
+  Sparkles,
+  Bug,
+  HelpCircle,
+  Code2,
+  FileCode,
+  Copy,
+  X,
 } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
@@ -72,7 +79,19 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
-export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
+export function ChatPanel({
+  isFloating = false,
+  isAgentVariant = false,
+  isDocked = false,
+  selectedFile,
+  onCodeAction,
+}: {
+  isFloating?: boolean;
+  isAgentVariant?: boolean;
+  isDocked?: boolean;
+  selectedFile?: { name: string; path: string; type: string } | null;
+  onCodeAction?: (type: 'explain' | 'bugs' | 'refactor') => void;
+}) {
   const { messages, isStreaming, startNewSession } = useChatStore();
   const isChatExpanded = useAppStore((s) => s.isChatExpanded);
   const [showHistory, setShowHistory] = useState(false);
@@ -124,6 +143,28 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   const hasMessages = messages.length > 0;
 
   if (isFloating && !isChatExpanded) {
+    if (isAgentVariant) {
+      return (
+        <div
+          className="w-full h-full flex items-center px-3 sm:px-3.5 cursor-pointer bg-gradient-to-r from-card/95 to-card/85 hover:from-primary/15 hover:to-card/95 transition-all group rounded-full select-none"
+          onClick={() => toggleChat(true)}
+          title="Open Weave AI Agent Panel (⌘J / Ctrl+J)"
+        >
+          <div className="flex items-center gap-2 w-full min-w-0">
+            <div className="w-6 sm:w-7 h-6 sm:h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground text-primary transition-all shrink-0 shadow-sm">
+              <Bot className="w-3.5 sm:w-4 h-3.5 sm:h-4 animate-pulse" />
+            </div>
+            <span className="text-foreground/90 group-hover:text-foreground text-xs font-bold flex-1 truncate tracking-tight transition-colors">
+              Weave Agent
+            </span>
+            <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground group-hover:text-primary font-mono font-bold uppercase bg-background/80 px-2 py-0.5 rounded-full border border-border/60 shadow-xs shrink-0 transition-all">
+              <span>⌘J</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className="w-full h-full flex items-center px-4 cursor-pointer bg-card/50 hover:bg-muted/50 transition-colors group rounded-2xl"
@@ -144,7 +185,7 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
 
   return (
     <div
-      className={`flex h-full overflow-hidden rounded-2xl ${!isFloating ? 'border border-border/40 bg-card shadow-sm' : 'w-full'}`}
+      className={`flex h-full overflow-hidden ${isDocked ? 'w-full bg-transparent border-0 rounded-none' : !isFloating ? 'border border-border/40 bg-card shadow-sm rounded-2xl' : 'w-full rounded-2xl'}`}
     >
       {/* ── Sidebar ── */}
       {showHistory && <ChatHistorySidebar onClose={() => setShowHistory(false)} />}
@@ -153,19 +194,39 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
       <div className="flex flex-col flex-1 min-w-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300">
           {/* ── Toolbar ── */}
-          <div className="flex items-center justify-between h-12 px-4 flex-shrink-0 gap-3 border-b border-border/40 bg-card/40 backdrop-blur-md z-10 rounded-t-2xl">
-            <div className="flex items-center gap-2">
+          <div className={`flex items-center justify-between px-3.5 flex-shrink-0 gap-2 border-b border-border/40 bg-card/80 backdrop-blur-md z-10 ${isDocked ? 'h-11 rounded-none bg-muted/30' : 'h-12 rounded-t-2xl'}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              {isDocked ? (
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 animate-pulse" />
+                  <span className="text-xs font-bold tracking-wide uppercase text-foreground truncate font-sans">
+                    Weave Agent
+                  </span>
+                  <span className="text-[10px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded-full shrink-0 border border-green-500/20">
+                    Active
+                  </span>
+                </div>
+              ) : isFloating && isAgentVariant ? (
+                <div className="flex items-center gap-2 pr-2 border-r border-border/40 min-w-0 shrink-0">
+                  <div className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
+                    <Bot className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <span className="text-xs font-bold tracking-wide uppercase text-foreground truncate hidden sm:inline">
+                    Weave Agent
+                  </span>
+                </div>
+              ) : null}
               <button
                 type="button"
                 title="Toggle History"
                 onClick={() => setShowHistory((prev) => !prev)}
-                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 bg-transparent border-0 shadow-none ${showHistory ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground hover:scale-105'} active:scale-95`}
+                className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-200 bg-transparent border-0 shadow-none shrink-0 ${showHistory ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground hover:scale-105'} active:scale-95`}
               >
                 <History className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Approval Mode Switcher — Cline/Cursor style */}
               <div
                 role="group"
@@ -177,35 +238,35 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
                   onClick={() => setApprovalMode('ask')}
                   title="Ask mode — confirm each file-changing action before it runs"
                   aria-pressed={approvalMode === 'ask'}
-                  className={`flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-1 px-2 h-6 sm:h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
                     approvalMode === 'ask'
                       ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <ShieldQuestion className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Ask</span>
+                  <ShieldQuestion className="w-3.5 h-3.5 shrink-0" />
+                  <span className={isFloating && isAgentVariant ? 'hidden' : 'hidden sm:inline'}>Ask</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setApprovalMode('accept-edits')}
                   title="Accept Edits mode — auto-approve file changes for this session"
                   aria-pressed={approvalMode === 'accept-edits'}
-                  className={`flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-1 px-2 h-6 sm:h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
                     approvalMode === 'accept-edits'
                       ? 'bg-green-500/15 text-green-600 dark:text-green-400 shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Accept Edits</span>
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className={isFloating && isAgentVariant ? 'hidden' : 'hidden sm:inline'}>Accept Edits</span>
                 </button>
               </div>
 
               {isStreaming && (
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold animate-pulse">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold animate-pulse">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Thinking...
+                  <span className={isFloating && isAgentVariant ? 'hidden' : 'inline'}>Thinking...</span>
                 </div>
               )}
               {!isStreaming && (
@@ -213,20 +274,30 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
                   type="button"
                   title="Start a new chat session"
                   onClick={startNewSession}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-transparent border-0 shadow-none text-muted-foreground hover:text-foreground transition-all duration-200 active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-transparent border-0 shadow-none text-muted-foreground hover:text-foreground transition-all duration-200 active:scale-95 cursor-pointer"
                 >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">New Chat</span>
+                  <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span className={isFloating && isAgentVariant ? 'hidden' : 'hidden sm:inline'}>New Chat</span>
                 </button>
               )}
-              {isFloating && (
+              {isFloating && !isDocked && (
                 <button
                   type="button"
                   title="Minimize chat (Ctrl+J or Esc)"
                   onClick={() => toggleChat(false)}
-                  className="flex items-center justify-center w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 active:scale-95 cursor-pointer ml-1"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 active:scale-95 cursor-pointer ml-0.5 shrink-0"
                 >
                   <Minimize2 className="w-4 h-4" />
+                </button>
+              )}
+              {isDocked && (
+                <button
+                  type="button"
+                  title="Close Weave Agent Sidebar (Ctrl+J)"
+                  onClick={() => toggleChat(false)}
+                  className="flex items-center justify-center w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 active:scale-95 cursor-pointer ml-0.5 shrink-0"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -240,7 +311,11 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
               className="flex flex-col max-w-4xl mx-auto w-full min-w-0 pr-3 sm:pr-4"
             >
               {!hasMessages ? (
-                <EmptyState />
+                isDocked ? (
+                  <DockedEmptyState selectedFile={selectedFile} onCodeAction={onCodeAction} />
+                ) : (
+                  <EmptyState />
+                )
               ) : (
                 <div className="py-2 space-y-4">
                   {messages
@@ -387,7 +462,7 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
 
         {/* ── Input ── */}
         <div className="flex-shrink-0 bg-transparent rounded-b-2xl">
-          <ChatInput />
+          <ChatInput isDocked={isDocked} />
         </div>
       </div>
     </div>
@@ -451,3 +526,140 @@ function EmptyState() {
     </div>
   );
 }
+
+function DockedEmptyState({
+  selectedFile,
+  onCodeAction,
+}: {
+  selectedFile?: { name: string; path: string; type: string } | null;
+  onCodeAction?: (type: 'explain' | 'bugs' | 'refactor') => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="flex flex-col min-h-0 my-auto px-4 py-5 animate-in fade-in zoom-in-95 duration-400 max-w-full">
+      {/* Subtle Greeting */}
+      <div className="flex items-center gap-2.5 mb-2">
+        <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 shadow-sm">
+          <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+        </div>
+        <div>
+          <h2 className="text-sm font-extrabold text-foreground tracking-tight font-sans">Weave AI IDE Assistant</h2>
+          <p className="text-[11px] text-muted-foreground">Autonomous context & code intelligence</p>
+        </div>
+      </div>
+
+      {/* Selected File Context Chip if available */}
+      {selectedFile && selectedFile.type !== 'directory' ? (
+        <div className="my-3 p-2.5 rounded-xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
+              <FileCode className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-foreground truncate font-mono">{selectedFile.name}</div>
+              <div className="text-[10px] font-mono text-muted-foreground truncate opacity-80">{selectedFile.path}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(selectedFile.path);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="p-1.5 rounded-md hover:bg-primary/15 text-muted-foreground hover:text-primary transition-colors shrink-0 cursor-pointer"
+            title="Copy file path"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      ) : (
+        <div className="my-3 p-2.5 rounded-xl border border-border/60 bg-muted/30 flex items-center gap-2 text-xs text-muted-foreground">
+          <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground/80" />
+          <span>No file active. Select a file in the tree to unlock contextual code actions.</span>
+        </div>
+      )}
+
+      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mt-2 mb-2 px-0.5">
+        Code Intelligence Actions
+      </div>
+
+      {/* Clean 1-Column Action List (Zero Squishing) */}
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (onCodeAction && selectedFile && selectedFile.type !== 'directory') {
+              onCodeAction('explain');
+            } else {
+              useChatStore.getState().sendMessage('Explain the project structure and main architectural patterns in this codebase.');
+            }
+          }}
+          className="group flex items-start gap-3 p-3 rounded-xl border border-border/70 bg-card/40 hover:bg-card hover:border-blue-500/40 text-left transition-all duration-200 shadow-sm hover:shadow cursor-pointer min-w-0"
+        >
+          <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors shrink-0 mt-0.5 shadow-sm">
+            <HelpCircle className="w-4 h-4 stroke-[2]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-foreground group-hover:text-blue-500 transition-colors truncate">
+              {selectedFile && selectedFile.type !== 'directory' ? `Explain "${selectedFile.name}"` : 'Explain Project Architecture'}
+            </div>
+            <div className="text-[11px] text-muted-foreground/90 line-clamp-1 mt-0.5 leading-relaxed">
+              Summarize logic, dependencies, and key patterns
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (onCodeAction && selectedFile && selectedFile.type !== 'directory') {
+              onCodeAction('bugs');
+            } else {
+              useChatStore.getState().sendMessage('Scan the workspace for potential security vulnerabilities, race conditions, or performance bottlenecks.');
+            }
+          }}
+          className="group flex items-start gap-3 p-3 rounded-xl border border-border/70 bg-card/40 hover:bg-card hover:border-red-500/40 text-left transition-all duration-200 shadow-sm hover:shadow cursor-pointer min-w-0"
+        >
+          <div className="p-2 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors shrink-0 mt-0.5 shadow-sm">
+            <Bug className="w-4 h-4 stroke-[2]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-foreground group-hover:text-red-500 transition-colors truncate">
+              {selectedFile && selectedFile.type !== 'directory' ? `Scan "${selectedFile.name}" for Bugs` : 'Scan Workspace for Risks'}
+            </div>
+            <div className="text-[11px] text-muted-foreground/90 line-clamp-1 mt-0.5 leading-relaxed">
+              Analyze edge cases, memory leaks, and vulnerabilities
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (onCodeAction && selectedFile && selectedFile.type !== 'directory') {
+              onCodeAction('refactor');
+            } else {
+              useChatStore.getState().sendMessage('Suggest clean code refactorings, design improvements, or generate boilerplate unit tests.');
+            }
+          }}
+          className="group flex items-start gap-3 p-3 rounded-xl border border-border/70 bg-card/40 hover:bg-card hover:border-green-500/40 text-left transition-all duration-200 shadow-sm hover:shadow cursor-pointer min-w-0"
+        >
+          <div className="p-2 rounded-lg bg-green-500/10 text-green-500 group-hover:bg-green-500 group-hover:text-white transition-colors shrink-0 mt-0.5 shadow-sm">
+            <Code2 className="w-4 h-4 stroke-[2]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-foreground group-hover:text-green-500 transition-colors truncate">
+              {selectedFile && selectedFile.type !== 'directory' ? `Refactor "${selectedFile.name}"` : 'Suggest Refactor & Tests'}
+            </div>
+            <div className="text-[11px] text-muted-foreground/90 line-clamp-1 mt-0.5 leading-relaxed">
+              Apply best practices and generate test coverage
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+

@@ -15,14 +15,14 @@ import {
   RefreshCw,
   Sparkles,
   GitBranch,
-  Bug,
-  Code2,
-  Copy,
-  Check,
   X,
-  HelpCircle,
+  Terminal,
+  Files as FilesIcon,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { GitPanel } from './GitPanel';
+import { WorkspaceSearch } from './WorkspaceSearch';
+import { IdeBottomDrawer } from './IdeBottomDrawer';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { usePluginStore } from '@/stores/usePluginStore';
@@ -32,6 +32,9 @@ import { FileEditor } from './FileEditor';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import { extractError } from '@/lib/errors';
+import { ChatPanel } from '@/components/chat/ChatPanel';
+import { useChatStore } from '@/stores/useChatStore';
+import { useAppStore } from '@/stores/useAppStore';
 
 // Helper to pick icon
 function getFileIcon(name: string) {
@@ -174,12 +177,17 @@ export function FileManager() {
   const [pendingSelect, setPendingSelect] = useState<FSNode | null>(null);
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false);
   
-  // AI Context & Git Status panel state
-  const [aiPanelOpen, setAiPanelOpen] = useState(true);
-  const [aiPrompt, setAiPrompt] = useState('');
+  // IDE Architecture State
+  const [sidebarTab, setSidebarTab] = useState<'explorer' | 'git' | 'search'>('explorer');
+  const [openedTabs, setOpenedTabs] = useState<FSNode[]>([]);
+  const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false);
+  const [bottomTab, setBottomTab] = useState<'terminal' | 'output' | 'diagnostics'>('terminal');
+  const [aiDiagnostics, setAiDiagnostics] = useState<string | null>(null);
+
+  // AI Agent & Right Sidebar state (Docked Antigravity style)
+  const isChatExpanded = useAppStore((s) => s.isChatExpanded);
+  const toggleChat = useAppStore((s) => s.toggleChat);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [isCopiedPath, setIsCopiedPath] = useState(false);
 
   const { executeCapability } = usePluginStore();
 
@@ -318,12 +326,33 @@ export function FileManager() {
   }, [rootNodes, searchQuery]);
 
   const handleSelect = (item: FSNode) => {
+    if (item.type === 'directory') return;
     if (editorDirty && selectedFile && item.path !== selectedFile.path) {
       setPendingSelect(item);
       setConfirmSwitchOpen(true);
       return;
     }
     setSelectedFile(item);
+    setOpenedTabs((prev) => {
+      if (prev.some((t) => t.path === item.path)) return prev;
+      return [...prev, item];
+    });
+  };
+
+  const handleCloseTab = (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
+    setOpenedTabs((prev) => {
+      const filtered = prev.filter((t) => t.path !== path);
+      if (selectedFile?.path === path) {
+        setSelectedFile(filtered.length > 0 ? filtered[filtered.length - 1] : null);
+      }
+      return filtered;
+    });
+  };
+
+  const handleSelectFromAux = (filePath: string, fileName: string) => {
+    const node: FSNode = { name: fileName, path: filePath, type: 'file' };
+    handleSelect(node);
   };
 
   const handleAiCodeAction = async (actionType: 'explain' | 'bugs' | 'refactor') => {
@@ -332,129 +361,194 @@ export function FileManager() {
       return;
     }
     setAiLoading(true);
-    setAiResponse(null);
     try {
       let prompt = '';
       if (actionType === 'explain') prompt = `Explain the architecture, purpose, and key logic of the file at path "${selectedFile.path}" concisely in bullet points.`;
       else if (actionType === 'bugs') prompt = `Analyze the code in "${selectedFile.path}" for potential bugs, security vulnerabilities, edge cases, or performance bottlenecks.`;
       else if (actionType === 'refactor') prompt = `Suggest clean refactorings, TypeScript/Rust best practices, or generate boilerplate unit tests for "${selectedFile.path}".`;
 
-      const res = await executeCapability('com.weave.builtin.chat', 'chat.send', {
-        message: prompt,
-        model: 'gpt-4o-mini',
-      }) as string | { content?: string; response?: string };
-
-      const reply = typeof res === 'string' ? res : (res?.content || res?.response || JSON.stringify(res));
-      setAiResponse(reply);
+      if (!isChatExpanded) toggleChat(true);
+      await useChatStore.getState().sendMessage(prompt);
+      if (actionType === 'bugs') {
+        setAiDiagnostics('Bug & security analysis sent to Weave Agent. Check the right sidebar for detailed findings.');
+        setBottomDrawerOpen(true);
+        setBottomTab('diagnostics');
+      }
+      toast.success('Sent code analysis request to Weave Agent');
     } catch (e) {
       toast.error(`AI analysis failed: ${extractError(e)}`);
-      setAiResponse('Could not complete AI code analysis. Please check your AI provider.');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleCustomAiCodeQuery = async () => {
-    if (!selectedFile || !aiPrompt.trim()) return;
-    setAiLoading(true);
-    setAiResponse(null);
-    try {
-      const prompt = `Regarding the file "${selectedFile.path}":\n\nUser Question: ${aiPrompt}`;
-      const res = await executeCapability('com.weave.builtin.chat', 'chat.send', {
-        message: prompt,
-        model: 'gpt-4o-mini',
-      }) as string | { content?: string; response?: string };
-
-      const reply = typeof res === 'string' ? res : (res?.content || res?.response || JSON.stringify(res));
-      setAiResponse(reply);
-      setAiPrompt('');
-    } catch (e) {
-      toast.error(`AI query failed: ${extractError(e)}`);
     } finally {
       setAiLoading(false);
     }
   };
 
   return (
-    <div className="flex h-full w-full bg-transparent pt-16">
-      {/* ── Column 1: File Tree Sidebar ── */}
+    <div className="flex h-full w-full bg-transparent pt-16 select-none">
+      {/* ── IDE Activity Bar ── */}
+      <div className="w-12 border-r border-border/80 bg-card/80 backdrop-blur-md flex flex-col items-center py-3 gap-3 shrink-0 z-10">
+        <button
+          type="button"
+          onClick={() => setSidebarTab('explorer')}
+          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+            sidebarTab === 'explorer'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+          title="File Explorer"
+        >
+          <FilesIcon className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setSidebarTab('git')}
+          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+            sidebarTab === 'git'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+          title="Source Control (Git)"
+        >
+          <GitBranch className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setSidebarTab('search')}
+          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+            sidebarTab === 'search'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+          }`}
+          title="Workspace Search"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* ── Column 1: Active Sidebar Tab Content ── */}
       <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card/50 backdrop-blur-md">
-        <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">
-          <div className="flex items-center gap-2 overflow-hidden mr-2">
-            <HardDrive className="w-4 h-4 text-primary flex-shrink-0" />
-            <h3
-              className="text-xs font-bold tracking-wide truncate uppercase text-foreground"
-              title={currentRoot === '.' ? 'Local Files' : currentRoot}
-            >
-              {currentRoot === '.' ? 'Workspace Tree' : currentRoot.split('/').pop() || currentRoot}
-            </h3>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-7 h-7 text-muted-foreground hover:text-foreground"
-              onClick={handleManualRefresh}
-              title="Refresh Directory"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-7 h-7 text-muted-foreground hover:text-foreground"
-              onClick={handleOpenFolder}
-              title="Open Folder"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="px-3 py-3 border-b border-border/60 flex-shrink-0">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search files..."
-              className="pl-8 h-8 text-xs bg-background"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <ScrollArea className="flex-1 p-2 pb-32">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-4 text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...
+        {sidebarTab === 'explorer' && (
+          <div className="flex flex-col h-full">
+            <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">
+              <div className="flex items-center gap-2 overflow-hidden mr-2">
+                <HardDrive className="w-4 h-4 text-primary flex-shrink-0" />
+                <h3
+                  className="text-xs font-bold tracking-wide truncate uppercase text-foreground"
+                  title={currentRoot === '.' ? 'Local Files' : currentRoot}
+                >
+                  {currentRoot === '.' ? 'Workspace Tree' : currentRoot.split('/').pop() || currentRoot}
+                </h3>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-7 h-7 text-muted-foreground hover:text-foreground"
+                  onClick={handleManualRefresh}
+                  title="Refresh Directory"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-7 h-7 text-muted-foreground hover:text-foreground"
+                  onClick={handleOpenFolder}
+                  title="Open Folder"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
-          ) : filteredRootNodes.length === 0 ? (
-            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-              {searchQuery.trim() ? 'No files match your search.' : 'No files in this directory.'}
+
+            <div className="px-3 py-3 border-b border-border/60 flex-shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search files..."
+                  className="pl-8 h-8 text-xs bg-background"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
-          ) : (
-            filteredRootNodes.map((item) => (
-              <FileTreeItem
-                key={item.path}
-                item={item}
-                selectedPath={selectedFile?.path}
-                onSelect={handleSelect}
-                onToggle={handleToggle}
-                query={searchQuery}
-              />
-            ))
-          )}
-        </ScrollArea>
+
+            <ScrollArea className="flex-1 p-2 pb-32">
+              {isLoading ? (
+                <div className="flex items-center justify-center p-4 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...
+                </div>
+              ) : filteredRootNodes.length === 0 ? (
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  {searchQuery.trim() ? 'No files match your search.' : 'No files in this directory.'}
+                </div>
+              ) : (
+                filteredRootNodes.map((item) => (
+                  <FileTreeItem
+                    key={item.path}
+                    item={item}
+                    selectedPath={selectedFile?.path}
+                    onSelect={handleSelect}
+                    onToggle={handleToggle}
+                    query={searchQuery}
+                  />
+                ))
+              )}
+            </ScrollArea>
+          </div>
+        )}
+
+        {sidebarTab === 'git' && (
+          <GitPanel currentRoot={currentRoot} onSelectFile={handleSelectFromAux} />
+        )}
+
+        {sidebarTab === 'search' && (
+          <WorkspaceSearch currentRoot={currentRoot} onSelectFile={handleSelectFromAux} />
+        )}
       </div>
 
       {/* ── Main Area (Columns 2 & 3) ── */}
       <div className="flex-1 flex h-full min-w-0">
         {/* ── Column 2: File Editor / Code View ── */}
         <div className="flex-1 flex flex-col min-w-0 bg-background/90 backdrop-blur-md relative">
+          {/* Tabbed Editor Header Bar */}
+          {openedTabs.length > 0 && (
+            <div className="h-9 border-b border-border/60 bg-muted/30 flex items-center overflow-x-auto shrink-0 px-1 gap-1">
+              {openedTabs.map((tab) => {
+                const isSelected = selectedFile?.path === tab.path;
+                return (
+                  <div
+                    key={tab.path}
+                    onClick={() => handleSelect(tab)}
+                    className={`h-7 px-3 rounded-lg flex items-center gap-2 text-xs font-mono cursor-pointer transition-all shrink-0 border ${
+                      isSelected
+                        ? 'bg-background text-foreground border-border/80 shadow-sm font-semibold'
+                        : 'bg-transparent text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground'
+                    }`}
+                  >
+                    {createElement(getFileIcon(tab.name), {
+                      className: `w-3.5 h-3.5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`,
+                    })}
+                    <span className="truncate max-w-[140px]">{tab.name}</span>
+                    {isSelected && editorDirty && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Unsaved changes" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleCloseTab(e, tab.path)}
+                      className="w-4 h-4 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground ml-1"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {selectedFile ? (
-            <div className="flex flex-col h-full w-full">
-              <div className="h-14 flex items-center justify-between border-b border-border/60 px-4 gap-2 flex-shrink-0 bg-card/80">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-background border border-border/60 rounded-xl shadow-sm">
+            <div className="flex flex-col flex-1 min-h-0 w-full">
+              <div className="h-12 flex items-center justify-between border-b border-border/60 px-4 gap-2 flex-shrink-0 bg-card/80">
+                <div className="flex items-center gap-2 px-3 py-1 bg-background border border-border/60 rounded-xl shadow-sm">
                   {selectedFile.type === 'directory' ? (
                     <FolderOpen className="w-3.5 h-3.5 text-primary" />
                   ) : (
@@ -463,18 +557,19 @@ export function FileManager() {
                     })
                   )}
                   <span className="text-xs font-bold text-foreground">{selectedFile.name}</span>
+                  {editorDirty && <span className="text-[10px] text-amber-500 font-mono font-bold">(Dirty)</span>}
                 </div>
 
                 <div className="flex items-center gap-2">
                   <Button
-                    variant={aiPanelOpen ? 'secondary' : 'ghost'}
+                    variant={isChatExpanded ? 'secondary' : 'ghost'}
                     size="sm"
-                    onClick={() => setAiPanelOpen(!aiPanelOpen)}
-                    className={`h-8 px-3 text-xs gap-1.5 rounded-xl border ${aiPanelOpen ? 'border-primary/50 text-primary bg-primary/10' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-                    title="Toggle AI Context & Git Panel"
+                    onClick={() => toggleChat(!isChatExpanded)}
+                    className={`h-7 px-3 text-xs gap-1.5 rounded-xl border ${isChatExpanded ? 'border-primary/50 text-primary bg-primary/10' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                    title="Toggle Weave Agent Sidebar (Ctrl+J)"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">AI Context & Git</span>
+                    <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+                    <span className="hidden sm:inline font-bold">Weave Agent</span>
                   </Button>
                 </div>
               </div>
@@ -508,135 +603,46 @@ export function FileManager() {
               </p>
             </div>
           )}
+
+          {/* Integrated Bottom Terminal Drawer */}
+          {bottomDrawerOpen ? (
+            <IdeBottomDrawer
+              currentRoot={currentRoot}
+              onClose={() => setBottomDrawerOpen(false)}
+              activeTab={bottomTab}
+              onTabChange={setBottomTab}
+              aiDiagnostics={aiDiagnostics}
+              onRunDiagnostics={() => handleAiCodeAction('bugs')}
+              isRunningDiagnostics={aiLoading}
+            />
+          ) : (
+            <div className="h-7 border-t border-border/60 bg-card/80 px-3 flex items-center justify-between text-[11px] font-mono text-muted-foreground shrink-0 select-none">
+              <div className="flex items-center gap-3">
+                <span className="truncate max-w-xs" title={currentRoot}>Root: {currentRoot}</span>
+                {editorDirty && <span className="text-amber-500 font-bold flex items-center gap-1">• Unsaved Changes</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => setBottomDrawerOpen(true)}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-muted/60 text-foreground transition-colors"
+                title="Open Terminal Console"
+              >
+                <Terminal className="w-3.5 h-3.5 text-primary" />
+                <span className="font-sans font-semibold">Open Terminal</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* ── Column 3: AI Context & Git Status Panel ── */}
-        {aiPanelOpen && (
-          <div className="w-[280px] border-l border-border/80 bg-card/40 backdrop-blur-md flex flex-col h-full shrink-0 shadow-lg z-10 animate-in slide-in-from-right duration-200">
-            <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 bg-muted/20">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <h3 className="text-xs font-bold tracking-wide uppercase text-foreground">AI Context & Git</h3>
-              </div>
-              <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setAiPanelOpen(false)}>
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-5">
-              {/* Git Status / Workspace Info */}
-              <div className="border border-border/60 rounded-xl p-3 bg-background/80 space-y-2.5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <GitBranch className="w-3.5 h-3.5 text-primary" /> Workspace Status
-                  </span>
-                  <span className="text-[10px] font-mono bg-green-500/10 text-green-500 px-2 py-0.5 rounded-full">
-                    Clean / Active
-                  </span>
-                </div>
-                <div className="text-[11px] text-muted-foreground space-y-1 font-mono">
-                  <p className="truncate" title={currentRoot}>Root: {currentRoot}</p>
-                  <p className="truncate">Active: {selectedFile?.name || 'None'}</p>
-                </div>
-                {selectedFile && (
-                  <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[10px] flex-1 gap-1 rounded-lg"
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedFile.path);
-                        setIsCopiedPath(true);
-                        setTimeout(() => setIsCopiedPath(false), 2000);
-                        toast.success('Copied file path to clipboard');
-                      }}
-                    >
-                      {isCopiedPath ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                      <span>Copy Path</span>
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* AI Code Intelligence */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Code Intelligence</span>
-                <div className="grid grid-cols-1 gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAiCodeAction('explain')}
-                    disabled={aiLoading || !selectedFile || selectedFile.type === 'directory'}
-                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
-                  >
-                    <HelpCircle className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span>Explain Code Logic</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAiCodeAction('bugs')}
-                    disabled={aiLoading || !selectedFile || selectedFile.type === 'directory'}
-                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
-                  >
-                    <Bug className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    <span>Find Bugs & Security</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAiCodeAction('refactor')}
-                    disabled={aiLoading || !selectedFile || selectedFile.type === 'directory'}
-                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
-                  >
-                    <Code2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                    <span>Suggest Refactor / Tests</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Custom AI Query */}
-              <div className="space-y-2 pt-2 border-t border-border/40">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Ask AI About File</span>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Ask anything about this code..."
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleCustomAiCodeQuery()}
-                    className="text-xs h-8 bg-background/80 border-border/80 rounded-xl"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleCustomAiCodeQuery}
-                    disabled={aiLoading || !aiPrompt.trim() || !selectedFile}
-                    className="w-full h-8 text-xs font-medium gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-sm"
-                  >
-                    {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    <span>Analyze with AI</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* AI Output Box */}
-              {(aiResponse || aiLoading) && (
-                <div className="p-3 bg-muted/40 border border-border/60 rounded-xl space-y-2 animate-in fade-in-0 shadow-inner">
-                  <span className="text-[11px] font-bold text-primary flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> AI Output:
-                  </span>
-                  {aiLoading ? (
-                    <div className="flex items-center justify-center py-4 text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      <span className="text-xs font-mono">Analyzing codebase...</span>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-foreground/90 leading-relaxed font-sans bg-background/80 p-2.5 rounded-lg border border-border/30 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
-                      {aiResponse}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        {/* ── Column 3: AI Agent Right Sidebar (Docked Antigravity style) ── */}
+        {isChatExpanded && (
+          <div className="w-[360px] sm:w-[400px] lg:w-[440px] border-l border-border/80 bg-card/95 backdrop-blur-xl flex flex-col h-full shrink-0 shadow-2xl z-10 animate-in slide-in-from-right duration-200">
+            <ChatPanel
+              isDocked={true}
+              isAgentVariant={true}
+              selectedFile={selectedFile}
+              onCodeAction={handleAiCodeAction}
+            />
           </div>
         )}
       </div>

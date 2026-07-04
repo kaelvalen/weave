@@ -17,6 +17,7 @@ impl GitPlugin {
     pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
         match capability {
             "git.status" => Self::status(params),
+            "git.init" => Self::init(params),
             "git.add" => Self::add(params),
             "git.commit" => Self::commit(params),
             "git.log" => Self::log(params),
@@ -39,12 +40,31 @@ impl GitPlugin {
         }
     }
 
+    fn init(params: Value) -> Result<Value, WeaveError> {
+        let cwd = params.get("directory").and_then(|v| v.as_str());
+        let result = Self::run_git_command(&["init"], cwd)?;
+        info!("Executed git.init in {:?}", cwd.unwrap_or("."));
+        Ok(json!({"output": result.trim(), "success": true}))
+    }
+
     fn status(params: Value) -> Result<Value, WeaveError> {
         let cwd = params.get("directory").and_then(|v| v.as_str());
-        let result = Self::run_git_command(&["status", "-s"], cwd)?;
+        let mut cmd = Command::new("git");
+        cmd.args(&["status", "-s"]);
+        if let Some(dir) = cwd { cmd.current_dir(dir); }
+        let output = cmd.output().map_err(|e| WeaveError::PluginError(format!("Failed to execute git: {}", e)))?;
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr).to_string();
+            if error.contains("not a git repository") || error.contains("fatal:") {
+                info!("Directory {:?} is not a git repository", cwd.unwrap_or("."));
+                return Ok(json!({"status": "", "branch": "", "is_repo": false, "success": true}));
+            }
+            return Err(WeaveError::PluginError(format!("Git error: {}", error.trim())));
+        }
+        let result = String::from_utf8_lossy(&output.stdout).to_string();
         let branch = Self::run_git_command(&["branch", "--show-current"], cwd).unwrap_or_default();
         info!("Executed git.status in {:?}", cwd.unwrap_or("."));
-        Ok(json!({"status": result.trim(), "branch": branch.trim(), "success": true}))
+        Ok(json!({"status": result.trim(), "branch": branch.trim(), "is_repo": true, "success": true}))
     }
 
     fn add(params: Value) -> Result<Value, WeaveError> {

@@ -168,7 +168,7 @@ const SLASH_COMMANDS = [
   },
 ];
 
-export function ChatInput() {
+export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
   const [input, setInput] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
@@ -467,9 +467,9 @@ export function ChatInput() {
   const canSend = (!!input.trim() || images.length > 0) && !isStreaming;
 
   return (
-    <div className="flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full">
+    <div className={isDocked ? 'flex-shrink-0 w-full' : 'flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full'}>
       {/* Quick Action Pills above chat bar when input is empty */}
-      {!input && images.length === 0 && !isStreaming && (
+      {!input && images.length === 0 && !isStreaming && !isDocked && (
         <div className="flex items-center gap-1.5 mb-2.5 px-1 overflow-x-auto hide-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-300">
           <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mr-1 flex-shrink-0">
             <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
@@ -545,7 +545,7 @@ export function ChatInput() {
       )}
 
       {/* Main Glassmorphism Chat Input Box */}
-      <div className="glow-effect rounded-2xl overflow-hidden border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl transition-all duration-300 focus-within:shadow-2xl focus-within:border-primary/50">
+      <div className={`overflow-hidden transition-all duration-300 focus-within:border-primary/50 ${isDocked ? 'rounded-none border-0 border-t border-border/60 bg-card/60 shadow-none' : 'glow-effect rounded-2xl border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl focus-within:shadow-2xl'}`}>
         {/* Plugin hint strip */}
         {hints.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/60 bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">

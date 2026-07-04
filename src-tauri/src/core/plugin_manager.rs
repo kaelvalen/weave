@@ -140,6 +140,7 @@ impl PluginManager {
                 .read_access(&["file://*"])
                 .write_access(&["file://*"])
                 .capability("git.status", r#"{"directory":"."}"#, "Show working tree status (short format) and current branch")
+                .capability("git.init", r#"{"directory":"."}"#, "Initialize a new Git repository")
                 .capability("git.add", r#"{"directory":".","path":"."}"#, "Stage files for commit")
                 .capability("git.commit", r#"{"directory":".","message":"..."}"#, "Commit staged changes")
                 .capability("git.log", r#"{"directory":".","limit":5}"#, "Show recent commit log (oneline)")
