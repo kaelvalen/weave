@@ -27,6 +27,7 @@ export const useAppStore = create<AppState>()(
     setActiveView: (view: View) => {
       set((state) => {
         state.activeView = view;
+        state.isChatExpanded = false;
       });
     },
 

@@ -90,45 +90,88 @@ export function PluginMarket() {
 
   return (
     <div className="flex flex-col h-full w-full bg-transparent pt-16">
-      <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between py-8 flex-shrink-0">
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">Plugins</h2>
-              <span className="text-xs text-muted-foreground font-mono px-2 py-0.5 rounded-full bg-muted border">
-                {plugins.length} available
-              </span>
+      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
+        {/* ── Compact Command Bar ── */}
+        <div className="flex items-center justify-between gap-4 py-4 flex-shrink-0 border-b border-border/60">
+          <div className="flex items-center gap-3 flex-1 max-w-xl">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search plugins by name, ID, or capability..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-card/80 border-border/80 h-9 text-xs focus-visible:ring-1"
+              />
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Discover, manage, and extend Weave's capabilities.
-            </p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-muted-foreground hover:text-foreground px-2"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               onClick={handleInstall}
               disabled={installing || isLoading}
+              size="sm"
               variant="outline"
-              className="gap-2 shadow-sm"
+              className="gap-1.5 h-9 text-xs shadow-sm bg-card"
               title="Install a plugin from a .wpk file"
             >
-              <Download className={`w-4 h-4 ${installing ? 'animate-spin' : ''}`} />
-              Install
+              <Download className={`w-3.5 h-3.5 ${installing ? 'animate-spin' : ''}`} />
+              + Install .wpk
             </Button>
             <Button
               onClick={handleRefresh}
               disabled={refreshing || isLoading}
-              className="gap-2 shadow-sm"
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 h-9 text-xs hover:bg-muted"
+              title="Refresh plugins"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
         </div>
 
+        {/* ── Category Tabs ── */}
+        <div className="py-3 flex items-center gap-1.5 flex-wrap flex-shrink-0">
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isActive = selectedCategory === cat.value;
+            const count = cat.value ? categoryCounts[cat.value] || 0 : plugins.length;
+            return (
+              <button
+                key={cat.label}
+                type="button"
+                onClick={() => setCategory(cat.value)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-foreground text-background shadow-sm scale-105'
+                    : 'bg-card/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {cat.label}
+                <span
+                  className={`text-[10px] font-mono px-1 rounded-full ${
+                    isActive ? 'bg-background/20 text-background' : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* ── Body ── */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card/40 rounded-t-xl border-x border-t border-border/60 shadow-inner">
           {/* ── Error Banner ── */}
           {error && (
             <div className="mx-6 mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/20 text-sm text-destructive">
@@ -139,49 +182,6 @@ export function PluginMarket() {
               </button>
             </div>
           )}
-
-          {/* ── Search & Filters ── */}
-          <div className="px-6 py-4 flex-shrink-0 space-y-4 border-b bg-muted/30">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, ID, or capability..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-background"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {CATEGORIES.map((cat) => {
-                const Icon = cat.icon;
-                const isActive = selectedCategory === cat.value;
-                const count = cat.value ? categoryCounts[cat.value] || 0 : plugins.length;
-                return (
-                  <button
-                    key={cat.label}
-                    type="button"
-                    onClick={() => setCategory(cat.value)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium border ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {cat.label}
-                    <span
-                      className={`text-[10px] font-mono px-1 rounded ${
-                        isActive ? 'bg-primary-foreground/20' : 'bg-muted'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {/* ── Content ── */}
           <div className="flex-1 overflow-y-auto min-h-0">

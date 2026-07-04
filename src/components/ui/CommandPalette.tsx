@@ -80,13 +80,27 @@ export function CommandPalette() {
         e.preventDefault();
         setOpen((open) => !open);
       }
+      if (
+        e.key === '/' &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName) &&
+        !(e.target as HTMLElement).isContentEditable
+      ) {
+        e.preventDefault();
+        setOpen(true);
+      }
       if (e.key === 'Escape') {
         setOpen(false);
       }
     };
 
+    const handleCustomOpen = () => setOpen(true);
+
     document.addEventListener('keydown', down);
-    return () => document.removeEventListener('keydown', down);
+    window.addEventListener('open-command-palette', handleCustomOpen);
+    return () => {
+      document.removeEventListener('keydown', down);
+      window.removeEventListener('open-command-palette', handleCustomOpen);
+    };
   }, []);
 
   if (!open) return null;

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
   Check,
+  Minimize2,
 } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
@@ -108,9 +109,19 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
     useChatStore.getState().loadHistory();
   }, []);
 
-  const hasMessages = messages.length > 0;
-
   const toggleChat = useAppStore((s) => s.toggleChat);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isFloating && isChatExpanded && e.key === 'Escape') {
+        toggleChat(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFloating, isChatExpanded, toggleChat]);
+
+  const hasMessages = messages.length > 0;
 
   if (isFloating && !isChatExpanded) {
     return (
@@ -206,6 +217,16 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">New Chat</span>
+                </button>
+              )}
+              {isFloating && (
+                <button
+                  type="button"
+                  title="Minimize chat (Ctrl+J or Esc)"
+                  onClick={() => toggleChat(false)}
+                  className="flex items-center justify-center w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 active:scale-95 cursor-pointer ml-1"
+                >
+                  <Minimize2 className="w-4 h-4" />
                 </button>
               )}
             </div>

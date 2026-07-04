@@ -253,23 +253,40 @@ export function Workflows() {
             className="mb-4 ml-4 !bg-card/80 backdrop-blur-md rounded-2xl shadow-xl !border-border/40 overflow-hidden"
           />
 
-          {/* Premium Floating Panel */}
-          <Panel position="top-right" className="flex items-center gap-3 mt-6 mr-6">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 px-4 shadow-sm border-border/50 bg-card/60 backdrop-blur-md hover:bg-card/80 transition-all"
-              onClick={handleSave}
-            >
-              <Save className="w-4 h-4 mr-2 text-muted-foreground" /> Save
-            </Button>
-            <Button
-              size="sm"
-              className="h-9 px-5 shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105"
-              onClick={handleExecute}
-            >
-              <Play className="w-4 h-4 mr-2" /> Execute
-            </Button>
+          {/* Dock-Aligned Control Deck */}
+          <Panel
+            position="top-center"
+            className="mt-16 z-40 flex items-center justify-between gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-xl border border-border/80 shadow-lg rounded-full transition-all animate-in fade-in-0 zoom-in-95 duration-200"
+          >
+            <div className="flex items-center gap-2 pr-3 border-r border-border/60 text-xs font-semibold select-none">
+              <span className="flex items-center gap-1.5 text-foreground">
+                <GitBranch className="w-3.5 h-3.5 text-primary" />
+                <span>Workflow Pipeline</span>
+              </span>
+              <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full border border-border/40">
+                {nodes.length} nodes
+              </span>
+              <span className="text-[10px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded-full">
+                Ready
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-3 text-xs rounded-full hover:bg-muted font-medium"
+                onClick={handleSave}
+              >
+                <Save className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" /> Save
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 px-4 text-xs rounded-full shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all hover:scale-105"
+                onClick={handleExecute}
+              >
+                <Play className="w-3.5 h-3.5 mr-1 fill-current" /> Execute Pipeline
+              </Button>
+            </div>
           </Panel>
         </ReactFlow>
       </div>

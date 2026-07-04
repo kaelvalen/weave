@@ -4,7 +4,7 @@ import {
   FileText, Plus, Search, Loader2, Save, Trash2, Calendar,
   Star, Tag, X, Eye, Edit3, Columns, Copy, Check, Download,
   Bold, Italic, Strikethrough, Heading1, Heading2, Code, Link as LinkIcon,
-  ListTodo, Table as TableIcon, Quote, MoreVertical
+  ListTodo, Table as TableIcon, Quote, MoreVertical, Sparkles
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { extractError } from '@/lib/errors';
 
 // CodeMirror imports
 import CodeMirror from '@uiw/react-codemirror';
@@ -136,12 +137,18 @@ export function NotesManager() {
   const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>(() => {
     return (localStorage.getItem('weave_notes_view_mode') as 'edit' | 'preview' | 'split') || 'split';
   });
+
+  // AI Assistant state
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
   
   const handleSetViewMode = (mode: 'edit' | 'preview' | 'split') => {
     setViewMode(mode);
     localStorage.setItem('weave_notes_view_mode', mode);
   };
-  
+
   // Tagging state
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
@@ -390,6 +397,56 @@ export function NotesManager() {
     toast.success(`Exported as .${type}`);
   };
 
+  const handleAiAction = async (actionType: 'summarize' | 'todo' | 'grammar' | 'tags') => {
+    if (!selectedNote || !selectedNote.content.trim()) {
+      toast.error('Please add content to the note first.');
+      return;
+    }
+    setAiLoading(true);
+    setAiResponse(null);
+    try {
+      let prompt = '';
+      if (actionType === 'summarize') prompt = `Summarize the following note concisely in bullet points:\n\n${selectedNote.content}`;
+      else if (actionType === 'todo') prompt = `Extract all actionable tasks and todos from this note formatted as a markdown checklist:\n\n${selectedNote.content}`;
+      else if (actionType === 'grammar') prompt = `Review and improve the writing, clarity, and grammar of this note:\n\n${selectedNote.content}`;
+      else if (actionType === 'tags') prompt = `Suggest 3-5 short lowercase tags for this note as a comma-separated list:\n\n${selectedNote.content}`;
+
+      const res = await executeCapability('com.weave.builtin.chat', 'chat.send', {
+        message: prompt,
+        model: 'gpt-4o-mini',
+      }) as string | { content?: string; response?: string };
+
+      const reply = typeof res === 'string' ? res : (res?.content || res?.response || JSON.stringify(res));
+      setAiResponse(reply);
+    } catch (e) {
+      toast.error(`AI assistance failed: ${extractError(e)}`);
+      setAiResponse('Could not generate AI response. Please check your model settings.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleCustomAiQuery = async () => {
+    if (!selectedNote || !aiPrompt.trim()) return;
+    setAiLoading(true);
+    setAiResponse(null);
+    try {
+      const prompt = `Based on the following note titled "${selectedNote.title}":\n\n${selectedNote.content}\n\nUser Question: ${aiPrompt}`;
+      const res = await executeCapability('com.weave.builtin.chat', 'chat.send', {
+        message: prompt,
+        model: 'gpt-4o-mini',
+      }) as string | { content?: string; response?: string };
+
+      const reply = typeof res === 'string' ? res : (res?.content || res?.response || JSON.stringify(res));
+      setAiResponse(reply);
+      setAiPrompt('');
+    } catch (e) {
+      toast.error(`AI query failed: ${extractError(e)}`);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const wordCount = selectedNote?.content
     ? selectedNote.content.trim().split(/\s+/).filter(Boolean).length
     : 0;
@@ -397,12 +454,12 @@ export function NotesManager() {
 
   return (
     <div className="flex h-full w-full bg-transparent pt-16">
-      {/* ── Sidebar ── */}
-      <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r bg-card/50">
-        <div className="h-14 px-4 flex items-center justify-between border-b flex-shrink-0 bg-muted/20">
+      {/* ── Column 1: Notes Tree Sidebar ── */}
+      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card/50 backdrop-blur-md">
+        <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-primary" />
-            <h3 className="text-xs font-bold tracking-wide uppercase">Notes Workspace</h3>
+            <h3 className="text-xs font-bold tracking-wide uppercase text-foreground">Notes Tree ({notes.length})</h3>
           </div>
           <Button
             variant="ghost"
@@ -415,7 +472,7 @@ export function NotesManager() {
           </Button>
         </div>
 
-        <div className="px-3 py-3 border-b flex-shrink-0 space-y-2.5">
+        <div className="px-3 py-3 border-b border-border/60 flex-shrink-0 space-y-2.5">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
@@ -471,14 +528,14 @@ export function NotesManager() {
                 <div
                   key={note.id}
                   onClick={() => setSelectedNote(note)}
-                  className={`group p-3 rounded-lg cursor-pointer transition-all border relative ${
+                  className={`group p-3 rounded-xl cursor-pointer transition-all border relative ${
                     selectedNote?.id === note.id
-                      ? 'bg-muted/80 border-primary/40 shadow-sm'
-                      : 'bg-transparent border-transparent hover:bg-muted/40 hover:border-border/50'
+                      ? 'bg-primary/15 text-foreground border-primary/50 shadow-sm'
+                      : 'bg-transparent border-transparent hover:bg-muted/40 hover:border-border/50 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
-                    <h4 className="text-xs font-semibold truncate flex-1 text-foreground">
+                    <h4 className="text-xs font-bold truncate flex-1 text-foreground">
                       {note.title || 'Untitled'}
                     </h4>
                     <Button
@@ -522,400 +579,534 @@ export function NotesManager() {
         </ScrollArea>
       </div>
 
-      {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background/95 backdrop-blur-md relative">
-        {selectedNote ? (
-          <div className="flex flex-col h-full">
-            {/* Top Header */}
-            <div className="h-14 flex items-center justify-between border-b px-6 flex-shrink-0 bg-card/80 gap-4">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => handleTogglePin(selectedNote, e)}
-                  className={`h-8 w-8 flex-shrink-0 ${selectedNote.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
-                  title={selectedNote.pinned ? 'Unpin Note' : 'Pin Note'}
-                >
-                  <Star className={`w-4 h-4 ${selectedNote.pinned ? 'fill-amber-500' : ''}`} />
-                </Button>
-                <input
-                  value={selectedNote.title}
-                  onChange={(e) => setSelectedNote({ ...selectedNote, title: e.target.value })}
-                  className="bg-transparent border-none outline-none font-bold text-base md:text-lg w-full text-foreground placeholder:text-muted-foreground truncate"
-                  placeholder="Note Title..."
-                />
-              </div>
-
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* View Mode Switcher */}
-                <div className="flex items-center bg-muted/60 p-0.5 rounded-md border border-border/50 mr-2">
+      {/* ── Main Area (Columns 2 & 3) ── */}
+      <div className="flex-1 flex h-full min-w-0">
+        {/* ── Column 2: Markdown Editor & Preview ── */}
+        <div className="flex-1 flex flex-col min-w-0 bg-background/95 backdrop-blur-md relative">
+          {selectedNote ? (
+            <div className="flex flex-col h-full">
+              {/* Top Header */}
+              <div className="h-14 flex items-center justify-between border-b border-border/60 px-6 flex-shrink-0 bg-card/80 gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   <Button
-                    variant={viewMode === 'edit' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSetViewMode('edit')}
-                    className="h-7 px-2.5 text-xs gap-1 shadow-none"
-                    title="Edit Markdown"
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => handleTogglePin(selectedNote, e)}
+                    className={`h-8 w-8 flex-shrink-0 ${selectedNote.pinned ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
+                    title={selectedNote.pinned ? 'Unpin Note' : 'Pin Note'}
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Edit</span>
+                    <Star className={`w-4 h-4 ${selectedNote.pinned ? 'fill-amber-500' : ''}`} />
                   </Button>
-                  <Button
-                    variant={viewMode === 'split' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSetViewMode('split')}
-                    className="h-7 px-2.5 text-xs gap-1 shadow-none"
-                    title="Split View"
-                  >
-                    <Columns className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Split</span>
-                  </Button>
-                  <Button
-                    variant={viewMode === 'preview' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSetViewMode('preview')}
-                    className="h-7 px-2.5 text-xs gap-1 shadow-none"
-                    title="Preview Rendered Markdown"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Preview</span>
-                  </Button>
+                  <input
+                    value={selectedNote.title}
+                    onChange={(e) => setSelectedNote({ ...selectedNote, title: e.target.value })}
+                    className="bg-transparent border-none outline-none font-bold text-base md:text-lg w-full text-foreground placeholder:text-muted-foreground truncate"
+                    placeholder="Note Title..."
+                  />
                 </div>
 
-                {/* Save Button */}
-                <Button
-                  size="sm"
-                  onClick={() => handleSave()}
-                  disabled={saving}
-                  className="gap-1.5 h-8 text-xs shadow-sm px-3"
-                >
-                  {saving ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  Save
-                </Button>
-
-                {/* More Actions Menu */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-8 w-8">
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48 text-xs">
-                    <DropdownMenuItem onClick={() => handleExport('copy')} className="gap-2">
-                      <Copy className="w-3.5 h-3.5 text-muted-foreground" /> Copy Markdown
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport('md')} className="gap-2">
-                      <Download className="w-3.5 h-3.5 text-muted-foreground" /> Export as .md
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport('html')} className="gap-2">
-                      <Download className="w-3.5 h-3.5 text-muted-foreground" /> Export as .html
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setConfirmDeleteOpen(true)}
-                      className="gap-2 text-destructive focus:text-destructive"
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* View Mode Switcher */}
+                  <div className="flex items-center bg-muted/60 p-0.5 rounded-md border border-border/50 mr-2">
+                    <Button
+                      variant={viewMode === 'edit' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleSetViewMode('edit')}
+                      className="h-7 px-2.5 text-xs gap-1 shadow-none"
+                      title="Edit Markdown"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete Note
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            {/* Sub-header: Tags & Formatting Toolbar */}
-            <div className="min-h-[40px] px-6 py-1.5 border-b bg-muted/20 flex flex-wrap items-center justify-between gap-3 flex-shrink-0 select-none">
-              {/* Tags Section */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Tag className="w-3.5 h-3.5 text-muted-foreground mr-1" />
-                {selectedNote.tags?.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="text-[10px] h-5 px-2 gap-1 bg-secondary/80 hover:bg-secondary"
-                  >
-                    {tag}
-                    <X
-                      className="w-2.5 h-2.5 cursor-pointer hover:text-destructive transition-colors ml-0.5"
-                      onClick={() => handleRemoveTag(tag)}
-                    />
-                  </Badge>
-                ))}
-                {isAddingTag ? (
-                  <div className="flex items-center gap-1">
-                    <Input
-                      value={newTagInput}
-                      onChange={(e) => setNewTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                      placeholder="Tag name..."
-                      className="h-6 w-24 text-[10px] px-2 py-0"
-                      autoFocus
-                    />
-                    <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={handleAddTag}>
-                      Add
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Edit</span>
                     </Button>
-                    <X
-                      className="w-3.5 h-3.5 cursor-pointer text-muted-foreground hover:text-foreground"
-                      onClick={() => {
-                        setIsAddingTag(false);
-                        setNewTagInput('');
+                    <Button
+                      variant={viewMode === 'split' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleSetViewMode('split')}
+                      className="h-7 px-2.5 text-xs gap-1 shadow-none"
+                      title="Split View"
+                    >
+                      <Columns className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Split</span>
+                    </Button>
+                    <Button
+                      variant={viewMode === 'preview' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleSetViewMode('preview')}
+                      className="h-7 px-2.5 text-xs gap-1 shadow-none"
+                      title="Preview Rendered Markdown"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Preview</span>
+                    </Button>
+                  </div>
+
+                  {/* AI Assistant Toggle */}
+                  <Button
+                    variant={aiPanelOpen ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setAiPanelOpen(!aiPanelOpen)}
+                    className={`h-8 px-2.5 text-xs gap-1.5 border ${aiPanelOpen ? 'border-primary/50 text-primary bg-primary/10' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                    title="Toggle AI Note Assistant Panel"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">AI Panel</span>
+                  </Button>
+
+                  {/* Save Button */}
+                  <Button
+                    size="sm"
+                    onClick={() => handleSave()}
+                    disabled={saving}
+                    className="gap-1.5 h-8 text-xs shadow-sm px-3"
+                  >
+                    {saving ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    Save
+                  </Button>
+
+                  {/* More Actions Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-8 w-8">
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48 text-xs">
+                      <DropdownMenuItem onClick={() => handleExport('copy')} className="gap-2">
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" /> Copy Markdown
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExport('md')} className="gap-2">
+                        <Download className="w-3.5 h-3.5 text-muted-foreground" /> Export as .md
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExport('html')} className="gap-2">
+                        <Download className="w-3.5 h-3.5 text-muted-foreground" /> Export as .html
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setConfirmDeleteOpen(true)}
+                        className="gap-2 text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete Note
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              {/* Sub-header: Tags & Formatting Toolbar */}
+              <div className="min-h-[40px] px-6 py-1.5 border-b border-border/60 bg-muted/20 flex flex-wrap items-center justify-between gap-3 flex-shrink-0 select-none">
+                {/* Tags Section */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Tag className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+                  {selectedNote.tags?.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="text-[10px] h-5 px-2 gap-1 bg-secondary/80 hover:bg-secondary"
+                    >
+                      {tag}
+                      <X
+                        className="w-2.5 h-2.5 cursor-pointer hover:text-destructive transition-colors ml-0.5"
+                        onClick={() => handleRemoveTag(tag)}
+                      />
+                    </Badge>
+                  ))}
+                  {isAddingTag ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={newTagInput}
+                        onChange={(e) => setNewTagInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                        placeholder="Tag name..."
+                        className="h-6 w-24 text-[10px] px-2 py-0"
+                        autoFocus
+                      />
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={handleAddTag}>
+                        Add
+                      </Button>
+                      <X
+                        className="w-3.5 h-3.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setIsAddingTag(false);
+                          setNewTagInput('');
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 border border-dashed border-border rounded-full"
+                      onClick={() => setIsAddingTag(true)}
+                    >
+                      <Plus className="w-2.5 h-2.5" /> Tag
+                    </Button>
+                  )}
+                </div>
+
+                {/* Formatting Toolbar */}
+                {(viewMode === 'edit' || viewMode === 'split') && (
+                  <div className="flex items-center gap-0.5 bg-background border border-border/60 rounded-md px-1 py-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('**', '**')}
+                      title="Bold (**)"
+                    >
+                      <Bold className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('*', '*')}
+                      title="Italic (*)"
+                    >
+                      <Italic className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('~~', '~~')}
+                      title="Strikethrough (~~)"
+                    >
+                      <Strikethrough className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('# ')}
+                      title="Heading 1 (#)"
+                    >
+                      <Heading1 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('## ')}
+                      title="Heading 2 (##)"
+                    >
+                      <Heading2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('`', '`')}
+                      title="Inline Code (`)"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('```text\n', '\n```')}
+                      title="Code Block (```)"
+                    >
+                      <span className="font-mono text-[10px] font-bold">```</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('[', '](https://)')}
+                      title="Link ([]())"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('- [ ] ')}
+                      title="Task Checklist (- [ ])"
+                    >
+                      <ListTodo className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('> ')}
+                      title="Blockquote (>)"
+                    >
+                      <Quote className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => insertFormat('\n| Column 1 | Column 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n')}
+                      title="Insert Table"
+                    >
+                      <TableIcon className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Editor & Preview Workspace */}
+              <div className="flex-1 w-full relative overflow-hidden bg-transparent flex">
+                {/* CodeMirror Editor Panel */}
+                {(viewMode === 'edit' || viewMode === 'split') && (
+                  <div className={`h-full relative overflow-hidden ${viewMode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'}`}>
+                    <CodeMirror
+                      value={selectedNote.content}
+                      height="100%"
+                      theme={getWeaveTheme(isDark)}
+                      extensions={[markdown(), EditorView.lineWrapping]}
+                      onChange={(val) => setSelectedNote({ ...selectedNote, content: val })}
+                      onUpdate={handleEditorUpdate}
+                      className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-sans [&_.cm-content]:pb-32 [&_.cm-line]:leading-relaxed"
+                      basicSetup={{
+                        lineNumbers: viewMode === 'edit',
+                        highlightActiveLineGutter: viewMode === 'edit',
+                        highlightSpecialChars: true,
+                        history: true,
+                        foldGutter: false,
+                        drawSelection: true,
+                        dropCursor: true,
+                        allowMultipleSelections: true,
+                        indentOnInput: true,
+                        syntaxHighlighting: true,
+                        bracketMatching: true,
+                        closeBrackets: true,
+                        autocompletion: true,
+                        rectangularSelection: true,
+                        crosshairCursor: true,
+                        highlightActiveLine: false,
+                        highlightSelectionMatches: true,
+                        closeBracketsKeymap: true,
+                        defaultKeymap: true,
+                        searchKeymap: true,
+                        historyKeymap: true,
+                        foldKeymap: true,
+                        completionKeymap: true,
+                        lintKeymap: true,
                       }}
                     />
                   </div>
-                ) : (
+                )}
+
+                {/* Rendered Markdown Preview Panel */}
+                {(viewMode === 'preview' || viewMode === 'split') && (
+                  <div className={`h-full relative overflow-hidden bg-background/50 ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
+                    <ScrollArea className="h-full w-full p-6 md:p-8 pb-32">
+                      <div className="max-w-3xl mx-auto text-sm leading-relaxed text-foreground space-y-4">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{
+                            h1: ({ children }) => <h1 className="text-2xl font-bold border-b border-border pb-2 mb-4 mt-6 text-foreground tracking-tight first:mt-0">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-xl font-semibold border-b border-border/60 pb-1.5 mb-3 mt-5 text-foreground">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 text-foreground">{children}</h3>,
+                            h4: ({ children }) => <h4 className="text-base font-semibold mb-2 mt-3 text-foreground">{children}</h4>,
+                            p: ({ children }) => <p className="text-sm leading-relaxed text-foreground/90 mb-3">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-3 text-sm text-foreground/90 pl-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-3 text-sm text-foreground/90 pl-2">{children}</ol>,
+                            li: ({ children }) => <li className="leading-normal">{children}</li>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/60 pl-4 py-1.5 my-3 bg-muted/40 italic text-muted-foreground rounded-r">{children}</blockquote>,
+                            table: ({ children }) => <div className="overflow-x-auto my-4 rounded-lg border border-border"><table className="w-full border-collapse text-sm">{children}</table></div>,
+                            thead: ({ children }) => <thead className="bg-muted/70 text-left">{children}</thead>,
+                            th: ({ children }) => <th className="border-b border-border px-3 py-2 font-semibold text-foreground">{children}</th>,
+                            td: ({ children }) => <td className="border-b border-border/50 px-3 py-2 text-foreground/80">{children}</td>,
+                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80 font-medium">{children}</a>,
+                            hr: () => <hr className="my-6 border-border" />,
+                            strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+                            em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
+                            del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
+                            img: ({ src, alt }) => <img src={src} alt={alt} className="rounded-lg max-w-full h-auto my-3 border border-border shadow-sm" />,
+                            input: ({ type, checked, ...props }) => {
+                              if (type === 'checkbox') {
+                                return <input type="checkbox" checked={checked} readOnly className="mr-2 rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 accent-primary cursor-default inline-block align-middle" {...props} />;
+                              }
+                              return <input type={type} {...props} />;
+                            },
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            code: MarkdownCodeBlock as any,
+                          }}
+                        >
+                          {selectedNote.content || '*Empty note...*'}
+                        </ReactMarkdown>
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Status Bar ── */}
+              <div className="h-7 border-t border-border/60 bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-4 flex-shrink-0 select-none z-10 font-mono tracking-tight">
+                <div className="flex items-center gap-4">
+                  {(viewMode === 'edit' || viewMode === 'split') && (
+                    <>
+                      <span className="flex items-center gap-1 hover:text-foreground transition-colors">
+                        Ln {cursor.line}, Col {cursor.col}
+                      </span>
+                      <span className="opacity-40">|</span>
+                    </>
+                  )}
+                  <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Word Count">
+                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                  </span>
+                  <span className="opacity-40">|</span>
+                  <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Estimated Reading Time">
+                    ~{readingTime} min read
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-amber-500/90 font-semibold uppercase tracking-wider">
+                    {viewMode === 'split' ? 'SPLIT MODE' : viewMode === 'preview' ? 'PREVIEW MODE' : 'EDIT MODE'}
+                  </span>
+                  <span className="opacity-40">|</span>
+                  <span className="hover:text-foreground transition-colors uppercase tracking-wider font-semibold">
+                    GFM MARKDOWN
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-transparent p-8">
+              <div className="w-16 h-16 rounded-2xl border border-border bg-card shadow-sm flex items-center justify-center mb-4">
+                <FileText className="w-8 h-8 text-primary/60" />
+              </div>
+              <h3 className="text-base font-bold text-foreground mb-1">No Note Selected</h3>
+              <p className="text-xs text-muted-foreground max-w-sm text-center mb-6">
+                Select a note from the sidebar to view or edit, or create a new note to start capturing ideas.
+              </p>
+              <Button onClick={handleCreate} size="sm" className="gap-2 text-xs h-8 rounded-xl shadow-sm">
+                <Plus className="w-3.5 h-3.5" /> Create New Note
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Column 3: AI Note Assistant Panel ── */}
+        {aiPanelOpen && selectedNote && (
+          <div className="w-[280px] border-l border-border/80 bg-card/40 backdrop-blur-md flex flex-col h-full shrink-0 shadow-lg z-10 animate-in slide-in-from-right duration-200">
+            <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <h3 className="text-xs font-bold tracking-wide uppercase text-foreground">AI Note Assistant</h3>
+              </div>
+              <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setAiPanelOpen(false)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {/* Quick AI Tools */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Quick Actions</span>
+                <div className="grid grid-cols-1 gap-1.5">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 border border-dashed border-border rounded-full"
-                    onClick={() => setIsAddingTag(true)}
+                    onClick={() => handleAiAction('summarize')}
+                    disabled={aiLoading}
+                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
                   >
-                    <Plus className="w-2.5 h-2.5" /> Tag
-                  </Button>
-                )}
-              </div>
-
-              {/* Formatting Toolbar (only enabled in edit/split view) */}
-              {(viewMode === 'edit' || viewMode === 'split') && (
-                <div className="flex items-center gap-0.5 bg-background border border-border/60 rounded-md px-1 py-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('**', '**')}
-                    title="Bold (**)"
-                  >
-                    <Bold className="w-3.5 h-3.5" />
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Summarize Note</span>
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('*', '*')}
-                    title="Italic (*)"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAiAction('todo')}
+                    disabled={aiLoading}
+                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
                   >
-                    <Italic className="w-3.5 h-3.5" />
+                    <ListTodo className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span>Extract Action Items</span>
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('~~', '~~')}
-                    title="Strikethrough (~~)"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAiAction('grammar')}
+                    disabled={aiLoading}
+                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
                   >
-                    <Strikethrough className="w-3.5 h-3.5" />
-                  </Button>
-                  <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('# ')}
-                    title="Heading 1 (#)"
-                  >
-                    <Heading1 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                    <span>Improve Writing</span>
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('## ')}
-                    title="Heading 2 (##)"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAiAction('tags')}
+                    disabled={aiLoading}
+                    className="justify-start text-xs h-8 gap-2 bg-background/80 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all rounded-xl"
                   >
-                    <Heading2 className="w-3.5 h-3.5" />
-                  </Button>
-                  <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('`', '`')}
-                    title="Inline Code (`)"
-                  >
-                    <Code className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('```text\n', '\n```')}
-                    title="Code Block (```)"
-                  >
-                    <span className="font-mono text-[10px] font-bold">```</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('[', '](https://)')}
-                    title="Link ([]())"
-                  >
-                    <LinkIcon className="w-3.5 h-3.5" />
-                  </Button>
-                  <div className="w-[1px] h-4 bg-border/60 mx-0.5" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('- [ ] ')}
-                    title="Task Checklist (- [ ])"
-                  >
-                    <ListTodo className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('> ')}
-                    title="Blockquote (>)"
-                  >
-                    <Quote className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => insertFormat('\n| Column 1 | Column 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n')}
-                    title="Insert Table"
-                  >
-                    <TableIcon className="w-3.5 h-3.5" />
+                    <Tag className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <span>Suggest Tags</span>
                   </Button>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Editor & Preview Workspace */}
-            <div className="flex-1 w-full relative overflow-hidden bg-transparent flex">
-              {/* CodeMirror Editor Panel */}
-              {(viewMode === 'edit' || viewMode === 'split') && (
-                <div className={`h-full relative overflow-hidden ${viewMode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'}`}>
-                  <CodeMirror
-                    value={selectedNote.content}
-                    height="100%"
-                    theme={getWeaveTheme(isDark)}
-                    extensions={[markdown(), EditorView.lineWrapping]}
-                    onChange={(val) => setSelectedNote({ ...selectedNote, content: val })}
-                    onUpdate={handleEditorUpdate}
-                    className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-sans [&_.cm-content]:pb-32 [&_.cm-line]:leading-relaxed"
-                    basicSetup={{
-                      lineNumbers: viewMode === 'edit',
-                      highlightActiveLineGutter: viewMode === 'edit',
-                      highlightSpecialChars: true,
-                      history: true,
-                      foldGutter: false,
-                      drawSelection: true,
-                      dropCursor: true,
-                      allowMultipleSelections: true,
-                      indentOnInput: true,
-                      syntaxHighlighting: true,
-                      bracketMatching: true,
-                      closeBrackets: true,
-                      autocompletion: true,
-                      rectangularSelection: true,
-                      crosshairCursor: true,
-                      highlightActiveLine: false,
-                      highlightSelectionMatches: true,
-                      closeBracketsKeymap: true,
-                      defaultKeymap: true,
-                      searchKeymap: true,
-                      historyKeymap: true,
-                      foldKeymap: true,
-                      completionKeymap: true,
-                      lintKeymap: true,
-                    }}
+              {/* Custom AI Query */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Ask AI About Note</span>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Ask anything about this note..."
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCustomAiQuery()}
+                    className="text-xs h-8 bg-background/80 border-border/80 rounded-xl"
                   />
+                  <Button
+                    size="sm"
+                    onClick={handleCustomAiQuery}
+                    disabled={aiLoading || !aiPrompt.trim()}
+                    className="w-full h-8 text-xs font-medium gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-sm"
+                  >
+                    {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>Generate Response</span>
+                  </Button>
                 </div>
-              )}
+              </div>
 
-              {/* Rendered Markdown Preview Panel */}
-              {(viewMode === 'preview' || viewMode === 'split') && (
-                <div className={`h-full relative overflow-hidden bg-background/50 ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
-                  <ScrollArea className="h-full w-full p-6 md:p-8 pb-32">
-                    <div className="max-w-3xl mx-auto text-sm leading-relaxed text-foreground space-y-4">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                          h1: ({ children }) => <h1 className="text-2xl font-bold border-b border-border pb-2 mb-4 mt-6 text-foreground tracking-tight first:mt-0">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-xl font-semibold border-b border-border/60 pb-1.5 mb-3 mt-5 text-foreground">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 text-foreground">{children}</h3>,
-                          h4: ({ children }) => <h4 className="text-base font-semibold mb-2 mt-3 text-foreground">{children}</h4>,
-                          p: ({ children }) => <p className="text-sm leading-relaxed text-foreground/90 mb-3">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-3 text-sm text-foreground/90 pl-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-3 text-sm text-foreground/90 pl-2">{children}</ol>,
-                          li: ({ children }) => <li className="leading-normal">{children}</li>,
-                          blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/60 pl-4 py-1.5 my-3 bg-muted/40 italic text-muted-foreground rounded-r">{children}</blockquote>,
-                          table: ({ children }) => <div className="overflow-x-auto my-4 rounded-lg border border-border"><table className="w-full border-collapse text-sm">{children}</table></div>,
-                          thead: ({ children }) => <thead className="bg-muted/70 text-left">{children}</thead>,
-                          th: ({ children }) => <th className="border-b border-border px-3 py-2 font-semibold text-foreground">{children}</th>,
-                          td: ({ children }) => <td className="border-b border-border/50 px-3 py-2 text-foreground/80">{children}</td>,
-                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80 font-medium">{children}</a>,
-                          hr: () => <hr className="my-6 border-border" />,
-                          strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
-                          em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
-                          del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
-                          img: ({ src, alt }) => <img src={src} alt={alt} className="rounded-lg max-w-full h-auto my-3 border border-border shadow-sm" />,
-                          input: ({ type, checked, ...props }) => {
-                            if (type === 'checkbox') {
-                              return <input type="checkbox" checked={checked} readOnly className="mr-2 rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 accent-primary cursor-default inline-block align-middle" {...props} />;
-                            }
-                            return <input type={type} {...props} />;
-                          },
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          code: MarkdownCodeBlock as any,
-                        }}
-                      >
-                        {selectedNote.content || '*Empty note...*'}
-                      </ReactMarkdown>
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-
-            {/* ── Status Bar ── */}
-            <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-4 flex-shrink-0 select-none z-10 font-mono tracking-tight">
-              <div className="flex items-center gap-4">
-                {(viewMode === 'edit' || viewMode === 'split') && (
-                  <>
-                    <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-                      Ln {cursor.line}, Col {cursor.col}
+              {/* AI Response Box */}
+              {(aiResponse || aiLoading) && (
+                <div className="p-3 bg-muted/40 border border-border/60 rounded-xl space-y-2 animate-in fade-in-0 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-primary flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> AI Output:
                     </span>
-                    <span className="opacity-40">|</span>
-                  </>
-                )}
-                <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Word Count">
-                  {wordCount} {wordCount === 1 ? 'word' : 'words'}
-                </span>
-                <span className="opacity-40">|</span>
-                <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Estimated Reading Time">
-                  ~{readingTime} min read
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-amber-500/90 font-semibold uppercase tracking-wider">
-                  {viewMode === 'split' ? 'SPLIT MODE' : viewMode === 'preview' ? 'PREVIEW MODE' : 'EDIT MODE'}
-                </span>
-                <span className="opacity-40">|</span>
-                <span className="hover:text-foreground transition-colors uppercase tracking-wider font-semibold">
-                  GFM MARKDOWN
-                </span>
-              </div>
+                    {aiResponse && (
+                      <button
+                        onClick={() => {
+                          insertFormat(`\n\n> **AI Assistant:**\n> ${aiResponse.replace(/\n/g, '\n> ')}\n\n`);
+                          toast.success('Inserted AI response into note');
+                        }}
+                        className="text-[10px] text-primary hover:underline font-bold"
+                      >
+                        + Insert into Note
+                      </button>
+                    )}
+                  </div>
+                  {aiLoading ? (
+                    <div className="flex items-center justify-center py-4 text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <span className="text-xs font-mono">Thinking...</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-foreground/90 leading-relaxed font-sans bg-background/80 p-2.5 rounded-lg border border-border/30 max-h-60 overflow-y-auto whitespace-pre-wrap">
+                      {aiResponse}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-transparent p-8">
-            <div className="w-16 h-16 rounded-xl border border-border bg-card shadow-sm flex items-center justify-center mb-4">
-              <FileText className="w-8 h-8 text-primary/60" />
-            </div>
-            <h3 className="text-base font-semibold text-foreground mb-1">No Note Selected</h3>
-            <p className="text-xs text-muted-foreground max-w-sm text-center mb-6">
-              Select a note from the sidebar to view or edit, or create a new note to start capturing ideas.
-            </p>
-            <Button onClick={handleCreate} size="sm" className="gap-2 text-xs h-8">
-              <Plus className="w-3.5 h-3.5" /> Create New Note
-            </Button>
           </div>
         )}
       </div>

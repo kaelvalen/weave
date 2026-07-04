@@ -557,6 +557,7 @@ function CanvasInner() {
           setActiveTool={setActiveTool}
           onExport={handleExport}
           onImport={handleImport}
+          projectName={project?.name}
         />
 
         {activeProjectId ? (
