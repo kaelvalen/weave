@@ -16,10 +16,14 @@ import {
   Cpu,
   Loader2,
   ArrowDown,
+  ShieldCheck,
+  ShieldQuestion,
+  Check,
 } from 'lucide-react';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
+import { useApprovalModeStore } from '@/stores/useApprovalModeStore';
 import { Button } from '@/components/ui/button';
 import { PlayCircle } from 'lucide-react';
 const SUGGESTED_PROMPTS = [
@@ -74,6 +78,8 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
+  const approvalMode = useApprovalModeStore((s) => s.mode);
+  const setApprovalMode = useApprovalModeStore((s) => s.setMode);
 
   useChatStream();
 
@@ -149,6 +155,42 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Approval Mode Switcher — Cline/Cursor style */}
+              <div
+                role="group"
+                aria-label="Edit approval mode"
+                className="flex items-center bg-muted/60 rounded-full p-0.5 border border-border/50"
+              >
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode('ask')}
+                  title="Ask mode — confirm each file-changing action before it runs"
+                  aria-pressed={approvalMode === 'ask'}
+                  className={`flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                    approvalMode === 'ask'
+                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <ShieldQuestion className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Ask</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode('accept-edits')}
+                  title="Accept Edits mode — auto-approve file changes for this session"
+                  aria-pressed={approvalMode === 'accept-edits'}
+                  className={`flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                    approvalMode === 'accept-edits'
+                      ? 'bg-green-500/15 text-green-600 dark:text-green-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Accept Edits</span>
+                </button>
+              </div>
+
               {isStreaming && (
                 <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold animate-pulse">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -263,6 +305,13 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
             });
           };
 
+          const handleAcceptAllForSession = () => {
+            // Switch to Accept Edits mode so subsequent destructive calls run without prompting,
+            // then approve the currently pending batch.
+            useApprovalModeStore.getState().setMode('accept-edits');
+            handleAcceptAll();
+          };
+
           const handleRejectAll = () => {
             pendingApprovals.forEach(({ messageId, call }) => {
               useChatStore.getState().executeToolCall(messageId, call.capability, false);
@@ -271,8 +320,8 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
 
           return (
             <div className="mx-4 mb-2 p-3 bg-card border border-border rounded-xl shadow-lg flex items-center justify-between animate-in slide-in-from-bottom-2 fade-in duration-200">
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <PlayCircle className="w-4 h-4 text-orange-500 animate-pulse" />
+              <div className="flex items-center gap-2 text-sm text-foreground min-w-0">
+                <PlayCircle className="w-4 h-4 text-orange-500 animate-pulse flex-shrink-0" />
                 <span className="font-medium">
                   AI wants to run {pendingApprovals.length} tool
                   {pendingApprovals.length > 1 ? 's' : ''}.
@@ -281,14 +330,26 @@ export function ChatPanel({ isFloating = false }: { isFloating?: boolean }) {
                   (Files will be changed)
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-shrink-0">
                 <Button
                   size="sm"
                   variant="default"
-                  className="h-8 bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                  className="h-8 bg-green-600 hover:bg-green-700 text-white shadow-sm gap-1.5"
                   onClick={handleAcceptAll}
+                  title="Approve this batch only"
                 >
                   Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-500/40 dark:text-green-400 dark:hover:bg-green-500/10"
+                  onClick={handleAcceptAllForSession}
+                  title="Approve this batch and auto-approve file edits for the rest of the session"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Accept All Edits</span>
+                  <span className="sm:hidden">All</span>
                 </Button>
                 <Button
                   size="sm"

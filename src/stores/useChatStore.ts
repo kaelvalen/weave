@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
 import { useAppStore } from './useAppStore';
 import { extractError } from '@/lib/errors';
+import { useApprovalModeStore } from './useApprovalModeStore';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -585,6 +586,8 @@ export const useChatStore = create<ChatState>()(
 
       // File/system-modifying capabilities require explicit user approval before running.
       // Non-destructive tools (read, list, calc, search, etc.) execute autonomously.
+      // In `accept-edits` mode the user has pre-approved all destructive calls for the session,
+      // so we skip the per-call prompt (behaves like other coders' "Accept Edits").
       const DESTRUCTIVE_CAPS = new Set([
         'file.write',
         'file.delete',
@@ -595,7 +598,9 @@ export const useChatStore = create<ChatState>()(
         'shell.run',
         'note.delete',
       ]);
-      const requiresApproval = validCalls.some((c) => DESTRUCTIVE_CAPS.has(c.capName));
+      const hasDestructive = validCalls.some((c) => DESTRUCTIVE_CAPS.has(c.capName));
+      const approvalMode = useApprovalModeStore.getState().mode;
+      const requiresApproval = hasDestructive && approvalMode === 'ask';
 
       // Attach tool calls to assistant message
       set((state) => {

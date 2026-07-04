@@ -305,8 +305,10 @@ export const ChatMessage = React.memo(function ChatMessage({
           </div>
         )}
 
-        {/* Incomplete Tool Call Warning */}
-        {/<\s*call\s+plugin=/i.test(message.content) &&
+        {/* Incomplete Tool Call Warning — only after streaming finishes, since while
+            streaming the closing </call> tag may simply not have arrived yet. */}
+        {!isStreaming &&
+          /<\s*call\s+plugin=/i.test(message.content) &&
           !/<\/\s*call\s*>/i.test(message.content) && (
             <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
               <svg

@@ -172,7 +172,7 @@ impl PluginManager {
                 .write_access(&["file://*"])
                 .capability("coder.read_file", r#"{"path":"...","start":null,"end":null}"#, "Read source file with line numbers and optional range")
                 .capability("coder.write_file", r#"{"path":"...","content":"...","create_dirs":true}"#, "Write a file (backs up previous to versioned history)")
-                .capability("coder.apply_diff", r#"{"path":"...","old_str":"...","new_str":"..."}"#, "Replace EXACT unique string old_str with new_str")
+                .capability("coder.apply_diff", r#"{"path":"...","old_str":"...","new_str":"..."}"#, "Replace unique string old_str with new_str. Keep old_str SHORT (1-5 lines)!")
                 .capability("coder.apply_patch", r#"{"path":"...","patch":"..."}"#, "Apply a unified diff patch to a file")
                 .capability("coder.patch_preview", r#"{"path":"...","patch":"..."}"#, "Get preview diff of applying a unified patch")
                 .capability("coder.revert_file", r#"{"path":"..."}"#, "Revert a file to its last versioned backup (undo change)")
@@ -457,7 +457,7 @@ impl PluginManager {
         prompt.push_str("2. **Context Gathering**: Always start by understanding the environment. Use `coder.list_dir` or `coder.read_file` to analyze the project structure and existing code BEFORE writing code.\n");
         prompt.push_str("3. **Multi-step Planning**: Break down complex requests. Think step-by-step. Implement one part, run tests/checks, then move to the next.\n");
         prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
-        prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. Only use `coder.write_file` for new files or massive rewrites.\n\n");
+        prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n\n");
         prompt.push_str("## Tool Usage Rules\n");
         prompt.push_str("- Output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call> when using a tool.\n");
         prompt.push_str("- You will receive the tool result in the next turn.\n");
