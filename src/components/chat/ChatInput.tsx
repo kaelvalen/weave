@@ -48,8 +48,22 @@ const FALLBACK_MODELS: ModelOption[] = [
   { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
   { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet', provider: 'anthropic' },
-  { value: 'kimi-k2-0711-preview', label: 'Kimi K2', provider: 'kimi' },
-  { value: 'opencode-gpt-4o', label: 'OpenCode GPT-4o', provider: 'opencode' },
+  {
+    value: 'opencode-go/qwen3.6-plus',
+    label: 'OpenCode Go (Qwen 3.6 Plus)',
+    provider: 'opencode',
+  },
+  {
+    value: 'opencode-go/kimi-k2.7-code',
+    label: 'OpenCode Go (Kimi K2.7 Code)',
+    provider: 'opencode',
+  },
+  {
+    value: 'zen/claude-3-7-sonnet',
+    label: 'OpenCode Zen (Claude 3.7 Sonnet)',
+    provider: 'opencode',
+  },
+  { value: 'zen/gpt-4o', label: 'OpenCode Zen (GPT-4o)', provider: 'opencode' },
   { value: 'llama3.1', label: 'Llama 3.1 (Local)', provider: 'local' },
 ];
 

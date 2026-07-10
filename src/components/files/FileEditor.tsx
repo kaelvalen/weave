@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
-import { Save, Loader2, AlertCircle, FileCode2 } from 'lucide-react';
+import { Save, Loader2, AlertCircle, FileCode2, Sparkles, FileDiff, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { FileDiffViewer } from './FileDiffViewer';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
 
@@ -88,6 +89,9 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [liveUpdated, setLiveUpdated] = useState(false);
+  const [prevContent, setPrevContent] = useState('');
+  const [isDiffMode, setIsDiffMode] = useState(false);
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
@@ -147,6 +151,7 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
         const result = res as { success: boolean; content: string };
         if (result && result.success) {
           setContent(result.content);
+          setPrevContent(result.content);
         } else {
           setError('Failed to read file content.');
         }
@@ -168,6 +173,45 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
     // mediaUrl is managed inside this effect; adding it would cause a fetch loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, executeCapability, isMedia, isImage, ext]);
+
+  // Listen for live AI updates to this open file
+  useEffect(() => {
+    let mounted = true;
+    const handleFileModified = (e: Event) => {
+      const customEvent = e as CustomEvent<{ path: string; capability: string }>;
+      if (customEvent.detail && customEvent.detail.path) {
+        const modifiedPath = customEvent.detail.path;
+        if (modifiedPath === path || modifiedPath.endsWith(filename)) {
+          executeCapability('com.weave.builtin.file', 'file.read', { path })
+            .then((res) => {
+              if (!mounted) return;
+              const result = res as { success: boolean; content: string };
+              if (result && result.success) {
+                setContent((currentVal) => {
+                  setPrevContent(currentVal || result.content);
+                  return result.content;
+                });
+                setIsDirty(false);
+                setLiveUpdated(true);
+                setIsDiffMode(true);
+                setTimeout(() => {
+                  if (mounted) setLiveUpdated(false);
+                }, 4000);
+                toast.success('⚡ Live code update', {
+                  description: `${filename} updated live by Weave Agent`,
+                });
+              }
+            })
+            .catch(console.error);
+        }
+      }
+    };
+    window.addEventListener('weave:file-modified', handleFileModified);
+    return () => {
+      mounted = false;
+      window.removeEventListener('weave:file-modified', handleFileModified);
+    };
+  }, [path, filename, executeCapability]);
 
   const handleSave = useCallback(
     async (currentContent: string) => {
@@ -286,64 +330,97 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
               role="status"
             />
           )}
+          {liveUpdated && (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md animate-fade-in">
+              <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+              AI Live Updated
+            </span>
+          )}
         </div>
 
-        <Button
-          size="sm"
-          onClick={() => handleSave(content)}
-          disabled={saving || !isDirty}
-          variant={isDirty ? 'default' : 'secondary'}
-          className={`gap-2 h-8 text-xs transition-all ${isDirty ? 'shadow-sm' : 'opacity-70'}`}
-        >
-          {saving ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Save className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2">
+          {prevContent && prevContent !== content && (
+            <Button
+              size="sm"
+              variant={isDiffMode ? 'default' : 'outline'}
+              onClick={() => setIsDiffMode(!isDiffMode)}
+              className="gap-1.5 h-8 text-xs font-sans font-medium"
+            >
+              {isDiffMode ? (
+                <>
+                  <Code className="w-3.5 h-3.5" />
+                  Code Editor
+                </>
+              ) : (
+                <>
+                  <FileDiff className="w-3.5 h-3.5 text-primary" />
+                  Diff View
+                </>
+              )}
+            </Button>
           )}
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+
+          <Button
+            size="sm"
+            onClick={() => handleSave(content)}
+            disabled={saving || !isDirty}
+            variant={isDirty ? 'default' : 'secondary'}
+            className={`gap-2 h-8 text-xs transition-all ${isDirty ? 'shadow-sm' : 'opacity-70'}`}
+          >
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
       </div>
 
-      {/* ── CodeMirror Editor ── */}
+      {/* ── CodeMirror Editor / Diff Viewer ── */}
       <div className="flex-1 relative w-full overflow-hidden text-sm bg-transparent">
-        <CodeMirror
-          value={content}
-          height="100%"
-          theme={getWeaveTheme(isDark)}
-          extensions={languageExt ? [languageExt] : []}
-          onChange={(val) => {
-            setContent(val);
-            if (!isDirty) setIsDirty(true);
-          }}
-          onUpdate={handleEditorUpdate}
-          className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-mono [&_.cm-content]:pb-32"
-          basicSetup={{
-            lineNumbers: true,
-            highlightActiveLineGutter: true,
-            highlightSpecialChars: true,
-            history: true,
-            foldGutter: true,
-            drawSelection: true,
-            dropCursor: true,
-            allowMultipleSelections: true,
-            indentOnInput: true,
-            syntaxHighlighting: true,
-            bracketMatching: true,
-            closeBrackets: true,
-            autocompletion: true,
-            rectangularSelection: true,
-            crosshairCursor: true,
-            highlightActiveLine: true,
-            highlightSelectionMatches: true,
-            closeBracketsKeymap: true,
-            defaultKeymap: true,
-            searchKeymap: true,
-            historyKeymap: true,
-            foldKeymap: true,
-            completionKeymap: true,
-            lintKeymap: true,
-          }}
-        />
+        {isDiffMode ? (
+          <FileDiffViewer oldContent={prevContent} newContent={content} filename={filename} />
+        ) : (
+          <CodeMirror
+            value={content}
+            height="100%"
+            theme={getWeaveTheme(isDark)}
+            extensions={languageExt ? [languageExt] : []}
+            onChange={(val) => {
+              setContent(val);
+              if (!isDirty) setIsDirty(true);
+            }}
+            onUpdate={handleEditorUpdate}
+            className="h-full w-full absolute inset-0 [&>.cm-editor]:h-full [&>.cm-editor]:outline-none [&_.cm-scroller]:font-mono [&_.cm-content]:pb-32"
+            basicSetup={{
+              lineNumbers: true,
+              highlightActiveLineGutter: true,
+              highlightSpecialChars: true,
+              history: true,
+              foldGutter: true,
+              drawSelection: true,
+              dropCursor: true,
+              allowMultipleSelections: true,
+              indentOnInput: true,
+              syntaxHighlighting: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              autocompletion: true,
+              rectangularSelection: true,
+              crosshairCursor: true,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+              closeBracketsKeymap: true,
+              defaultKeymap: true,
+              searchKeymap: true,
+              historyKeymap: true,
+              foldKeymap: true,
+              completionKeymap: true,
+              lintKeymap: true,
+            }}
+          />
+        )}
       </div>
 
       {/* ── Status Bar ── */}

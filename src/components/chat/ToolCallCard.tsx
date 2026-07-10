@@ -120,7 +120,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
   const isCoderPlugin = call.plugin_id === 'com.weave.builtin.coder';
 
   return (
-    <div className="my-3 max-w-full w-fit border rounded-xl overflow-hidden bg-muted/40 backdrop-blur-sm text-sm shadow-sm transition-all hover:shadow-md">
+    <div className="my-1 w-full border border-border/60 rounded-xl overflow-hidden bg-background/60 hover:bg-background/90 text-sm shadow-2xs transition-all">
       <div
         className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-muted/60 transition-colors gap-6"
         onClick={() => setExpanded(!expanded)}

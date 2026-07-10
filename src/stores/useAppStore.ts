@@ -26,8 +26,10 @@ export const useAppStore = create<AppState>()(
 
     setActiveView: (view: View) => {
       set((state) => {
+        if (state.activeView !== view && view !== 'files') {
+          state.isChatExpanded = false;
+        }
         state.activeView = view;
-        state.isChatExpanded = false;
       });
     },
 

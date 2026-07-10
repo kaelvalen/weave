@@ -1,6 +1,7 @@
 use tauri::State;
 use tracing::{debug, info};
 
+use crate::core::github_plugin::{GithubPluginClient, GithubRepo};
 use crate::models::plugin::Plugin;
 use crate::AppState;
 use crate::utils::errors::WeaveError;
@@ -72,6 +73,60 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()
         }
     }
     Ok(())
+}
+
+/// List public repositories for a GitHub organization.
+#[tauri::command]
+pub async fn plugin_list_github_repos(
+    org: String,
+    _app_state: State<'_, AppState>,
+) -> Result<Vec<GithubRepo>, WeaveError> {
+    info!("Listing GitHub plugins for organization: {}", org);
+    // Validate org name to avoid injection / unexpected API calls.
+    if org.is_empty() || !org.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(WeaveError::PluginError(
+            "Invalid GitHub organization name".to_string(),
+        ));
+    }
+    let client = GithubPluginClient::new();
+    let repos = client.list_org_repos(&org).await?;
+    Ok(repos)
+}
+
+/// Install a plugin by cloning a GitHub repository into the plugin directory.
+#[tauri::command]
+pub async fn plugin_install_from_github_repo(
+    repo_url: String,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<Plugin>, WeaveError> {
+    info!("Installing plugin from GitHub repo: {}", repo_url);
+    let client = GithubPluginClient::new();
+    client
+        .install_from_repo(&app_state.plugin_manager, &repo_url)
+        .await
+}
+
+/// Install a plugin by downloading a `.wpk` asset from a GitHub release.
+#[tauri::command]
+pub async fn plugin_install_from_github_release(
+    repo_url: String,
+    tag: Option<String>,
+    asset_name: Option<String>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<Plugin>, WeaveError> {
+    info!(
+        "Installing plugin from GitHub release: {} (tag: {:?}, asset: {:?})",
+        repo_url, tag, asset_name
+    );
+    let client = GithubPluginClient::new();
+    client
+        .install_from_release(
+            &app_state.plugin_manager,
+            &repo_url,
+            tag.as_deref(),
+            asset_name.as_deref(),
+        )
+        .await
 }
 
 #[tauri::command]

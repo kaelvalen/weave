@@ -42,6 +42,15 @@ export interface Plugin {
   category: PluginCategory;
 }
 
+export interface GithubRepo {
+  name: string;
+  full_name: string;
+  description?: string;
+  html_url: string;
+  default_branch: string;
+  has_releases: boolean;
+}
+
 export interface WorkflowStep {
   id: string;
   plugin_id: string;

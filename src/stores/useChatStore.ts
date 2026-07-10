@@ -332,6 +332,10 @@ export const useChatStore = create<ChatState>()(
               usePluginStore
                 .getState()
                 .executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
+                .then(() => {
+                  window.dispatchEvent(new CustomEvent('weave:file-modified', { detail: { path: call.params.path, capability: 'coder.revert_file' } }));
+                  window.dispatchEvent(new Event('weave-fs-refresh'));
+                })
                 .catch((err) => toast.error(extractError(err)));
             }
           }
@@ -648,6 +652,20 @@ export const useChatStore = create<ChatState>()(
                 }
               }
             });
+            if (
+              ['coder.write_file', 'coder.apply_diff', 'coder.apply_patch', 'coder.revert_file', 'file.write'].includes(
+                call.capName
+              ) &&
+              call.params &&
+              typeof call.params.path === 'string'
+            ) {
+              window.dispatchEvent(
+                new CustomEvent('weave:file-modified', {
+                  detail: { path: call.params.path, capability: call.capName },
+                })
+              );
+              window.dispatchEvent(new Event('weave-fs-refresh'));
+            }
             return `Tool ${call.capName} returned:\n${resultStr}`;
           } catch (err) {
             const errorStr = extractError(err);
@@ -790,6 +808,20 @@ export const useChatStore = create<ChatState>()(
             }
           });
           saveSession();
+          if (
+            ['coder.write_file', 'coder.apply_diff', 'coder.apply_patch', 'coder.revert_file', 'file.write'].includes(
+              capName
+            ) &&
+            call.params &&
+            typeof call.params.path === 'string'
+          ) {
+            window.dispatchEvent(
+              new CustomEvent('weave:file-modified', {
+                detail: { path: call.params.path, capability: capName },
+              })
+            );
+            window.dispatchEvent(new Event('weave-fs-refresh'));
+          }
 
           const quietUserMsg: ChatMessage = {
             id: generateId(),

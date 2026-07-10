@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { PluginCard } from './PluginCard';
+import { GithubPluginPanel } from './GithubPluginPanel';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -16,6 +17,7 @@ import {
   AlertCircle,
   X,
   Download,
+  Github,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -45,6 +47,7 @@ export function PluginMarket() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [showGithub, setShowGithub] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -115,6 +118,16 @@ export function PluginMarket() {
 
           <div className="flex items-center gap-2">
             <Button
+              onClick={() => setShowGithub((s) => !s)}
+              size="sm"
+              variant={showGithub ? 'default' : 'outline'}
+              className="gap-1.5 h-9 text-xs shadow-sm"
+              title="Browse and install plugins from GitHub"
+            >
+              <Github className="w-3.5 h-3.5" />
+              {showGithub ? 'Marketplace' : 'GitHub'}
+            </Button>
+            <Button
               onClick={handleInstall}
               disabled={installing || isLoading}
               size="sm"
@@ -140,35 +153,37 @@ export function PluginMarket() {
         </div>
 
         {/* ── Category Tabs ── */}
-        <div className="py-3 flex items-center gap-1.5 flex-wrap flex-shrink-0">
-          {CATEGORIES.map((cat) => {
-            const Icon = cat.icon;
-            const isActive = selectedCategory === cat.value;
-            const count = cat.value ? categoryCounts[cat.value] || 0 : plugins.length;
-            return (
-              <button
-                key={cat.label}
-                type="button"
-                onClick={() => setCategory(cat.value)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-foreground text-background shadow-sm scale-105'
-                    : 'bg-card/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {cat.label}
-                <span
-                  className={`text-[10px] font-mono px-1 rounded-full ${
-                    isActive ? 'bg-background/20 text-background' : 'bg-muted text-muted-foreground'
+        {!showGithub && (
+          <div className="py-3 flex items-center gap-1.5 flex-wrap flex-shrink-0">
+            {CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
+              const isActive = selectedCategory === cat.value;
+              const count = cat.value ? categoryCounts[cat.value] || 0 : plugins.length;
+              return (
+                <button
+                  key={cat.label}
+                  type="button"
+                  onClick={() => setCategory(cat.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-foreground text-background shadow-sm scale-105'
+                      : 'bg-card/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
                   }`}
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                  <Icon className="w-3.5 h-3.5" />
+                  {cat.label}
+                  <span
+                    className={`text-[10px] font-mono px-1 rounded-full ${
+                      isActive ? 'bg-background/20 text-background' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── Body ── */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card/40 rounded-t-xl border-x border-t border-border/60 shadow-inner">
@@ -186,7 +201,9 @@ export function PluginMarket() {
           {/* ── Content ── */}
           <div className="flex-1 overflow-y-auto min-h-0">
             <div className="px-6 py-6 pb-32">
-              {isLoading ? (
+              {showGithub ? (
+                <GithubPluginPanel />
+              ) : isLoading ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="p-4 rounded-lg border bg-card space-y-3">

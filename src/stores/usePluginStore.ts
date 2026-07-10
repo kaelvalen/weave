@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import type { Plugin, PluginCategory } from '@/types/plugin';
+import type { GithubRepo, Plugin, PluginCategory } from '@/types/plugin';
 import { extractError } from '@/lib/errors';
 
 interface PluginState {
@@ -15,6 +15,8 @@ interface PluginState {
   error: string | null;
   searchQuery: string;
   selectedCategory: string | null;
+  githubRepos: GithubRepo[];
+  githubOrg: string;
 
   discoverPlugins: () => Promise<void>;
   installFromFile: (sourcePath: string) => Promise<void>;
@@ -31,6 +33,9 @@ interface PluginState {
   setCategory: (c: string | null) => void;
   refreshPlugins: () => Promise<void>;
   clearError: () => void;
+  fetchGithubPlugins: (org?: string) => Promise<void>;
+  installFromGithubRepo: (repoUrl: string) => Promise<void>;
+  installFromGithubRelease: (repoUrl: string, tag?: string, asset?: string) => Promise<void>;
 }
 
 export const usePluginStore = create<PluginState>()(
@@ -44,6 +49,8 @@ export const usePluginStore = create<PluginState>()(
       error: null,
       searchQuery: '',
       selectedCategory: null,
+      githubRepos: [],
+      githubOrg: 'weave-plugins',
 
       discoverPlugins: async () => {
         set((state) => {
@@ -196,6 +203,87 @@ export const usePluginStore = create<PluginState>()(
         set((state) => {
           state.error = null;
         });
+      },
+
+      fetchGithubPlugins: async (org?: string) => {
+        const targetOrg = org || get().githubOrg;
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const repos: GithubRepo[] = await invoke('plugin_list_github_repos', {
+            org: targetOrg,
+          });
+          set((state) => {
+            state.githubRepos = repos;
+            state.githubOrg = targetOrg;
+            state.isLoading = false;
+          });
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Failed to list GitHub plugins: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `Failed to list GitHub plugins: ${msg}`;
+          });
+        }
+      },
+
+      installFromGithubRepo: async (repoUrl: string) => {
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const plugins: Plugin[] = await invoke('plugin_install_from_github_repo', {
+            repoUrl,
+          });
+          set((state) => {
+            state.plugins = plugins;
+            state.loadedPlugins = plugins
+              .filter((p) => p.state === 'active' || p.state === 'loaded')
+              .map((p) => p.id);
+            state.isLoading = false;
+          });
+          toast.success('Plugin installed from GitHub repository');
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`GitHub plugin install failed: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `GitHub plugin install failed: ${msg}`;
+          });
+        }
+      },
+
+      installFromGithubRelease: async (repoUrl: string, tag?: string, asset?: string) => {
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const plugins: Plugin[] = await invoke('plugin_install_from_github_release', {
+            repoUrl,
+            tag,
+            asset_name: asset,
+          });
+          set((state) => {
+            state.plugins = plugins;
+            state.loadedPlugins = plugins
+              .filter((p) => p.state === 'active' || p.state === 'loaded')
+              .map((p) => p.id);
+            state.isLoading = false;
+          });
+          toast.success('Plugin installed from GitHub release');
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`GitHub release install failed: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `GitHub release install failed: ${msg}`;
+          });
+        }
       },
     })),
     {

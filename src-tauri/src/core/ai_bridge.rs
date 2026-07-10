@@ -204,13 +204,18 @@ impl AiBridge {
                 self.chat_kimi(enhanced_messages, &model, api_key, api_url.as_deref(), temperature, max_tokens).await
             }
             Provider::Opencode => {
-                let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/v1/chat/completions".to_string());
-                if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" {
-                    url = "https://opencode.ai/zen/v1/chat/completions".to_string();
+                let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/go/v1/chat/completions".to_string());
+                if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" || url == "https://opencode.ai/go/v1" || url == "https://opencode.ai/go/v1/chat/completions" {
+                    url = "https://opencode.ai/zen/go/v1/chat/completions".to_string();
                 } else if !url.ends_with("/chat/completions") {
                     url = format!("{}/chat/completions", url.trim_end_matches('/'));
                 }
-                let actual_model = model.strip_prefix("opencode/").unwrap_or(&model);
+                let actual_model = model
+                    .strip_prefix("opencode-go/")
+                    .or_else(|| model.strip_prefix("opencode-zen/"))
+                    .or_else(|| model.strip_prefix("opencode/"))
+                    .or_else(|| model.strip_prefix("zen/"))
+                    .unwrap_or(&model);
                 self.chat_openai(enhanced_messages, actual_model, api_key, Some(&url), temperature, max_tokens).await
             }
             Provider::Local => {
@@ -316,13 +321,18 @@ impl AiBridge {
                     ).await
                 }
                 Provider::Opencode => {
-                    let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/v1/chat/completions".to_string());
-                    if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" {
-                        url = "https://opencode.ai/zen/v1/chat/completions".to_string();
+                    let mut url = api_url.unwrap_or_else(|| "https://opencode.ai/zen/go/v1/chat/completions".to_string());
+                    if url == "https://api.opencode.ai/v1" || url == "https://api.opencode.ai/v1/chat/completions" || url == "https://opencode.ai/go/v1" || url == "https://opencode.ai/go/v1/chat/completions" {
+                        url = "https://opencode.ai/zen/go/v1/chat/completions".to_string();
                     } else if !url.ends_with("/chat/completions") {
                         url = format!("{}/chat/completions", url.trim_end_matches('/'));
                     }
-                    let actual_model = model.strip_prefix("opencode/").unwrap_or(&model);
+                    let actual_model = model
+                        .strip_prefix("opencode-go/")
+                        .or_else(|| model.strip_prefix("opencode-zen/"))
+                        .or_else(|| model.strip_prefix("opencode/"))
+                        .or_else(|| model.strip_prefix("zen/"))
+                        .unwrap_or(&model);
                     Self::stream_openai_internal(
                         client, enhanced_messages, actual_model, api_key, Some(&url),
                         temperature, max_tokens, tx.clone(),

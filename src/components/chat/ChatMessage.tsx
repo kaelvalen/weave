@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { User, Bot, Copy, Check, Brain, Edit2, RefreshCw } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
+import { AgentActivityAccordion } from './AgentActivityAccordion';
 import { Textarea } from '@/components/ui/textarea';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -296,13 +297,13 @@ export const ChatMessage = React.memo(function ChatMessage({
           </div>
         )}
 
-        {/* Tool Call Cards */}
+        {/* Tool Call Cards -> Agent Activity Accordion */}
         {hasPluginCalls && (
-          <div className="flex flex-col gap-2 my-3">
-            {message.metadata!.plugin_calls.map((call, i) => (
-              <ToolCallCard key={i} call={call} messageId={message.id} />
-            ))}
-          </div>
+          <AgentActivityAccordion
+            calls={message.metadata!.plugin_calls}
+            messageId={message.id}
+            isStreaming={isStreaming && _isLast}
+          />
         )}
 
         {/* Incomplete Tool Call Warning — only after streaming finishes, since while
@@ -391,16 +392,25 @@ export const ChatMessage = React.memo(function ChatMessage({
             </div>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={{ code: CodeBlock }}
-              >
-                {message.content
-                  .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
-                  .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-                  .replace(/\\\((.*?)\\\)/g, '$$$1$$')}
-              </ReactMarkdown>
+              {message.content
+                .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
+                .trim() === '' && hasPluginCalls && !isStreaming ? (
+                <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in shadow-2xs">
+                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span>Autonomous task execution completed successfully.</span>
+                </div>
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{ code: CodeBlock }}
+                >
+                  {message.content
+                    .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
+                    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+                    .replace(/\\\((.*?)\\\)/g, '$$$1$$')}
+                </ReactMarkdown>
+              )}
             </div>
           )}
           {showCursor && !isEditing && <span className="streaming-cursor" />}

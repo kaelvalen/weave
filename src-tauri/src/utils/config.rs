@@ -114,8 +114,8 @@ impl Default for AppConfig {
                 },
                 opencode: ProviderConfig {
                     api_key: String::new(),
-                    model: "opencode-go".to_string(),
-                    api_url: Some("https://opencode.ai/zen/v1".to_string()),
+                    model: "opencode-go/qwen3.6-plus".to_string(),
+                    api_url: Some("https://opencode.ai/zen/go/v1".to_string()),
                     temperature: 0.7,
                     max_tokens: 8192,
                 },

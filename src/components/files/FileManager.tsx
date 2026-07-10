@@ -251,6 +251,30 @@ export function FileManager() {
     return () => window.removeEventListener('weave-fs-refresh', handleRefresh);
   }, [currentRoot, loadDirectory]);
 
+  // Listen for live AI code modification events to auto-switch to file editor and open tab
+  useEffect(() => {
+    const handleFileModified = (e: Event) => {
+      const customEvent = e as CustomEvent<{ path: string; capability: string }>;
+      if (customEvent.detail && customEvent.detail.path) {
+        const filePath = customEvent.detail.path;
+        const fileName = filePath.split(/[/\\]/).pop() || filePath;
+        const node: FSNode = { name: fileName, path: filePath, type: 'file' };
+        const appStore = useAppStore.getState();
+        appStore.setActiveView('files');
+        if (!appStore.isChatExpanded) {
+          appStore.toggleChat(true);
+        }
+        setSelectedFile(node);
+        setOpenedTabs((prev) => {
+          if (prev.some((t) => t.path === filePath)) return prev;
+          return [...prev, node];
+        });
+      }
+    };
+    window.addEventListener('weave:file-modified', handleFileModified);
+    return () => window.removeEventListener('weave:file-modified', handleFileModified);
+  }, []);
+
   const handleManualRefresh = async () => {
     setIsLoading(true);
     const nodes = await loadDirectory(currentRoot);

@@ -297,6 +297,74 @@ export function SettingsPanel() {
                   desc="Configure your Opencode (Zen/Go) API connection."
                 >
                   <div className="space-y-4">
+                    <FieldLabel label="Service Tier (Go vs Zen)">
+                      <div className="grid grid-cols-2 gap-3 p-1 bg-muted/60 rounded-lg border">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfig({
+                              ...config,
+                              ai: {
+                                ...config.ai,
+                                opencode: {
+                                  ...config.ai.opencode,
+                                  api_url: 'https://opencode.ai/zen/go/v1',
+                                  model:
+                                    config.ai.opencode.model.startsWith('zen/') ||
+                                    !config.ai.opencode.model
+                                      ? 'opencode-go/qwen3.6-plus'
+                                      : config.ai.opencode.model,
+                                },
+                              },
+                            })
+                          }
+                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-semibold transition-all ${
+                            config.ai.opencode.api_url?.includes('/go')
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          🚀 OpenCode Go
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfig({
+                              ...config,
+                              ai: {
+                                ...config.ai,
+                                opencode: {
+                                  ...config.ai.opencode,
+                                  api_url: 'https://opencode.ai/zen/v1',
+                                  model:
+                                    config.ai.opencode.model === 'opencode-go' ||
+                                    config.ai.opencode.model.startsWith('opencode-go/') ||
+                                    !config.ai.opencode.model
+                                      ? 'zen/claude-3-7-sonnet'
+                                      : config.ai.opencode.model,
+                                },
+                              },
+                            })
+                          }
+                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-semibold transition-all ${
+                            !config.ai.opencode.api_url?.includes('/go')
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          🧘 OpenCode Zen
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 px-1 text-xs text-muted-foreground font-mono">
+                        <span>
+                          Active Endpoint:{' '}
+                          <span className="font-semibold text-foreground">
+                            {config.ai.opencode.api_url || 'https://opencode.ai/zen/go/v1'}
+                          </span>
+                        </span>
+                      </div>
+                    </FieldLabel>
+
                     <FieldLabel label="API Key">
                       <PasswordInput
                         value={config.ai.opencode.api_key}
