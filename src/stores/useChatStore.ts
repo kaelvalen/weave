@@ -230,6 +230,38 @@ function parseToolCalls(content: string): {
   return { calls, failures };
 }
 
+function hydrateMessageMetadata(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages) return [];
+  return messages.map((msg) => {
+    if (msg.role === 'assistant' && msg.content && msg.content.includes('<call')) {
+      const parsed = parseToolCalls(msg.content);
+      if (parsed.calls.length > 0) {
+        const existingCalls = msg.metadata?.plugin_calls || [];
+        const reconstructed = parsed.calls.map((c) => {
+          const matched = existingCalls.find((ec) => ec.capability === c.capName);
+          return (
+            matched || {
+              plugin_id: c.capName,
+              capability: c.capName,
+              params: c.params,
+              status: 'success' as const,
+              result: c.params,
+            }
+          );
+        });
+        return {
+          ...msg,
+          metadata: {
+            ...msg.metadata,
+            plugin_calls: reconstructed,
+          },
+        };
+      }
+    }
+    return msg;
+  });
+}
+
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
     messages: [],
@@ -972,7 +1004,7 @@ export const useChatStore = create<ChatState>()(
         const history: ChatMessage[] = await invoke('chat_get_history');
         if (history && history.length > 0) {
           set((state) => {
-            state.messages = history;
+            state.messages = hydrateMessageMetadata(history);
           });
         }
       } catch (err) {
@@ -1004,14 +1036,15 @@ export const useChatStore = create<ChatState>()(
           title: string;
           messages: ChatMessage[];
         };
+        const hydratedMessages = hydrateMessageMetadata(session.messages);
         set((state) => {
           state.conversationId = session.id;
           state.conversationTitle = session.title;
-          state.messages = session.messages;
+          state.messages = hydratedMessages;
           state.error = null;
         });
         // Restore backend history to match session
-        await invoke('chat_set_history', { history: session.messages });
+        await invoke('chat_set_history', { history: hydratedMessages });
       } catch (err) {
         const errorStr = extractError(err);
         toast.error(errorStr);

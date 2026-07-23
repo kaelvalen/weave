@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { User, Bot, Copy, Check, Brain, Edit2, RefreshCw } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
 import { AgentActivityAccordion } from './AgentActivityAccordion';
+import { ArtifactCard } from './ArtifactCard';
+import { ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -106,16 +108,16 @@ function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
   const isUser = role === 'user';
   return (
     <div
-      className={`w-8 h-8 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105 ${
+      className={`w-7 h-7 rounded border flex items-center justify-center shrink-0 font-mono text-xs ${
         isUser
-          ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-primary/20'
-          : 'bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-primary border-primary/20 shadow-indigo-500/5'
+          ? 'bg-foreground text-background border-foreground'
+          : 'bg-muted text-foreground border-border'
       }`}
     >
       {isUser ? (
-        <User className="w-4 h-4 stroke-[2.5]" />
+        <User className="w-3.5 h-3.5" />
       ) : (
-        <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400 stroke-[2.5]" />
+        <Bot className="w-3.5 h-3.5" />
       )}
     </div>
   );
@@ -123,7 +125,7 @@ function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
 
 function InlineBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted/80 text-muted-foreground border border-border/60 shadow-sm">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/50 text-muted-foreground border border-border">
       {children}
     </span>
   );
@@ -193,11 +195,35 @@ export const ChatMessage = React.memo(function ChatMessage({
   }
 
   if (fakeToolCall) {
+    const isNoteOrFile =
+      fakeToolCall.capability.includes('note') ||
+      fakeToolCall.capability.includes('file') ||
+      fakeToolCall.capability.includes('write') ||
+      fakeToolCall.capability.includes('create');
+
+    const resObj = (fakeToolCall.result || {}) as Record<string, unknown>;
+    const artifactTitle =
+      (resObj.title as string) || (resObj.path as string) || fakeToolCall.capability;
+
+    const artifactContent =
+      (resObj.content as string) ||
+      (typeof fakeToolCall.result === 'string'
+        ? fakeToolCall.result
+        : JSON.stringify(fakeToolCall.result, null, 2));
+
+    const artifactObj: ActiveArtifact | null = isNoteOrFile
+      ? {
+          type: fakeToolCall.capability.includes('note') ? 'note' : 'file',
+          title: artifactTitle,
+          content: artifactContent,
+        }
+      : null;
+
     return (
-      <div className="group flex items-start gap-4 px-5 py-1">
-        <div className="flex-shrink-0 w-8" />
+      <div className="group flex flex-col gap-1 px-5 py-1">
         <div className="flex-1 min-w-0">
           <ToolCallCard call={fakeToolCall} messageId={message.id} />
+          {artifactObj && <ArtifactCard artifact={artifactObj} />}
         </div>
       </div>
     );

@@ -12,22 +12,17 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
-import { toast } from 'sonner';
-import { extractError } from '@/lib/errors';
 import {
   ArrowUp,
   FileText,
   Calculator,
   StickyNote,
-  RefreshCw,
   Search,
   ChevronDown,
-  Star,
   Paperclip,
   X,
   Square,
   Sparkles,
-  Zap,
   LayoutGrid,
   Workflow,
   Cpu,
@@ -35,12 +30,6 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
-
-import openaiIcon from '@/assets/ChatGPT_logo.svg.webp';
-import anthropicIcon from '@/assets/anthropic.svg';
-import kimiIcon from '@/assets/kimi-ai-icon.svg';
-import opencodeLightIcon from '@/assets/opencodelightmode.png';
-import opencodeDarkIcon from '@/assets/opencodedarkmode.png';
 
 type ModelOption = { value: string; label: string; provider: Provider };
 
@@ -65,55 +54,6 @@ const FALLBACK_MODELS: ModelOption[] = [
   },
   { value: 'zen/gpt-4o', label: 'OpenCode Zen (GPT-4o)', provider: 'opencode' },
   { value: 'llama3.1', label: 'Llama 3.1 (Local)', provider: 'local' },
-];
-
-const PROVIDER_META: Record<string, { color: string; icon?: string; iconDark?: string }> = {
-  openai: { color: '#10a37f', icon: openaiIcon, iconDark: openaiIcon },
-  anthropic: { color: '#d97757', icon: anthropicIcon, iconDark: anthropicIcon },
-  kimi: { color: '#555555', icon: kimiIcon, iconDark: kimiIcon },
-  opencode: { color: '#e67e22', icon: opencodeLightIcon, iconDark: opencodeDarkIcon },
-  local: { color: '#9b59b6' },
-};
-
-const PLUGIN_HINTS = [
-  { keyword: 'file', icon: FileText, label: 'File' },
-  { keyword: 'read', icon: FileText, label: 'File' },
-  { keyword: 'list', icon: FileText, label: 'File' },
-  { keyword: 'calc', icon: Calculator, label: 'Calc' },
-  { keyword: 'math', icon: Calculator, label: 'Calc' },
-  { keyword: 'note', icon: StickyNote, label: 'Note' },
-  { keyword: 'convert', icon: Calculator, label: 'Calc' },
-];
-
-const QUICK_ACTIONS = [
-  {
-    label: '@File',
-    prefix: 'Read file ',
-    icon: FileText,
-    color:
-      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
-  },
-  {
-    label: '/calc',
-    prefix: 'Calculate ',
-    icon: Calculator,
-    color:
-      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
-  },
-  {
-    label: '+Note',
-    prefix: 'Create a note about ',
-    icon: StickyNote,
-    color:
-      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
-  },
-  {
-    label: 'Canvas',
-    prefix: 'Create a canvas layout with ',
-    icon: LayoutGrid,
-    color:
-      'text-muted-foreground bg-muted/60 border-border/60 hover:bg-muted hover:text-foreground',
-  },
 ];
 
 const SLASH_COMMANDS = [
@@ -182,7 +122,7 @@ const SLASH_COMMANDS = [
   },
 ];
 
-export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
+export function ChatInput() {
   const [input, setInput] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
@@ -195,32 +135,21 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
     isStreaming,
     isSwitchingModel,
     selectedModel,
-    selectedProvider,
     setModel,
   } = useChatStore();
-  const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
-  const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } =
-    useModelPreferenceStore();
-  const { plugins: externalPlugins, loadedPlugins } = usePluginStore();
+  const { lastConfigUpdate } = useAppStore();
+  const { addRecentModel } = useModelPreferenceStore();
+  const { plugins: externalPlugins } = usePluginStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [forceRefresh, setForceRefresh] = useState(0);
-
   useEffect(() => {
     let cancelled = false;
-    // Standard data-fetch pattern: loading state for async model list refresh.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setModelsLoading(true);
 
     invoke<AppConfig>('system_get_config')
       .then(async () => {
-        const providers = Object.keys(PROVIDER_META) as Provider[];
-
-        if (providers.length === 0) {
-          if (!cancelled) setModels([]);
-          return;
-        }
+        const providers: Provider[] = ['openai', 'anthropic', 'opencode', 'local'];
 
         const results = await Promise.allSettled(
           providers.map((key) => invoke<string[]>('list_provider_models', { provider: key }))
@@ -246,7 +175,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [lastConfigUpdate, forceRefresh]);
+  }, [lastConfigUpdate]);
 
   useEffect(() => {
     if (models.length > 0 && !selectedModel) {
@@ -269,7 +198,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
     try {
       await invoke('chat_abort_generation');
     } catch (err) {
-      toast.error(`Failed to abort generation: ${extractError(err)}`);
+      console.error('Failed to abort generation:', err);
     }
   }, []);
 
@@ -431,99 +360,15 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const hints = useMemo(() => {
-    const inputLow = input.toLowerCase().trim();
-    if (!inputLow) return [];
-
-    const matched: { label: string; icon: React.ElementType; isExternal?: boolean }[] = [];
-    const seen = new Set<string>();
-
-    // 1. Check external / discovered / loaded plugins from usePluginStore
-    for (const p of externalPlugins) {
-      const cleanName = p.name
-        .replace(/\s*\(.*?\)\s*/g, '')
-        .trim()
-        .toLowerCase();
-      const shortId = p.id.split('.').pop()?.toLowerCase() || '';
-      const shortIdSpace = shortId.replace(/_/g, ' ');
-
-      if (
-        (inputLow.includes(p.name.toLowerCase()) ||
-          inputLow.includes(p.id.toLowerCase()) ||
-          (cleanName && cleanName.length > 2 && inputLow.includes(cleanName)) ||
-          (shortId && shortId.length > 2 && inputLow.includes(shortId)) ||
-          (shortIdSpace && shortIdSpace.length > 2 && inputLow.includes(shortIdSpace)) ||
-          loadedPlugins.includes(p.id)) &&
-        !seen.has(p.name)
-      ) {
-        seen.add(p.name);
-        matched.push({ label: p.name, icon: Cpu, isExternal: !p.is_builtin });
-      }
-    }
-
-    // 2. Check SLASH_COMMANDS
-    for (const sc of SLASH_COMMANDS) {
-      const cmdWord = sc.command.replace('/', '').toLowerCase();
-      if (
-        (inputLow.includes(sc.command.toLowerCase()) || inputLow.includes(cmdWord)) &&
-        !seen.has(sc.title)
-      ) {
-        seen.add(sc.title);
-        matched.push({ label: sc.title, icon: sc.icon });
-      }
-    }
-
-    // 3. Check builtin keyword PLUGIN_HINTS
-    for (const h of PLUGIN_HINTS) {
-      if (inputLow.includes(h.keyword) && !seen.has(h.label)) {
-        seen.add(h.label);
-        matched.push({ label: h.label, icon: h.icon });
-      }
-    }
-
-    return matched;
-  }, [input, externalPlugins, loadedPlugins]);
-  const currentProvider = models.find((m) => m.value === selectedModel)?.provider ?? 'openai';
-  const pm = PROVIDER_META[currentProvider] ?? PROVIDER_META.openai;
   const canSend = (!!input.trim() || images.length > 0) && !isStreaming && !isSwitchingModel;
 
   return (
-    <div className={isDocked ? 'flex-shrink-0 w-full' : 'flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full'}>
-      {/* Quick Action Pills above chat bar when input is empty */}
-      {!input && images.length === 0 && !isStreaming && !isDocked && (
-        <div className="flex items-center gap-1.5 mb-2.5 px-1 overflow-x-auto hide-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mr-1 flex-shrink-0">
-            <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
-            Quick Actions:
-          </span>
-          {QUICK_ACTIONS.map((qa, i) => {
-            const Icon = qa.icon;
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  setInput(qa.prefix);
-                  if (textareaRef.current) {
-                    textareaRef.current.focus();
-                  }
-                }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-200 flex-shrink-0 shadow-sm hover:scale-105 active:scale-95 ${qa.color}`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{qa.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
+    <div className="flex-shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
       {/* Slash Command Autocomplete Menu */}
       {isSlashCommandActive && filteredSlashCommands.length > 0 && (
-        <div className="mb-2 w-full max-h-60 overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 backdrop-blur-xl shadow-2xl p-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
-          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1 flex items-center justify-between">
-            <span>Available Capabilities</span>
-            <span>↑↓ to navigate, Enter to select</span>
+        <div className="mb-2 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg p-1 animate-in fade-in duration-150 z-50">
+          <div className="px-2 py-1 text-[10px] font-mono text-muted-foreground border-b border-border/50 mb-1">
+            Available Slash Commands
           </div>
           {filteredSlashCommands.map((cmd, idx) => {
             const Icon = cmd.icon;
@@ -534,356 +379,145 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
                 type="button"
                 onClick={() => selectSlashCommand(cmd)}
                 onMouseEnter={() => setSlashSelectedIndex(idx)}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left transition-all duration-150 cursor-pointer ${
-                  isSelected
-                    ? 'bg-primary/15 text-primary shadow-sm scale-[1.005]'
-                    : 'hover:bg-muted/60 text-foreground'
+                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded text-left font-mono text-xs transition-colors cursor-pointer ${
+                  isSelected ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted/80 text-muted-foreground'}`}
-                  >
-                    <Icon className="w-4 h-4 stroke-[2]" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold font-mono">{cmd.command}</span>
-                      <span className="text-xs font-semibold">{cmd.title}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground line-clamp-1">{cmd.desc}</p>
-                  </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-semibold">{cmd.command}</span>
+                  <span className="text-[11px] font-sans truncate">{cmd.title}</span>
                 </div>
-                <span
-                  className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${isSelected ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border/60 bg-muted/40 text-muted-foreground'}`}
-                >
-                  Plugin
-                </span>
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Main Glassmorphism Chat Input Box */}
-      <div className={`overflow-hidden transition-all duration-300 focus-within:border-primary/50 ${isDocked ? 'rounded-none border-0 border-t border-border/60 bg-card/60 shadow-none' : 'glow-effect rounded-2xl border border-border/80 bg-card/90 backdrop-blur-2xl shadow-xl focus-within:shadow-2xl'}`}>
-        {/* Plugin hint strip */}
-        {hints.length > 0 && (
-          <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/60 bg-primary/5 backdrop-blur-md animate-in fade-in duration-200">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1 flex-shrink-0">
-              <Zap className="w-3 h-3 text-amber-500 fill-current animate-pulse" />
-              Active Plugins
-            </span>
-            <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
-              {hints.map((h, i) => {
-                const Icon = h.icon;
-                return (
-                  <span
-                    key={i}
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-sm flex-shrink-0 transition-all duration-200 ${
-                      h.isExternal
-                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
-                        : 'bg-background text-foreground border-border/80'
-                    }`}
-                  >
-                    <Icon className="w-3 h-3 text-primary" />
-                    {h.label}
-                  </span>
-                );
-              })}
-            </div>
+      {/* Clean Monochrome Chat Input Box */}
+      <div className="border border-border rounded-lg bg-card p-2 flex flex-col gap-2">
+        {/* Attached image previews */}
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-1 pt-1">
+            {images.map((img, idx) => (
+              <div key={idx} className="relative group rounded border border-border overflow-hidden w-12 h-12">
+                <img src={img} alt="attachment" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(idx)}
+                  className="absolute top-0.5 right-0.5 bg-background/80 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Main input row */}
-        <div className="flex items-end gap-2.5 p-3">
-          {/* Model selector */}
-          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-            <DropdownMenuTrigger
-              disabled={modelsLoading || isStreaming || isSwitchingModel}
-              className="h-9 text-xs flex-shrink-0 bg-muted/60 hover:bg-muted border border-border/60 shadow-sm rounded-full px-3 gap-2 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-              title="Select AI Model"
-            >
-              {pm.icon ? (
-                <>
-                  <img
-                    src={pm.icon}
-                    alt={currentProvider}
-                    className="w-4 h-4 object-contain flex-shrink-0 dark:hidden"
+        {/* Text area */}
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onDrop={handleDrop}
+          placeholder="Ask anything or use / command..."
+          rows={1}
+          className="w-full resize-none bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-1 text-sm font-sans placeholder:text-muted-foreground min-h-[36px] max-h-[160px]"
+        />
+
+        {/* Action Row */}
+        <div className="flex items-center justify-between pt-1 border-t border-border/40 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            {/* Model Selector */}
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+              <DropdownMenuTrigger
+                disabled={modelsLoading || isStreaming || isSwitchingModel}
+                className="h-7 text-xs bg-muted/50 hover:bg-muted border border-border px-2.5 rounded gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <span className="truncate max-w-[120px] font-medium">
+                  {modelsLoading || isSwitchingModel
+                    ? 'Loading...'
+                    : models.find((m) => m.value === selectedModel)?.label || 'Model'}
+                </span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 rounded-md bg-popover border border-border p-1 shadow-lg" sideOffset={6}>
+                <div className="flex items-center px-2 py-1 border-b border-border/50 mb-1">
+                  <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search model..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground font-mono"
                   />
-                  {pm.iconDark && (
-                    <img
-                      src={pm.iconDark}
-                      alt={currentProvider}
-                      className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block"
-                    />
-                  )}
-                </>
-              ) : (
-                <span
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
-                  style={{ background: pm.color }}
-                />
-              )}
-              <span className="truncate max-w-[80px] sm:max-w-[130px] font-medium text-left">
-                {modelsLoading || isSwitchingModel
-                  ? 'Loading...'
-                  : models.find((m) => m.value === selectedModel)?.label ||
-                    (models.length === 0 ? 'No models' : 'Model')}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-[220px] rounded-2xl shadow-xl backdrop-blur-xl bg-popover/95 border-border/80 p-1"
-              sideOffset={8}
+                </div>
+                <div className="max-h-48 overflow-y-auto font-mono text-xs">
+                  {models
+                    .filter((m) => m.label.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((m) => (
+                      <DropdownMenuItem
+                        key={m.value}
+                        onClick={() => {
+                          void setModel(m.value, m.provider);
+                          setDropdownOpen(false);
+                        }}
+                        className={`px-2 py-1.5 rounded text-xs cursor-pointer ${
+                          m.value === selectedModel ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {m.label}
+                      </DropdownMenuItem>
+                    ))}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Paperclip Attach */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Attach image"
             >
-              <div className="flex items-center px-2.5 py-2 border-b mb-1">
-                <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search models..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  className="flex-1 bg-transparent text-xs outline-none min-w-0 placeholder:text-muted-foreground"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setForceRefresh((f) => f + 1);
-                  }}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted ml-1"
-                  disabled={modelsLoading}
-                  title="Refresh models"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${modelsLoading ? 'animate-spin text-primary' : ''}`}
-                  />
-                </button>
-              </div>
-              <div className="max-h-[220px] overflow-y-auto hide-scrollbar px-1">
-                {models.length === 0 ? (
-                  <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    No models configured
-                  </div>
-                ) : (
-                  (() => {
-                    const filtered = models.filter(
-                      (m) =>
-                        m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        m.value.toLowerCase().includes(searchQuery.toLowerCase())
-                    );
-
-                    const favs = filtered.filter((m) => favoriteModels.includes(m.value));
-                    const recents = filtered.filter(
-                      (m) => recentModels.includes(m.value) && !favoriteModels.includes(m.value)
-                    );
-                    const rest = filtered.filter(
-                      (m) => !favoriteModels.includes(m.value) && !recentModels.includes(m.value)
-                    );
-
-                    const renderModelItem = (m: ModelOption) => {
-                      const meta = PROVIDER_META[m.provider] ?? PROVIDER_META.openai;
-                      const isFav = favoriteModels.includes(m.value);
-                      const isSelected = m.value === selectedModel;
-                      return (
-                        <DropdownMenuItem
-                          key={m.value}
-                          onClick={() => {
-                            if (m.value === selectedModel && m.provider === selectedProvider) {
-                              setDropdownOpen(false);
-                              return;
-                            }
-                            void setModel(m.value, m.provider);
-                            setDropdownOpen(false);
-                          }}
-                          className={`text-xs py-2 px-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors mb-0.5 ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/80'}`}
-                        >
-                          <div className="flex items-center gap-2.5 truncate min-w-0 flex-1 pr-2">
-                            {meta.icon ? (
-                              <>
-                                <img
-                                  src={meta.icon}
-                                  alt={m.provider}
-                                  className="w-4 h-4 object-contain flex-shrink-0 dark:hidden"
-                                />
-                                {meta.iconDark && (
-                                  <img
-                                    src={meta.iconDark}
-                                    alt={m.provider}
-                                    className="w-4 h-4 object-contain flex-shrink-0 hidden dark:block"
-                                  />
-                                )}
-                              </>
-                            ) : (
-                              <span
-                                className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
-                                style={{ background: meta.color }}
-                              />
-                            )}
-                            <span className="truncate">{m.label}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavoriteModel(m.value);
-                            }}
-                            className={`flex-shrink-0 p-1 rounded-md hover:bg-background transition-opacity ${isFav ? 'text-yellow-500 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
-                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                          >
-                            <Star className="w-3.5 h-3.5" fill={isFav ? 'currentColor' : 'none'} />
-                          </button>
-                        </DropdownMenuItem>
-                      );
-                    };
-
-                    return (
-                      <>
-                        {favs.length > 0 && (
-                          <div className="mb-2">
-                            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              Favorites
-                            </div>
-                            {favs.map(renderModelItem)}
-                          </div>
-                        )}
-                        {recents.length > 0 && (
-                          <div className="mb-2">
-                            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              Recent
-                            </div>
-                            {recents.map(renderModelItem)}
-                          </div>
-                        )}
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            All Models
-                          </div>
-                          {rest.map(renderModelItem)}
-                        </div>
-                      </>
-                    );
-                  })()
-                )}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <div className="h-5 w-px bg-border/60 flex-shrink-0 mb-2" />
-
-          {/* Attach Button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 mb-0.5 relative group"
-            title="Attach image"
-          >
-            <Paperclip className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            {images.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm animate-pulse">
-                {images.length}
-              </span>
-            )}
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) {
-                Array.from(e.target.files).forEach(processFile);
-              }
-              e.target.value = ''; // reset
-            }}
-          />
-
-          <div className="flex-1 flex flex-col min-w-0">
-            {images.length > 0 && (
-              <div className="flex items-center gap-2.5 px-1 pb-2 overflow-x-auto hide-scrollbar">
-                {images.map((img, idx) => (
-                  <div
-                    key={idx}
-                    className="relative group w-14 h-14 flex-shrink-0 rounded-xl overflow-hidden border border-border/80 shadow-md bg-background transition-transform hover:scale-105"
-                  >
-                    <img src={img} alt="attachment" className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => removeImage(idx)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
-                      title="Remove image"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Textarea */}
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              onFocus={() => {
-                if (!isChatExpanded) toggleChat(true);
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) Array.from(e.target.files).forEach(processFile);
+                e.target.value = '';
               }}
-              placeholder="Ask anything, attach images, or trigger tools..."
-              rows={1}
-              className={[
-                'flex-1 min-h-[36px] max-h-[180px] py-2 px-1 text-sm leading-relaxed resize-none font-sans',
-                'bg-transparent border-0 shadow-none',
-                'focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
-                'placeholder:text-muted-foreground/70',
-              ].join(' ')}
             />
           </div>
 
-          {/* Shortcut hint & Send / Stop button */}
-          <div className="flex items-center gap-2 flex-shrink-0 mb-0.5">
-            <span className="text-[10px] text-muted-foreground/50 font-mono hidden xl:inline select-none">
-              ↵ Send
-            </span>
-            {isStreaming ? (
-              <button
-                type="button"
-                onClick={handleStop}
-                aria-label="Stop generation"
-                className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md hover:scale-105 active:scale-95 animate-pulse"
-                title="Stop generation"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={!canSend}
-                onClick={handleSend}
-                aria-label="Send"
-                title={
-                  isSwitchingModel
-                    ? 'Waiting for local model switch'
-                    : canSend
-                      ? 'Send message (Enter)'
-                      : 'Type a message to send'
-                }
-                className={[
-                  'w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md',
-                  'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
-                  canSend
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:scale-105 active:scale-95'
-                    : 'bg-muted text-muted-foreground',
-                ].join(' ')}
-              >
-                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-              </button>
-            )}
-          </div>
+          {/* Send / Stop Button */}
+          {isStreaming ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="flex items-center gap-1.5 px-3 py-1 bg-destructive text-destructive-foreground font-semibold rounded text-xs hover:bg-destructive/90 transition-colors"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              <span>Stop</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              className="flex items-center gap-1 px-3 py-1 bg-foreground text-background font-semibold rounded text-xs hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer"
+            >
+              <span>Send</span>
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1,21 +1,19 @@
 use std::path::{Path, PathBuf};
 use crate::utils::errors::WeaveError;
 
-const BLOCKED_PATHS: &[&str] = &[
+const BLOCKED_PREFIXES: &[&str] = &[
     "/etc",
     "/proc",
     "/sys",
     "/dev",
     "/boot",
-    "/usr",
-    "/bin",
-    "/sbin",
-    "/root/.ssh",
-    ".git",
-    ".env",
+    "/root",
+    "/var/log",
+    "/var/run",
 ];
 
 pub fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
+    let path = path.trim();
     if path.starts_with("~/") {
         let home = dirs::home_dir().ok_or_else(|| WeaveError::PluginError("Cannot determine home directory".to_string()))?;
         Ok(home.join(&path[2..]))
@@ -27,18 +25,17 @@ pub fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
 }
 
 pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
-    // Resolve absolute path first
+    // 1. Resolve absolute path
     let abs_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir().map_err(|e| WeaveError::Io(e.to_string()))?.join(path)
     };
 
-    // If path exists, canonicalize directly
+    // 2. Canonicalize path (or parent if file doesn't exist yet)
     let resolved = if abs_path.exists() {
         abs_path.canonicalize().map_err(|e| WeaveError::Io(e.to_string()))?
     } else {
-        // If it doesn't exist, canonicalize the closest existing parent
         let mut parent = abs_path.as_path();
         let mut components = Vec::new();
         while !parent.exists() {
@@ -60,15 +57,22 @@ pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
 
     let path_str = resolved.to_string_lossy();
 
-    // Check blocked directories/files
-    for blocked in BLOCKED_PATHS {
-        // Check if path starts withblocked path (handling leading slashes)
-        if path_str.starts_with(blocked) || path_str.contains(&format!("/{}", blocked)) {
+    // 3. Deny access to sensitive system paths
+    for prefix in BLOCKED_PREFIXES {
+        if path_str == *prefix || path_str.starts_with(&format!("{}/", prefix)) {
             return Err(WeaveError::PermissionDenied(format!(
                 "Access denied: Path violates security boundary: {}",
                 resolved.display()
             )));
         }
+    }
+
+    // 4. Deny access to sensitive SSH key folders
+    if path_str.contains("/.ssh/") || path_str.ends_with("/.ssh") {
+        return Err(WeaveError::PermissionDenied(format!(
+            "Access denied: SSH key folder is protected: {}",
+            resolved.display()
+        )));
     }
 
     Ok(resolved)
@@ -89,9 +93,9 @@ pub fn validate_write_access(path: &Path) -> Result<PathBuf, WeaveError> {
     let secure_path = canonicalize_secure(path)?;
     let path_str = secure_path.to_string_lossy();
 
-    // Block critical writes
-    if path_str.contains(".git/") || path_str.ends_with(".git") {
-        return Err(WeaveError::PermissionDenied(format!("Write access to Git internal metadata denied: {}", secure_path.display())));
+    // Block write to internal git objects
+    if path_str.contains("/.git/objects/") || path_str.contains("/.git/refs/") {
+        return Err(WeaveError::PermissionDenied(format!("Write access to Git internal objects denied: {}", secure_path.display())));
     }
 
     Ok(secure_path)

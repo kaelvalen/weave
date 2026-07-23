@@ -463,9 +463,10 @@ impl PluginManager {
         prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
         prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n");
         prompt.push_str("6. **Note Organization**: Use `note.create`, `note.update`, `note.toggle_pin`, and `note.search` to actively document findings, pin important architecture notes, and organize research with tags.\n");
-        prompt.push_str("7. **User Memory & Learning**: Actively use `memory.store` to remember important user preferences, coding style rules, or tech stack details discovered during conversations. Check existing user facts with `memory.recall` when making architectural decisions.\n\n");
+        prompt.push_str("7. **User Memory & Learning**: Actively use `memory.store` to remember important user preferences, coding style rules, or tech stack details discovered during conversations. Check existing user facts with `memory.recall` when making architectural decisions.\n");
+        prompt.push_str("8. **Canvas & Diagram Creation**: When asked to create a canvas, diagram, Turing machine, flowchart, or visual layout, YOU MUST CALL `canvas.add_node` AND `canvas.connect_nodes` DIRECTLY. Do NOT output plain text instructions or JSON schemas explaining how to create a canvas; EXECUTE the tool calls using `<call plugin=\"canvas.add_node\">...</call>`!\n\n");
         prompt.push_str("## Tool Usage Rules\n");
-        prompt.push_str("- Output ONLY: <call plugin=\"tool_name\">{\"param\":\"value\"}</call> when using a tool.\n");
+        prompt.push_str("- Output ONLY: <call plugin=\"capability_name\">{\"param\":\"value\"}</call> when using a tool.\n");
         prompt.push_str("- You will receive the tool result in the next turn.\n");
         prompt.push_str("- You may execute ONE tool at a time.\n");
         prompt.push_str("- Do NOT output markdown code blocks containing the `<call>` tag. Output the `<call>` tag completely unformatted.\n\n");

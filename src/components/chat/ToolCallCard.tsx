@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { PluginCall } from '@/types/chat';
+import { useAppStore } from '@/stores/useAppStore';
 
 interface ToolCallCardProps {
   call: PluginCall;
@@ -64,7 +65,30 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
 
           {call.result && (
             <div>
-              <span className="text-[10px] text-muted-foreground uppercase font-sans font-bold">Result</span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-muted-foreground uppercase font-sans font-bold">Result</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const contentStr = typeof call.result === 'string'
+                      ? call.result
+                      : JSON.stringify(call.result, null, 2);
+                    const titleStr = (call.params?.title as string) ||
+                      (call.params?.path as string) ||
+                      (call.capability as string);
+
+                    useAppStore.getState().openArtifact({
+                      type: call.capability.includes('note') ? 'note' : 'file',
+                      title: titleStr,
+                      content: contentStr,
+                    });
+                  }}
+                  className="px-2 py-0.5 bg-foreground text-background font-semibold rounded text-[10px] hover:opacity-90 transition-opacity cursor-pointer font-sans"
+                >
+                  Preview Artifact ↗
+                </button>
+              </div>
               <pre className="mt-0.5 p-1.5 bg-background rounded border text-[11px] font-mono overflow-x-auto text-foreground whitespace-pre-wrap max-h-48">
                 {typeof call.result === 'string'
                   ? call.result

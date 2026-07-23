@@ -471,7 +471,7 @@ export function ChatPanel({
 
         {/* ── Input ── */}
         <div className="flex-shrink-0 bg-transparent rounded-b-2xl">
-          <ChatInput isDocked={isDocked} />
+          <ChatInput />
         </div>
       </div>
     </div>
