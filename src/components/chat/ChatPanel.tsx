@@ -227,39 +227,39 @@ export function ChatPanel({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Approval Mode Switcher — Cline/Cursor style */}
+              {/* Approval Mode Switcher */}
               <div
                 role="group"
                 aria-label="Edit approval mode"
-                className="flex items-center bg-muted/60 rounded-full p-0.5 border border-border/50"
+                className="flex items-center bg-muted/50 rounded-md p-0.5 border border-border"
               >
                 <button
                   type="button"
                   onClick={() => setApprovalMode('ask')}
                   title="Ask mode — confirm each file-changing action before it runs"
                   aria-pressed={approvalMode === 'ask'}
-                  className={`flex items-center gap-1 px-2 h-6 sm:h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                     approvalMode === 'ask'
-                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-sm'
+                      ? 'bg-foreground text-background font-semibold'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <ShieldQuestion className="w-3.5 h-3.5 shrink-0" />
-                  <span className={isFloating && isAgentVariant ? 'hidden' : 'hidden sm:inline'}>Ask</span>
+                  <span>Ask</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setApprovalMode('accept-edits')}
                   title="Accept Edits mode — auto-approve file changes for this session"
                   aria-pressed={approvalMode === 'accept-edits'}
-                  className={`flex items-center gap-1 px-2 h-6 sm:h-7 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                     approvalMode === 'accept-edits'
-                      ? 'bg-green-500/15 text-green-600 dark:text-green-400 shadow-sm'
+                      ? 'bg-foreground text-background font-semibold'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span className={isFloating && isAgentVariant ? 'hidden' : 'hidden sm:inline'}>Accept Edits</span>
+                  <span>Auto-Approve</span>
                 </button>
               </div>
 

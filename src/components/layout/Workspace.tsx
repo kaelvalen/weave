@@ -1,5 +1,4 @@
 import { useAppStore } from '@/stores/useAppStore';
-import { ChatPanel } from '@/components/chat/ChatPanel';
 import { ChatCommandCenter } from '@/components/chat/ChatCommandCenter';
 import { PluginMarket } from '@/components/plugins/PluginMarket';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
@@ -15,7 +14,6 @@ import { useEffect } from 'react';
 
 export function Workspace() {
   const { activeView } = useAppStore();
-  const isChatExpanded = useAppStore((s) => s.isChatExpanded);
 
   const renderView = () => {
     switch (activeView) {
@@ -57,26 +55,11 @@ export function Workspace() {
   }, []);
 
   return (
-    <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-hidden relative">
-      {/* Dynamic View Area */}
+    <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative">
+      {/* View Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative view-transition">{renderView()}</div>
 
-      {/* Standard Floating AI Chat Container (For all non-chat and non-files views like Profile, Notes, Settings, etc.) */}
-      {activeView !== 'chat' && activeView !== 'files' && (
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 z-40 transition-all duration-400 flex flex-col pointer-events-none rounded-2xl ${
-            isChatExpanded
-              ? 'w-[768px] max-w-[95vw] h-[80vh] bottom-6 opacity-100 shadow-2xl'
-              : 'w-[540px] max-w-[90vw] h-14 bottom-10 opacity-95 hover:opacity-100 shadow-xl translate-y-0'
-          }`}
-        >
-          <div className="w-full h-full min-w-0 max-w-full overflow-hidden pointer-events-auto border border-border/40 bg-card flex flex-col rounded-2xl shadow-inner isolate [transform:translateZ(0)] [backface-visibility:hidden]">
-            <ChatPanel isFloating={true} isAgentVariant={false} />
-          </div>
-        </div>
-      )}
-
-      {/* StatusBar sits at the bottom of the workspace area */}
+      {/* StatusBar */}
       <StatusBar />
     </main>
   );
