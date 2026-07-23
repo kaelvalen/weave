@@ -278,7 +278,7 @@ impl AiBridge {
                     None,
                     config.local.api_url.clone(),
                     config.local.temperature,
-                    4096,
+                    0, // No token limit for local models
                 ),
             };
             (provider, model, api_key, api_url, temperature, max_tokens)
@@ -369,34 +369,7 @@ impl AiBridge {
         }
 
         let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
-        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
-            let content = if let Some(images) = &m.images {
-                let mut content_arr = vec![serde_json::json!({
-                    "type": "text",
-                    "text": m.content
-                })];
-                for img in images {
-                    content_arr.push(serde_json::json!({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": img
-                        }
-                    }));
-                }
-                serde_json::Value::Array(content_arr)
-            } else {
-                serde_json::Value::String(m.content.clone())
-            };
-
-            OpenAiMessage {
-                role: match m.role {
-                    ChatRole::User => "user".to_string(),
-                    ChatRole::Assistant => "assistant".to_string(),
-                    ChatRole::System => "system".to_string(),
-                },
-                content,
-            }
-        }).collect();
+        let openai_messages = Self::build_openai_messages(&messages, model, api_url);
 
         let request = OpenAiRequest {
             model: model.to_string(),
@@ -634,6 +607,100 @@ impl AiBridge {
         Ok(content)
     }
 
+fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<&str>) -> Vec<OpenAiMessage> {
+    let model_lower = model.to_lowercase();
+    let is_gemma = model_lower.contains("gemma");
+    let is_local = model_lower.contains(".gguf") || api_url.map(|u| u.contains("8080") || u.contains("11434") || u.contains("localhost") || u.contains("127.0.0.1")).unwrap_or(false);
+
+    if is_gemma || is_local {
+        let mut sys_text = String::new();
+        let mut filtered: Vec<ChatMessage> = Vec::new();
+
+        for m in messages {
+            if m.content.trim().is_empty() {
+                continue;
+            }
+            if m.role == ChatRole::System {
+                if !sys_text.is_empty() {
+                    sys_text.push_str("\n\n");
+                }
+                sys_text.push_str(&m.content);
+            } else {
+                filtered.push(m.clone());
+            }
+        }
+
+        if !sys_text.is_empty() {
+            if let Some(first_user) = filtered.iter_mut().find(|m| m.role == ChatRole::User) {
+                first_user.content = format!("[System Instructions]\n{}\n\n{}", sys_text, first_user.content);
+            } else {
+                filtered.insert(0, ChatMessage {
+                    id: "sys_as_user".to_string(),
+                    role: ChatRole::User,
+                    content: format!("[System Instructions]\n{}", sys_text),
+                    timestamp: 0,
+                    metadata: None,
+                    images: None,
+                });
+            }
+        }
+
+        return filtered.into_iter().map(|m| {
+            let content = if let Some(images) = &m.images {
+                let mut content_arr = vec![serde_json::json!({
+                    "type": "text",
+                    "text": m.content
+                })];
+                for img in images {
+                    content_arr.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": { "url": img }
+                    }));
+                }
+                serde_json::Value::Array(content_arr)
+            } else {
+                serde_json::Value::String(m.content.clone())
+            };
+
+            OpenAiMessage {
+                role: match m.role {
+                    ChatRole::User => "user".to_string(),
+                    ChatRole::Assistant => "assistant".to_string(),
+                    ChatRole::System => "user".to_string(),
+                },
+                content,
+            }
+        }).collect();
+    }
+
+    messages.iter().filter(|m| !m.content.trim().is_empty()).map(|m| {
+        let content = if let Some(images) = &m.images {
+            let mut content_arr = vec![serde_json::json!({
+                "type": "text",
+                "text": m.content
+            })];
+            for img in images {
+                content_arr.push(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": { "url": img }
+                }));
+            }
+            serde_json::Value::Array(content_arr)
+        } else {
+            serde_json::Value::String(m.content.clone())
+        };
+
+        OpenAiMessage {
+            role: match m.role {
+                ChatRole::User => "user".to_string(),
+                ChatRole::Assistant => "assistant".to_string(),
+                ChatRole::System => "system".to_string(),
+            },
+            content,
+        }
+    }).collect()
+}
+
     async fn stream_openai_internal(
         client: reqwest::Client,
         messages: Vec<ChatMessage>,
@@ -647,34 +714,7 @@ impl AiBridge {
         let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("OpenAI".to_string()))?;
         let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
         
-        let openai_messages: Vec<OpenAiMessage> = messages.iter().map(|m| {
-            let content = if let Some(images) = &m.images {
-                let mut content_arr = vec![serde_json::json!({
-                    "type": "text",
-                    "text": m.content
-                })];
-                for img in images {
-                    content_arr.push(serde_json::json!({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": img
-                        }
-                    }));
-                }
-                serde_json::Value::Array(content_arr)
-            } else {
-                serde_json::Value::String(m.content.clone())
-            };
-
-            OpenAiMessage {
-                role: match m.role {
-                    ChatRole::User => "user".to_string(),
-                    ChatRole::Assistant => "assistant".to_string(),
-                    ChatRole::System => "system".to_string(),
-                },
-                content,
-            }
-        }).collect();
+        let openai_messages = Self::build_openai_messages(&messages, model, api_url);
 
         let request = OpenAiRequest {
             model: model.to_string(),
@@ -839,10 +879,10 @@ impl AiBridge {
         model: &str,
         api_url: Option<&str>,
         temperature: f64,
-        max_tokens: u32,
+        _max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
     ) -> Result<(), WeaveError> {
-        if model.ends_with(".gguf") {
+        if model.contains(".gguf") {
             let mut server_guard = llama_server.lock().await;
             
             let needs_restart = match &mut *server_guard {
@@ -873,7 +913,9 @@ impl AiBridge {
                     .arg("--port")
                     .arg("8080")
                     .arg("-c")
-                    .arg("8192")
+                    .arg("32768") // Large context window - no cost for local models
+                    .arg("-n")
+                    .arg("-1")   // No output token limit
                     .kill_on_drop(true)
                     .spawn()
                     .map_err(|e| WeaveError::LocalLlmNotAvailable(format!("Failed to start llama-server: {}", e)))?;
@@ -893,7 +935,7 @@ impl AiBridge {
                 Some("dummy_key".to_string()),
                 Some("http://localhost:8080/v1/chat/completions"),
                 temperature,
-                max_tokens,
+                0, // No token limit for local models
                 tx
             ).await;
         }
@@ -1188,14 +1230,29 @@ impl AiBridge {
                     }
                 }
 
-                // 2. Scan /home/kael/Models/llama.cpp for .gguf files
-                if let Ok(entries) = std::fs::read_dir("/home/kael/Models/llama.cpp") {
+                // 2. Scan /home/kael/Models/llama.cpp for .gguf files (including subdirectories)
+                let gguf_root = "/home/kael/Models/llama.cpp";
+                if let Ok(entries) = std::fs::read_dir(gguf_root) {
                     for entry in entries.filter_map(Result::ok) {
-                        if let Some(ext) = entry.path().extension() {
-                            if ext == "gguf" {
-                                if let Some(name) = entry.file_name().to_str() {
-                                    models.push(name.to_string());
+                        let path = entry.path();
+                        if path.is_dir() {
+                            // Recurse one level into subdirectories
+                            if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                                let dir_name = entry.file_name();
+                                for sub_entry in sub_entries.filter_map(Result::ok) {
+                                    let sub_path = sub_entry.path();
+                                    if sub_path.extension().map(|e| e == "gguf").unwrap_or(false) {
+                                        if let Some(file_name) = sub_path.file_name().and_then(|n| n.to_str()) {
+                                            if let Some(dir) = dir_name.to_str() {
+                                                models.push(format!("{}/{}", dir, file_name));
+                                            }
+                                        }
+                                    }
                                 }
+                            }
+                        } else if path.extension().map(|e| e == "gguf").unwrap_or(false) {
+                            if let Some(name) = entry.file_name().to_str() {
+                                models.push(name.to_string());
                             }
                         }
                     }

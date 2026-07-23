@@ -99,7 +99,7 @@ pub async fn chat_send_message(
                     None,
                     ai_config.local.api_url.clone(),
                     ai_config.local.temperature,
-                    ai_config.local.context_length,
+                    0, // No token limit for local models
                 ),
                 crate::models::chat::Provider::Openai => (
                     Some(ai_config.openai.api_key.clone()),
@@ -121,7 +121,8 @@ pub async fn chat_send_message(
     };
 
     let history = {
-        app_state.chat_history.read().clone()
+        let h = app_state.chat_history.read().clone();
+        h.into_iter().filter(|m| !m.content.trim().is_empty()).collect()
     };
     
     let mut system_prompt = app_state.plugin_manager.get_system_prompt();

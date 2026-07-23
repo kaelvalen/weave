@@ -351,16 +351,25 @@ export function ChatPanel({
                       );
                     })}
                   {isStreaming &&
-                    messages[messages.length - 1]?.role === 'assistant' &&
-                    messages[messages.length - 1]?.content === '' && (
-                      <div className="flex items-start gap-4 px-5 py-3">
-                        <div className="w-8 h-8 rounded-md border bg-muted flex items-center justify-center flex-shrink-0">
-                          <Bot className="w-4 h-4" />
+                    (messages[messages.length - 1]?.role === 'user' ||
+                      (messages[messages.length - 1]?.role === 'assistant' &&
+                        messages[messages.length - 1]?.content === '')) && (
+                      <div className="flex items-start gap-3.5 px-4 sm:px-6 py-3 animate-fade-in">
+                        <div className="w-8 h-8 rounded-xl border bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-primary border-primary/20 flex items-center justify-center flex-shrink-0 shadow-sm">
+                          <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400 stroke-[2.5]" />
                         </div>
-                        <div className="flex gap-1 mt-2">
-                          <span className="typing-dot" />
-                          <span className="typing-dot" />
-                          <span className="typing-dot" />
+                        <div className="flex flex-col gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-foreground">Weave AI</span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-2xs animate-pulse font-sans">
+                              <Sparkles className="w-3 h-3 text-purple-500 animate-spin" /> Thinking...
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <span className="w-2 h-2 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
                         </div>
                       </div>
                     )}

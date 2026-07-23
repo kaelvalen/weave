@@ -336,6 +336,42 @@ export const ChatMessage = React.memo(function ChatMessage({
             </div>
           )}
 
+        {/* Thinking Accordion Component */}
+        {(() => {
+          if (!isAssistant) return null;
+          let thinkingText = '';
+
+          const thinkMatch = message.content.match(/<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i);
+          if (thinkMatch) {
+            thinkingText = thinkMatch[1].trim();
+          }
+
+          return (
+            <>
+              {thinkingText && (
+                <details
+                  defaultOpen={true}
+                  className="mb-3 group/think border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/10 rounded-xl overflow-hidden text-xs shadow-2xs"
+                >
+                  <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 transition-colors">
+                    <Brain className="w-3.5 h-3.5 text-purple-500 animate-pulse shrink-0" />
+                    <span>Thought Process</span>
+                    <span className="text-[10px] text-purple-500/70 font-mono ml-auto group-open/think:hidden">
+                      Show thoughts
+                    </span>
+                    <span className="text-[10px] text-purple-500/70 font-mono ml-auto hidden group-open/think:inline">
+                      Hide thoughts
+                    </span>
+                  </summary>
+                  <div className="p-3 bg-background/60 border-t border-purple-500/15 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+                    {thinkingText}
+                  </div>
+                </details>
+              )}
+            </>
+          );
+        })()}
+
         {/* Message Body */}
         <div
           className={`text-sm text-foreground leading-relaxed break-words ${
@@ -406,6 +442,7 @@ export const ChatMessage = React.memo(function ChatMessage({
                   components={{ code: CodeBlock }}
                 >
                   {message.content
+                    .replace(/<\s*think\s*>[\s\S]*?(?:<\/\s*think\s*>|$)/gi, '')
                     .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
                     .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
                     .replace(/\\\((.*?)\\\)/g, '$$$1$$')}

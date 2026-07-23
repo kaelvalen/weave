@@ -71,6 +71,7 @@ fn main() {
             weave::commands::models::local_server_status,
             weave::commands::models::local_server_start,
             weave::commands::models::local_server_stop,
+            weave::commands::models::local_model_switch,
             weave::commands::knowledge::list_knowledge_files,
             weave::commands::knowledge::upload_knowledge_file,
             weave::commands::knowledge::delete_knowledge_file,

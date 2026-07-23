@@ -11,6 +11,7 @@ import { useApprovalModeStore } from './useApprovalModeStore';
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
+  isSwitchingModel: boolean;
   selectedModel: string;
   selectedProvider: string;
   error: string | null;
@@ -25,7 +26,7 @@ interface ChatState {
   finalizeMessage: (messageId: string) => void;
   executeToolCall: (messageId: string, capName: string, isApproved: boolean) => Promise<void>;
   clearChat: () => void;
-  setModel: (model: string, provider?: string) => void;
+  setModel: (model: string, provider?: string) => Promise<void>;
   setError: (error: string | null) => void;
   loadHistory: () => Promise<void>;
 
@@ -233,6 +234,7 @@ export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
     messages: [],
     isStreaming: false,
+    isSwitchingModel: false,
     selectedModel: 'gpt-4o-mini',
     selectedProvider: 'openai',
     error: null,
@@ -912,13 +914,52 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    setModel: (model: string, provider?: string) =>
-      set((state) => {
-        state.selectedModel = model;
-        if (provider) {
-          state.selectedProvider = provider;
+    setModel: async (model: string, provider?: string) => {
+      if (get().isSwitchingModel) return;
+
+      const state = get();
+      const prevModel = state.selectedModel;
+      const prevProvider = state.selectedProvider;
+      const nextProvider = provider ?? prevProvider;
+
+      const sameModelAndProvider = prevModel === model && prevProvider === nextProvider;
+      if (sameModelAndProvider) return;
+
+      const prevIsOllamaLocal = prevProvider === 'local' && !prevModel.endsWith('.gguf');
+      const nextIsOllamaLocal = nextProvider === 'local' && !model.endsWith('.gguf');
+      const needsLocalLifecycleSwitch = prevIsOllamaLocal || nextIsOllamaLocal;
+
+      if (needsLocalLifecycleSwitch) {
+        set((s) => {
+          s.isSwitchingModel = true;
+        });
+
+        try {
+          await invoke('local_model_switch', {
+            previousModel: prevIsOllamaLocal ? prevModel : null,
+            nextModel: nextIsOllamaLocal ? model : null,
+          });
+        } catch (err) {
+          const errorMsg = extractError(err);
+          toast.error(`Local model switch failed: ${errorMsg}`);
+          set((s) => {
+            s.error = errorMsg;
+          });
+          return;
+        } finally {
+          set((s) => {
+            s.isSwitchingModel = false;
+          });
         }
-      }),
+      }
+
+      set((s) => {
+        s.selectedModel = model;
+        if (provider) {
+          s.selectedProvider = provider;
+        }
+      });
+    },
 
     setError: (error: string | null) => {
       set((state) => {

@@ -9,7 +9,7 @@ pkgs.mkShell {
     cargo
     cargo-tauri
     nodejs
-    python3
+    python313
     rustc
   ];
 
@@ -26,6 +26,7 @@ pkgs.mkShell {
     harfbuzz
     openssl
     dbus
+    dbus.dev
     hicolor-icon-theme
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base

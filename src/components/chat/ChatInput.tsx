@@ -190,7 +190,14 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { sendMessage, isStreaming, selectedModel, setModel } = useChatStore();
+  const {
+    sendMessage,
+    isStreaming,
+    isSwitchingModel,
+    selectedModel,
+    selectedProvider,
+    setModel,
+  } = useChatStore();
   const { lastConfigUpdate, isChatExpanded, toggleChat } = useAppStore();
   const { recentModels, favoriteModels, addRecentModel, toggleFavoriteModel } =
     useModelPreferenceStore();
@@ -243,7 +250,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
 
   useEffect(() => {
     if (models.length > 0 && !selectedModel) {
-      setModel(models[0].value, models[0].provider);
+      void setModel(models[0].value, models[0].provider);
     }
   }, [models, selectedModel, setModel]);
 
@@ -478,7 +485,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
   }, [input, externalPlugins, loadedPlugins]);
   const currentProvider = models.find((m) => m.value === selectedModel)?.provider ?? 'openai';
   const pm = PROVIDER_META[currentProvider] ?? PROVIDER_META.openai;
-  const canSend = (!!input.trim() || images.length > 0) && !isStreaming;
+  const canSend = (!!input.trim() || images.length > 0) && !isStreaming && !isSwitchingModel;
 
   return (
     <div className={isDocked ? 'flex-shrink-0 w-full' : 'flex-shrink-0 px-4 pb-6 pt-2 max-w-4xl mx-auto w-full'}>
@@ -593,7 +600,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
           {/* Model selector */}
           <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger
-              disabled={modelsLoading || isStreaming}
+              disabled={modelsLoading || isStreaming || isSwitchingModel}
               className="h-9 text-xs flex-shrink-0 bg-muted/60 hover:bg-muted border border-border/60 shadow-sm rounded-full px-3 gap-2 overflow-hidden flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               title="Select AI Model"
             >
@@ -619,7 +626,7 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
                 />
               )}
               <span className="truncate max-w-[80px] sm:max-w-[130px] font-medium text-left">
-                {modelsLoading
+                {modelsLoading || isSwitchingModel
                   ? 'Loading...'
                   : models.find((m) => m.value === selectedModel)?.label ||
                     (models.length === 0 ? 'No models' : 'Model')}
@@ -684,7 +691,11 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
                         <DropdownMenuItem
                           key={m.value}
                           onClick={() => {
-                            setModel(m.value, m.provider);
+                            if (m.value === selectedModel && m.provider === selectedProvider) {
+                              setDropdownOpen(false);
+                              return;
+                            }
+                            void setModel(m.value, m.provider);
                             setDropdownOpen(false);
                           }}
                           className={`text-xs py-2 px-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors mb-0.5 ${isSelected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/80'}`}
@@ -854,7 +865,13 @@ export function ChatInput({ isDocked = false }: { isDocked?: boolean } = {}) {
                 disabled={!canSend}
                 onClick={handleSend}
                 aria-label="Send"
-                title={canSend ? 'Send message (Enter)' : 'Type a message to send'}
+                title={
+                  isSwitchingModel
+                    ? 'Waiting for local model switch'
+                    : canSend
+                      ? 'Send message (Enter)'
+                      : 'Type a message to send'
+                }
                 className={[
                   'w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md',
                   'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
