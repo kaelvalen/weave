@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tracing::info;
 
@@ -87,7 +88,7 @@ impl RuntimeKernel {
         Ok(())
     }
 
-    /// Async Dataflow Orchestration Entry Point: Goal -> Planner -> Policy -> Execution -> SAGA Rollback -> CQRS & Memory
+    /// Event-Driven Ready Queue Execution Loop: ReadyQueue -> NodeExecutor -> CompletionEvent -> DependencyResolution -> ReadyQueue
     pub async fn execute_goal(
         &self,
         goal: &str,
@@ -95,9 +96,9 @@ impl RuntimeKernel {
         ctx: &ExecutionContext,
     ) -> Result<Value, WeaveError> {
         let span_ctx = ctx.child_span();
-        info!("RuntimeKernel orchestrating goal (trace_id: {}, span_id: {}): '{}'", span_ctx.trace_id, span_ctx.span_id, goal);
+        info!("RuntimeKernel deterministic ReadyQueue loop for goal (trace_id: {}): '{}'", span_ctx.trace_id, goal);
 
-        // 1. Audit Task Created & Unified Pipeline Publish
+        // 1. Audit Task Created
         self.event_store.append_and_publish(
             AuditEventType::TaskCreated {
                 task_id: span_ctx.session_id.clone(),
@@ -107,7 +108,7 @@ impl RuntimeKernel {
             &ctx.event_bus,
         );
 
-        // 2. Pure Planner creates candidate TaskGraph
+        // 2. Planner creates TaskGraph
         let mut graph: TaskGraph = self.planner_engine.create_plan(goal)?;
         self.event_store.append(
             AuditEventType::TaskPlanned {
@@ -117,101 +118,103 @@ impl RuntimeKernel {
             json!({"plan_id": graph.id}),
         );
 
-        // 3. Async Parallel Dataflow Batch Execution Loop
-        let batches = graph.get_parallel_batches();
-        for batch in batches {
-            for node_id in batch {
-                graph.resolve_dataflow_inputs(&node_id);
-                graph.update_status(&node_id, TaskStatus::Running, None);
+        // 3. Event-Driven Ready Queue Execution Engine Loop
+        let mut ready_queue: VecDeque<String> = graph
+            .get_executable_nodes()
+            .into_iter()
+            .map(|n| n.id)
+            .collect();
 
-                let (cap_id, mut params, inputs) = {
-                    let node = graph.nodes.get(&node_id).unwrap();
-                    (node.capability_id.clone(), node.params.clone(), node.inputs.clone())
-                };
+        while let Some(node_id) = ready_queue.pop_front() {
+            let scoped_ctx = span_ctx.child_scope(&node_id);
+            graph.resolve_dataflow_inputs(&node_id);
+            graph.update_status(&node_id, TaskStatus::Running, None);
 
-                // Merge dataflow inputs into execution params
-                if let Some(obj) = params.as_object_mut() {
-                    for (k, v) in inputs {
-                        obj.insert(k, v);
+            let (cap_id, mut params, inputs) = {
+                let node = graph.nodes.get(&node_id).unwrap();
+                (node.capability_id.clone(), node.params.clone(), node.inputs.clone())
+            };
+
+            if let Some(obj) = params.as_object_mut() {
+                for (k, v) in inputs {
+                    obj.insert(k, v);
+                }
+            }
+
+            // Policy Boundary Check
+            if cap_id == "shell.exec" || cap_id == "shell.execute" {
+                if let Some(cmd) = params.get("command").and_then(|v| v.as_str()) {
+                    if matches!(self.permission_registry.check_command(cmd), PolicyDecision::Deny { .. }) {
+                        graph.update_status(
+                            &node_id,
+                            TaskStatus::Failed { error: "Policy denied shell execution".into() },
+                            None,
+                        );
+
+                        let _ = graph.saga_rollback(&node_id, &scoped_ctx).await;
+                        return Err(WeaveError::PermissionDenied(format!("Policy denied command: {}", cmd)));
                     }
                 }
+            }
 
-                // Policy Check
-                if cap_id == "shell.exec" || cap_id == "shell.execute" {
-                    if let Some(cmd) = params.get("command").and_then(|v| v.as_str()) {
-                        if matches!(self.permission_registry.check_command(cmd), PolicyDecision::Deny { .. }) {
-                            graph.update_status(
-                                &node_id,
-                                TaskStatus::Failed { error: "Policy denied shell execution".into() },
-                                None,
-                            );
+            self.event_store.append(
+                AuditEventType::ExecutionStarted {
+                    task_id: node_id.clone(),
+                    capability_id: cap_id.clone(),
+                },
+                json!({"params": params}),
+            );
 
-                            let _ = graph.saga_rollback(&node_id, &span_ctx).await;
-                            return Err(WeaveError::PermissionDenied(format!("Policy denied command: {}", cmd)));
+            let exec_reg = self.execution_registry.clone();
+            let plugin = plugin_id.to_string();
+            let cap = cap_id.clone();
+            let p = params.clone();
+            let c = scoped_ctx.clone();
+
+            let handle = tokio::spawn(async move {
+                exec_reg.execute(&plugin, &cap, p, &c)
+            });
+
+            match handle.await {
+                Ok(Ok(output)) => {
+                    // Completion Event & Dependency Resolution
+                    graph.update_status(&node_id, TaskStatus::Completed, Some(output.clone()));
+                    self.event_store.append(
+                        AuditEventType::ExecutionFinished {
+                            task_id: node_id.clone(),
+                            success: true,
+                            duration_ms: 10,
+                        },
+                        json!({"output": output}),
+                    );
+
+                    // Re-evaluate Ready Queue
+                    for next_node in graph.get_executable_nodes() {
+                        if !ready_queue.contains(&next_node.id) {
+                            ready_queue.push_back(next_node.id);
                         }
                     }
                 }
+                Ok(Err(e)) => {
+                    graph.update_status(
+                        &node_id,
+                        TaskStatus::Failed { error: e.to_string() },
+                        None,
+                    );
 
-                self.event_store.append(
-                    AuditEventType::ExecutionStarted {
-                        task_id: node_id.clone(),
-                        capability_id: cap_id.clone(),
-                    },
-                    json!({"params": params}),
-                );
+                    let _ = graph.saga_rollback(&node_id, &scoped_ctx).await;
+                    return Err(e);
+                }
+                Err(join_err) => {
+                    let err_msg = format!("Task node join error: {}", join_err);
+                    graph.update_status(
+                        &node_id,
+                        TaskStatus::Failed { error: err_msg.clone() },
+                        None,
+                    );
 
-                let exec_reg = self.execution_registry.clone();
-                let plugin = plugin_id.to_string();
-                let cap = cap_id.clone();
-                let p = params.clone();
-                let c = span_ctx.clone();
-
-                let handle = tokio::spawn(async move {
-                    exec_reg.execute(&plugin, &cap, p, &c)
-                });
-
-                match handle.await {
-                    Ok(Ok(output)) => {
-                        graph.update_status(&node_id, TaskStatus::Completed, Some(output.clone()));
-                        self.event_store.append(
-                            AuditEventType::ExecutionFinished {
-                                task_id: node_id.clone(),
-                                success: true,
-                                duration_ms: 10,
-                            },
-                            json!({"output": output}),
-                        );
-                    }
-                    Ok(Err(e)) => {
-                        graph.update_status(
-                            &node_id,
-                            TaskStatus::Failed { error: e.to_string() },
-                            None,
-                        );
-
-                        self.event_store.append(
-                            AuditEventType::ExecutionFinished {
-                                task_id: node_id.clone(),
-                                success: false,
-                                duration_ms: 10,
-                            },
-                            json!({"error": e.to_string()}),
-                        );
-
-                        let _ = graph.saga_rollback(&node_id, &span_ctx).await;
-                        return Err(e);
-                    }
-                    Err(join_err) => {
-                        let err_msg = format!("Task node join error: {}", join_err);
-                        graph.update_status(
-                            &node_id,
-                            TaskStatus::Failed { error: err_msg.clone() },
-                            None,
-                        );
-
-                        let _ = graph.saga_rollback(&node_id, &span_ctx).await;
-                        return Err(WeaveError::ExecutionError(err_msg));
-                    }
+                    let _ = graph.saga_rollback(&node_id, &scoped_ctx).await;
+                    return Err(WeaveError::ExecutionError(err_msg));
                 }
             }
         }

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::core::tool_registry::{SideEffectLevel, ToolDefinition};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityNode {
     pub id: String,
@@ -16,6 +18,17 @@ pub struct CapabilityNode {
     pub latency_ms: u64,
     pub failure_rate: f64,
     pub vector_embedding: Vec<f32>,
+}
+
+impl CapabilityNode {
+    pub fn to_tool_definition(&self) -> ToolDefinition {
+        let mut def = ToolDefinition::new(&self.id, &self.name, &self.description);
+        def.planner_tags = self.input_types.clone();
+        def.parallel_safe = true;
+        def.estimated_cost_usd = self.cost_rating;
+        def.estimated_latency_ms = self.latency_ms;
+        def
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,5 +134,9 @@ impl CapabilityKnowledgeGraph {
 
     pub fn list_nodes(&self) -> Vec<CapabilityNode> {
         self.nodes.read().values().cloned().collect()
+    }
+
+    pub fn as_tool_definitions(&self) -> Vec<ToolDefinition> {
+        self.nodes.read().values().map(|n| n.to_tool_definition()).collect()
     }
 }

@@ -140,6 +140,21 @@ impl EventSourcingStore {
         StateReducer::reduce_events(&records)
     }
 
+    pub fn replay_execution(&self, goal_id: &str) -> Vec<AuditRecord> {
+        let records = self.records.read();
+        records
+            .iter()
+            .filter(|r| {
+                if let AuditEventType::TaskCreated { task_id, .. } = &r.event {
+                    task_id == goal_id
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn create_snapshot(&self) -> Snapshot {
         let snap = Snapshot {
             snapshot_id: uuid::Uuid::new_v4().to_string(),

@@ -6,12 +6,15 @@ use tracing::info;
 
 use crate::core::execution_context::ExecutionContext;
 use crate::core::kernel::RuntimeKernel;
+use crate::core::memory::blackboard::Blackboard;
+use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AgentStatus {
     Idle,
     Planning,
     Executing,
+    Reconciling,
     Paused,
     Failed { error: String },
 }
@@ -34,6 +37,44 @@ pub struct Agent {
 }
 
 impl Agent {
+    /// Kubernetes-style state reconciliation loop comparing desired goals vs current blackboard facts
+    pub async fn reconcile(
+        &mut self,
+        blackboard: &Blackboard,
+        kernel: Arc<RuntimeKernel>,
+        plugin_id: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<(), WeaveError> {
+        self.status = AgentStatus::Reconciling;
+        info!("Agent '{}' running Kubernetes-style state reconcile loop...", self.name);
+
+        while let Some(goal) = self.goal_queue.pop_front() {
+            let snap = blackboard.snapshot();
+            let fact_key = format!("goal_completed:{}", goal.id);
+
+            // Reconcile desired state: if fact already asserts completion, skip
+            if snap.facts.contains_key(&fact_key) {
+                info!("Goal '{}' already satisfied in Blackboard, skipping execution.", goal.goal_text);
+                continue;
+            }
+
+            self.status = AgentStatus::Executing;
+            match kernel.execute_goal(&goal.goal_text, plugin_id, ctx).await {
+                Ok(output) => {
+                    blackboard.add_fact(fact_key, format!("Goal satisfied: {:?}", output), 1.0);
+                    info!("Agent '{}' reconciled goal successfully.", self.name);
+                }
+                Err(e) => {
+                    self.status = AgentStatus::Failed { error: e.to_string() };
+                    return Err(e);
+                }
+            }
+        }
+
+        self.status = AgentStatus::Idle;
+        Ok(())
+    }
+
     pub async fn run_loop(&mut self, kernel: Arc<RuntimeKernel>, plugin_id: &str, ctx: ExecutionContext) {
         info!("Starting autonomous event loop for Agent '{}' ({})", self.name, self.id);
 
