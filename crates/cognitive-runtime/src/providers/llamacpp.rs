@@ -1,34 +1,32 @@
 use reqwest::Client;
 use serde_json::json;
-use ai_runtime::traits::ChatModel;
+use crate::traits::ChatModel;
 use crate::models::chat::ChatMessage;
 use crate::utils::errors::WeaveError;
 
-pub struct AnthropicProvider {
+pub struct LlamaCppProvider {
     client: Client,
-    api_key: String,
     base_url: String,
 }
 
-impl AnthropicProvider {
-    pub fn new(api_key: String, base_url: Option<String>) -> Self {
+impl LlamaCppProvider {
+    pub fn new(base_url: Option<String>) -> Self {
         Self {
             client: Client::new(),
-            api_key,
-            base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string()),
+            base_url: base_url.unwrap_or_else(|| "http://localhost:8080".to_string()),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl ChatModel for AnthropicProvider {
+impl ChatModel for LlamaCppProvider {
     async fn chat_complete(
         &self,
         messages: &[ChatMessage],
-        model: &str,
+        _model: &str,
         temperature: f32,
     ) -> Result<String, WeaveError> {
-        let url = format!("{}/messages", self.base_url);
+        let url = format!("{}/v1/chat/completions", self.base_url);
         let formatted_messages: Vec<serde_json::Value> = messages
             .iter()
             .map(|m| {
@@ -42,24 +40,20 @@ impl ChatModel for AnthropicProvider {
         let response = self
             .client
             .post(&url)
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
             .json(&json!({
-                "model": model,
                 "messages": formatted_messages,
-                "max_tokens": 4096,
                 "temperature": temperature
             }))
             .send()
             .await
-            .map_err(|e| WeaveError::AiError(format!("Anthropic HTTP error: {}", e)))?;
+            .map_err(|e| WeaveError::AiError(format!("llama.cpp HTTP error: {}", e)))?;
 
         let res_json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| WeaveError::AiError(format!("Anthropic JSON error: {}", e)))?;
+            .map_err(|e| WeaveError::AiError(format!("llama.cpp JSON error: {}", e)))?;
 
-        let content = res_json["content"][0]["text"]
+        let content = res_json["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("")
             .to_string();

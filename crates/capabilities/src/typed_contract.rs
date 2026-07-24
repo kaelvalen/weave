@@ -27,17 +27,3 @@ impl ArtifactVersion {
         self.major == other.major && self.minor <= other.minor
     }
 }
-
-/// Trait for validating capability inputs and outputs.
-pub trait Validation {
-    fn validate(&self) -> Result<(), CapabilityError>;
-}
-
-/// Trait for migrating old data formats to new ones.
-pub trait Migration<OldType> {
-    fn migrate_from(old: OldType) -> Result<Self, CapabilityError>
-    where
-        Self: Sized;
-}
-
-

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::SystemTime;
-use ai_runtime::traits::{ChatModel, EmbeddingModel};
+use crate::traits::{ChatModel, EmbeddingModel};
 use crate::models::chat::{ChatMessage, ChatRole};
 use crate::utils::errors::WeaveError;
 

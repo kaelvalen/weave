@@ -50,18 +50,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "plugin-runtime",
- "runtime-kernel",
- "serde",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -424,11 +412,14 @@ name = "capabilities"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "memory",
+ "parking_lot",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -557,6 +548,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
 dependencies = [
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "cognitive-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "plugin-runtime",
+ "reqwest 0.12.28",
+ "runtime-kernel",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -1274,10 +1282,14 @@ name = "execution-runtime"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "parking_lot",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -1736,6 +1748,10 @@ dependencies = [
  "system-deps",
  "winapi",
 ]
+
+[[package]]
+name = "github-plugin"
+version = "0.1.0"
 
 [[package]]
 name = "glib"
@@ -2510,6 +2526,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "knowledge"
+version = "0.1.0"
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2706,10 +2726,15 @@ name = "memory"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "capabilities",
+ "parking_lot",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -3334,10 +3359,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "memory",
+ "parking_lot",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -3359,10 +3388,15 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "capabilities",
+ "parking_lot",
+ "reqwest 0.12.28",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -3958,9 +3992,13 @@ name = "runtime-kernel"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "parking_lot",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -6251,10 +6289,10 @@ dependencies = [
 name = "weave"
 version = "0.2.0"
 dependencies = [
- "ai-runtime",
  "async-trait",
  "capabilities",
  "chrono",
+ "cognitive-runtime",
  "diffy",
  "dirs 5.0.1",
  "execution-runtime",
@@ -7095,10 +7133,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "execution-runtime",
+ "parking_lot",
  "runtime-kernel",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]

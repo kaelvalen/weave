@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde_json::json;
-use ai_runtime::traits::{ChatModel, EmbeddingModel};
+use crate::traits::{ChatModel, EmbeddingModel};
 use crate::models::chat::ChatMessage;
 use crate::utils::errors::WeaveError;
 

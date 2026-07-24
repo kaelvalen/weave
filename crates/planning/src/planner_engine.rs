@@ -1,31 +1,31 @@
 use std::sync::Arc;
 
-use planning::execution_optimizer::{PlanOptimizerTrait, TopologicalOptimizer};
-use planning::goal_analyzer::{GoalAnalyzerTrait, HeuristicGoalAnalyzer};
-use planning::plan_generator::{PlanGeneratorTrait, SemanticVectorPlanGenerator};
-use planning::task_graph::TaskGraph;
+use crate::execution_optimizer::TopologicalOptimizer;
+use crate::goal_analyzer::HeuristicGoalAnalyzer;
+use crate::plan_generator::{PlanGeneratorTrait, SemanticVectorPlanGenerator};
+use crate::task_graph::TaskGraph;
 use memory::planner_index::PlannerIndex;
 use crate::utils::errors::WeaveError;
 
 pub struct PlannerEngine {
-    goal_analyzer: Box<dyn GoalAnalyzerTrait>,
+    goal_analyzer: HeuristicGoalAnalyzer,
     plan_generator: Box<dyn PlanGeneratorTrait>,
-    plan_optimizer: Box<dyn PlanOptimizerTrait>,
+    plan_optimizer: TopologicalOptimizer,
 }
 
 impl PlannerEngine {
     pub fn new(planner_index: Arc<PlannerIndex>) -> Self {
         Self {
-            goal_analyzer: Box::new(HeuristicGoalAnalyzer::new()),
+            goal_analyzer: HeuristicGoalAnalyzer::new(),
             plan_generator: Box::new(SemanticVectorPlanGenerator::new(planner_index)),
-            plan_optimizer: Box::new(TopologicalOptimizer::new()),
+            plan_optimizer: TopologicalOptimizer::new(),
         }
     }
 
     pub fn with_strategies(
-        goal_analyzer: Box<dyn GoalAnalyzerTrait>,
+        goal_analyzer: HeuristicGoalAnalyzer,
         plan_generator: Box<dyn PlanGeneratorTrait>,
-        plan_optimizer: Box<dyn PlanOptimizerTrait>,
+        plan_optimizer: TopologicalOptimizer,
     ) -> Self {
         Self {
             goal_analyzer,
