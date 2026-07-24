@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod ai;
 pub mod ai_bridge;
 pub mod capability_registry;
@@ -17,5 +18,6 @@ pub mod registries;
 pub mod resource_manager;
 pub mod sandbox;
 pub mod scheduler;
+pub mod subsystem;
 pub mod tool_registry;
 pub mod workflow;

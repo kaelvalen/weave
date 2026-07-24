@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tracing::info;
 
+use crate::core::agent::agent_subsystem::AgentSubsystem;
 use crate::core::event_sourcing::{AuditEventType, EventSourcingStore};
 use crate::core::execution_context::ExecutionContext;
 use crate::core::memory::memory_engine::MemoryEngine;
@@ -11,11 +12,13 @@ use crate::core::planner::task_graph::{TaskGraph, TaskStatus};
 use crate::core::policy_engine::PolicyDecision;
 use crate::core::registries::capability_registry::CapabilityRegistry;
 use crate::core::registries::execution_registry::ExecutionRegistry;
+use crate::core::registries::knowledge_graph::CapabilityKnowledgeGraph;
 use crate::core::registries::permission_registry::PermissionRegistry;
 use crate::core::registries::planner_index::PlannerIndex;
 use crate::core::registries::vector_index::CapabilityVectorIndex;
 use crate::core::resource_manager::ResourceManager;
 use crate::core::scheduler::Scheduler;
+use crate::core::subsystem::*;
 use crate::utils::errors::WeaveError;
 
 pub struct RuntimeKernel {
@@ -25,11 +28,14 @@ pub struct RuntimeKernel {
     pub permission_registry: Arc<PermissionRegistry>,
     pub planner_index: Arc<PlannerIndex>,
     pub vector_index: Arc<CapabilityVectorIndex>,
+    pub knowledge_graph: Arc<CapabilityKnowledgeGraph>,
+    pub agent_subsystem: Arc<AgentSubsystem>,
     pub memory_engine: Arc<MemoryEngine>,
     pub event_store: Arc<EventSourcingStore>,
     pub observability: Arc<Observability>,
     pub resource_manager: Arc<ResourceManager>,
     pub scheduler: Arc<Scheduler>,
+    pub subsystems: Vec<Arc<dyn KernelSubsystem>>,
 }
 
 impl RuntimeKernel {
@@ -45,6 +51,13 @@ impl RuntimeKernel {
         resource_manager: Arc<ResourceManager>,
         scheduler: Arc<Scheduler>,
     ) -> Self {
+        let subsystems: Vec<Arc<dyn KernelSubsystem>> = vec![
+            Arc::new(PlanningSubsystem::new()),
+            Arc::new(ExecutionSubsystem::new()),
+            Arc::new(MemorySubsystem::new()),
+            Arc::new(StorageSubsystem::new()),
+        ];
+
         Self {
             planner_engine,
             execution_registry,
@@ -52,12 +65,23 @@ impl RuntimeKernel {
             permission_registry,
             planner_index,
             vector_index: Arc::new(CapabilityVectorIndex::new()),
+            knowledge_graph: Arc::new(CapabilityKnowledgeGraph::new()),
+            agent_subsystem: Arc::new(AgentSubsystem::new()),
             memory_engine,
             event_store,
             observability,
             resource_manager,
             scheduler,
+            subsystems,
         }
+    }
+
+    pub async fn initialize_subsystems(&self) -> Result<(), WeaveError> {
+        for sub in &self.subsystems {
+            info!("Initializing Kernel Subsystem: {}", sub.name());
+            sub.init().await?;
+        }
+        Ok(())
     }
 
     /// Async Dataflow Orchestration Entry Point: Goal -> Planner -> Policy -> Execution -> SAGA Rollback -> CQRS & Memory
