@@ -189,10 +189,100 @@ export function planForGoal(state: RuntimeEventSource, goalId: string): PlannedS
 export function artifactsForGoal(
   state: RuntimeEventSource,
   goalId: string
-): { ref: string; ts: string; capability: string | null }[] {
+): { ref: string; ts: string; capability: string | null; size_bytes: number | null }[] {
   return eventsForGoal(state, goalId)
     .filter((e) => e.kind === 'artifact_produced' && e.artifact_ref != null)
-    .map((e) => ({ ref: e.artifact_ref as string, ts: e.ts, capability: e.capability }));
+    .map((e) => {
+      const raw = e.params?.size_bytes;
+      return {
+        ref: e.artifact_ref as string,
+        ts: e.ts,
+        capability: e.capability,
+        size_bytes: typeof raw === 'number' && Number.isFinite(raw) ? raw : null,
+      };
+    });
+}
+
+/** Memory updates recorded within a goal, chronological. */
+export function memoryUpdatesForGoal(
+  state: RuntimeEventSource,
+  goalId: string
+): { ts: string; summary: string; capability: string | null }[] {
+  return eventsForGoal(state, goalId)
+    .filter((e) => e.kind === 'memory_updated')
+    .map((e) => ({ ts: e.ts, summary: e.summary, capability: e.capability }));
+}
+
+/** Aggregate per-goal execution facts, derived from the goal's events. */
+export interface GoalStats {
+  status: 'running' | 'completed' | 'failed' | 'unknown';
+  startedTs: string | null;
+  durationMs: number | null;
+  planCount: number;
+  stepCount: number;
+  failedCount: number;
+  artifactCount: number;
+  memoryCount: number;
+}
+
+const EMPTY_GOAL_STATS: GoalStats = {
+  status: 'unknown',
+  startedTs: null,
+  durationMs: null,
+  planCount: 0,
+  stepCount: 0,
+  failedCount: 0,
+  artifactCount: 0,
+  memoryCount: 0,
+};
+
+/**
+ * Roll up one goal's events into header-level stats. Status: `running` while
+ * any step runs or the plan still has pending steps, `failed` when any step
+ * failed, `completed` when steps exist and none are running/failed, `unknown`
+ * when the goal has no events. `durationMs` is null while running (no end).
+ */
+export function goalStats(state: RuntimeEventSource, goalId: string): GoalStats {
+  const events = eventsForGoal(state, goalId);
+  if (events.length === 0) return EMPTY_GOAL_STATS;
+
+  const steps = foldEventsToSteps(events);
+  const failedCount = steps.filter((s) => s.status === 'failed').length;
+  const terminalCount = steps.filter((s) => s.status !== 'running').length;
+  const planCount = planForGoal(state, goalId)?.length ?? 0;
+
+  let status: GoalStats['status'];
+  if (steps.some((s) => s.status === 'running') || (planCount > 0 && terminalCount < planCount)) {
+    status = 'running';
+  } else if (failedCount > 0) {
+    status = 'failed';
+  } else if (steps.length > 0) {
+    status = 'completed';
+  } else {
+    status = 'unknown';
+  }
+
+  const firstPlan = events.find((e) => e.kind === 'plan_started');
+  const firstStep = events.find((e) => e.kind === 'step_started');
+  const startedTs = firstPlan?.ts ?? firstStep?.ts ?? null;
+
+  let durationMs: number | null = null;
+  if (startedTs != null && status !== 'running') {
+    const start = Date.parse(startedTs);
+    const end = Date.parse(events[events.length - 1].ts);
+    if (!Number.isNaN(start) && !Number.isNaN(end)) durationMs = Math.max(0, end - start);
+  }
+
+  return {
+    status,
+    startedTs,
+    durationMs,
+    planCount,
+    stepCount: steps.length,
+    failedCount,
+    artifactCount: events.filter((e) => e.kind === 'artifact_produced').length,
+    memoryCount: events.filter((e) => e.kind === 'memory_updated').length,
+  };
 }
 
 interface RuntimeState {

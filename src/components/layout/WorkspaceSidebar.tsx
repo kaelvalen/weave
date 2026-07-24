@@ -1,7 +1,6 @@
 import { useAppStore } from '@/stores/useAppStore';
 import type { View } from '@/types/app';
 import {
-  Activity,
   MessageSquare,
   Package,
   Brain,
@@ -29,10 +28,7 @@ interface NavSection {
 const SECTIONS: NavSection[] = [
   {
     label: 'Workspace',
-    items: [
-      { view: 'chat', label: 'Conversations', icon: MessageSquare },
-      { view: 'execution', label: 'Executions', icon: Activity },
-    ],
+    items: [{ view: 'chat', label: 'Conversations', icon: MessageSquare }],
   },
   {
     label: 'Knowledge',

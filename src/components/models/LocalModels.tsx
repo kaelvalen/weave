@@ -12,9 +12,11 @@ import {
   effectiveTps,
   findLoadedModel,
   formatContextLength,
+  formatTokensCompact,
   formatTps,
   formatVram,
   isActiveModel,
+  modelNamesMatch,
 } from '@/lib/modelStats';
 
 interface LocalModelInfo {
@@ -44,7 +46,7 @@ interface LocalServerStatus {
 
 export function LocalModels() {
   const [models, setModels] = useState<LocalModelInfo[]>([]);
-  const [stats, setStats] = useState<SystemStats>({ ram_usage: 0, ram_total: 16_000_000_000 });
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [modelDetails, setModelDetails] = useState<Record<string, LocalModelDetails>>({});
   const [modelStats, setModelStats] = useState<ModelStats | null>(null);
   const [downloadUrl, setDownloadUrl] = useState('');
@@ -230,6 +232,13 @@ export function LocalModels() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Match a loaded runtime model back to its local file to reuse the parsed
+  // GGUF context length; null when there's no matching file or no header data.
+  const loadedContextLength = (loadedName: string): number | null => {
+    const local = models.find((m) => modelNamesMatch(m.name, loadedName));
+    return local ? (modelDetails[local.name]?.context_length ?? null) : null;
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-background pt-16">
       <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
@@ -238,10 +247,10 @@ export function LocalModels() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <Cpu className="w-6 h-6 text-primary" />
-              Local Models Manager
+              Runtime
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Download and run open-source models completely offline.
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
+              models & execution resources
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -254,6 +263,66 @@ export function LocalModels() {
             <Button className="gap-2" onClick={handleDownload} disabled={!!activeDownload}>
               <Download className="w-4 h-4" /> Download
             </Button>
+          </div>
+        </div>
+
+        {/* Loaded runtime — fed by the same 10s runtime_get_model_stats poll below */}
+        <div className="border border-border rounded-lg bg-surface-1 mb-6 flex-shrink-0 font-mono">
+          <div className="border-b border-border px-4 py-2 flex items-center justify-between gap-4">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Loaded runtime
+            </span>
+            {modelStats && (
+              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    modelStats.ollama_running ? 'bg-green-500' : 'bg-red-500'
+                  }`}
+                />
+                {modelStats.ollama_running ? 'Ollama running' : 'Ollama not running'}
+              </span>
+            )}
+          </div>
+          <div className="px-4 py-3 text-xs">
+            {!modelStats ? (
+              <p className="text-muted-foreground">Loading runtime stats…</p>
+            ) : !modelStats.ollama_running ? (
+              <p className="text-muted-foreground">
+                Ollama is not running — start the server below to load models.
+              </p>
+            ) : modelStats.loaded_models.length === 0 ? (
+              <p className="text-muted-foreground">No model loaded — start one below.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {modelStats.loaded_models.map((lm) => {
+                  const ctx = loadedContextLength(lm.name);
+                  const tps = isActiveModel(modelStats, lm.name)
+                    ? effectiveTps(modelStats)
+                    : null;
+                  return (
+                    <div key={lm.name} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <span className="text-foreground font-semibold">{lm.name}</span>
+                      {lm.vram_bytes != null && (
+                        <span className="text-muted-foreground">
+                          VRAM {formatVram(lm.vram_bytes)}
+                        </span>
+                      )}
+                      {ctx != null && (
+                        <span className="text-muted-foreground">
+                          Ctx {formatContextLength(ctx)}
+                        </span>
+                      )}
+                      {tps != null && (
+                        <span className="text-green-500">{formatTps(tps)} tps</span>
+                      )}
+                      <span className="text-muted-foreground">
+                        {formatTokensCompact(modelStats.total_tokens)} tok this session
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

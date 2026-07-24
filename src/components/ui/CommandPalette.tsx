@@ -11,7 +11,6 @@ import {
   MessageCircle,
   FileText,
   Brain,
-  Activity,
   Boxes,
   Zap,
   type LucideIcon,
@@ -103,15 +102,9 @@ export function CommandPalette() {
     () => [
       {
         id: 'chat',
-        label: 'Go to Chat',
+        label: 'Go to Workspace',
         icon: MessageCircle,
         onSelect: () => setActiveView('chat'),
-      },
-      {
-        id: 'execution',
-        label: 'Go to Execution',
-        icon: Activity,
-        onSelect: () => setActiveView('execution'),
       },
       {
         id: 'artifacts',

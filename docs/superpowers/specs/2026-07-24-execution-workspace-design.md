@@ -84,3 +84,25 @@ Extreme-flat aesthetic: no box-shadows (globally disabled), 1px `border-border` 
 - `nix-shell --run "cargo check --workspace"` clean (plain `cargo` fails to link outside nix-shell on this NixOS host)
 - `npm run build` (= `tsc && vite build`) clean
 - Manual sanity: event contract serde round-trip test in `runtime_event.rs` extended for new fields
+
+---
+
+## Round 2 — Goal-centric consolidation (2026-07-24, user feedback round 2)
+
+Design manifesto: **"The UI should visualize state transitions, not conversations."** Runtime speaks first, the LLM last. Everything below must remain honest — derived from real events/commands, never fabricated.
+
+- **Goal as an object**: GoalCard carries status (running/completed/failed), started time, duration, and counts (plan steps / steps / artifacts / memory updates) via a new `goalStats(state, goalId)` selector in `useRuntimeStore`. User↔assistant message pairing: execution data is keyed to the assistant message id (= traceId); the user message's GoalCard displays the paired assistant message's stats.
+- **Message order**: Goal → Execution (collapsed when done — progressive disclosure) → inline Artifact cards (name, created, size via `artifact_produced.params.size_bytes` — new backend stat in plugin.rs; Open/Reveal actions) → Assistant summary (collapsed by default when execution data exists; raw stream hidden while executing).
+- **Human plan**: PLAN chips show capability descriptions from the plugin store (fallback: capability id).
+- **Execution route merged**: the standalone Executions nav item is removed; `Workspace.tsx` routes 'execution' → chat; a bottom drawer in ChatCommandCenter (Ctrl+E) hosts the new shared `ExecutionPanel` (`goalIds?: string[]` prop — "This thread" vs "All traces" tabs).
+- **Trace chain**: `ExecutionPanel` renders per-goal GoalTrace cards as stage sections — PLANNING (planned capabilities) → STEPS (StepTimeline) → ARTIFACTS (with size) → MEMORY (updates) — collapsible, running goals expanded with a planning pulse.
+- **Models → Runtime view**: top "Loaded runtime" card (Ollama status, loaded model name/VRAM/context/TPS, session tokens) above the existing library/download UI.
+- **Capabilities capability-first**: group by capability id across plugins ("N providers"), expand → provider plugins with state + real reliability metrics.
+- **Memory categories**: `memory.store` accepts optional `category` (persisted, serde default for old entries); MemoryView groups Semantic/Procedural/Episodic/Working/General; Teach bar gains a category select. No invented classification of old entries.
+- **Motion**: existing CSS keyframes + planning-section pulse and step-icon color transitions. No new dependencies.
+
+Round-2 contracts (implemented across two agents):
+- `goalStats(state, goalId): GoalStats` (standalone export from useRuntimeStore).
+- `artifactsForGoal` return extended with `size_bytes: number | null`.
+- `ExecutionPanel({ goalIds?, className? })` exported from `src/components/execution/ExecutionPanel.tsx`.
+- Memory entry: additive optional `category: string | null`.
