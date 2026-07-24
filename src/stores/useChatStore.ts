@@ -127,7 +127,7 @@ function inferCapabilityFromJson(json: string): string | null {
 }
 
 /** Parse the parameter payload for a tool call, tolerating fenced code blocks and unclosed tags. */
-function parseToolParams(paramsStr: string, capName: string): Record<string, unknown> | null {
+function parseToolParams(paramsStr: string, capName: string, isStreaming = false): Record<string, unknown> | null {
   try {
     let clean = (paramsStr || '{}').trim();
     if (clean.startsWith('```json')) {
@@ -145,16 +145,41 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
     try {
       return JSON.parse(clean);
     } catch {
-      // Fallback: if JSON.parse fails (e.g. trailing text or truncated JSON), find balanced JSON
+      // Fallback: if JSON.parse fails, find balanced JSON
       const balanced = findBalancedJson(clean);
       if (balanced.length > 0) {
         return JSON.parse(balanced[0]);
       }
+
+      // If streaming, attempt partial repair
+      if (isStreaming) {
+        const completions = ['"', '"}', '}', '"]}', '"}]}', '}}'];
+        for (const end of completions) {
+          try {
+            return JSON.parse(clean + end);
+          } catch {
+            // continue
+          }
+        }
+        const obj: Record<string, unknown> = {};
+        const kvRegex = /"([^"]+)"\s*:\s*(?:"([^"]*)"|(\d+)|(true|false)|null)/g;
+        let match: RegExpExecArray | null;
+        while ((match = kvRegex.exec(clean)) !== null) {
+          const key = match[1];
+          if (match[2] !== undefined) obj[key] = match[2];
+          else if (match[3] !== undefined) obj[key] = Number(match[3]);
+          else if (match[4] !== undefined) obj[key] = match[4] === 'true';
+        }
+        return obj;
+      }
+
       throw new Error('No balanced JSON found');
     }
   } catch (e) {
-    console.warn(`Failed to parse tool params for ${capName}:`, e, paramsStr);
-    return null;
+    if (!isStreaming) {
+      console.warn(`Failed to parse tool params for ${capName}:`, e, paramsStr);
+    }
+    return isStreaming ? {} : null;
   }
 }
 
@@ -162,7 +187,7 @@ function parseToolParams(paramsStr: string, capName: string): Record<string, unk
  *  Supports `<call plugin="...">...</call>` (with or without a closing tag)
  *  and raw JSON fallback for models that don't use XML tags.
  *  Malformed calls are returned as failures so callers can log them. */
-function parseToolCalls(content: string): {
+function parseToolCalls(content: string, isStreaming = false): {
   calls: ParsedToolCall[];
   failures: ToolParseFailure[];
 } {
@@ -201,7 +226,7 @@ function parseToolCalls(content: string): {
 
     const paramsStr = rest.slice(0, endIdx);
     const raw = content.slice(tagStart, rawEnd);
-    const params = parseToolParams(paramsStr, capName);
+    const params = parseToolParams(paramsStr, capName, isStreaming);
 
     if (params === null) {
       failures.push({ raw, reason: `Failed to parse parameters for ${capName}` });
@@ -218,7 +243,7 @@ function parseToolCalls(content: string): {
       const capName = inferCapabilityFromJson(json);
       if (!capName) continue;
 
-      const params = parseToolParams(json, capName);
+      const params = parseToolParams(json, capName, isStreaming);
       if (params === null) {
         failures.push({ raw: json, reason: `Failed to parse inferred JSON params for ${capName}` });
       } else {
@@ -514,16 +539,50 @@ export const useChatStore = create<ChatState>()(
 
     appendChunk: (chunk: string, messageId: string) => {
       set((state) => {
-        const existing = state.messages.find((m) => m.id === messageId);
-        if (existing) {
-          existing.content += chunk;
+        let targetMsg = state.messages.find((m) => m.id === messageId);
+        if (targetMsg) {
+          targetMsg.content += chunk;
         } else {
-          state.messages.push({
+          targetMsg = {
             id: messageId,
             role: 'assistant',
             content: chunk,
             timestamp: Date.now(),
-          });
+          };
+          state.messages.push(targetMsg);
+        }
+
+        // Real-time instant tool call extraction during streaming
+        if (targetMsg.role === 'assistant' && targetMsg.content.includes('<call')) {
+          const { calls } = parseToolCalls(targetMsg.content, true);
+          if (calls.length > 0) {
+            if (!targetMsg.metadata) targetMsg.metadata = { plugin_calls: [] };
+            const existingCalls = targetMsg.metadata.plugin_calls || [];
+            const pluginStore = usePluginStore.getState();
+
+            const updatedCalls = calls.map((c) => {
+              const pluginId = pluginStore.getPluginIdForCapability(c.capName) || c.capName;
+              const matched = existingCalls.find((ec) => ec.capability === c.capName);
+              return (
+                matched || {
+                  plugin_id: pluginId,
+                  capability: c.capName,
+                  params: c.params,
+                  status: 'pending' as const,
+                }
+              );
+            });
+
+            // Keep parameters updated live as they stream in
+            for (const c of calls) {
+              const matched = updatedCalls.find((ec) => ec.capability === c.capName);
+              if (matched && Object.keys(c.params).length > 0) {
+                matched.params = { ...matched.params, ...c.params };
+              }
+            }
+
+            targetMsg.metadata.plugin_calls = updatedCalls;
+          }
         }
       });
     },

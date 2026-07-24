@@ -180,12 +180,3 @@ pub fn plugin_get_by_id(
 ) -> Result<Option<Plugin>, WeaveError> {
     Ok(app_state.plugin_manager.get_plugin(&plugin_id))
 }
-
-#[tauri::command]
-pub async fn workflow_execute_chain(
-    steps: Vec<crate::core::workflow_engine::WorkflowStep>,
-    app_state: State<'_, AppState>,
-) -> Result<crate::core::workflow_engine::WorkflowResult, WeaveError> {
-    info!("Executing workflow chain with {} steps", steps.len());
-    app_state.workflow_engine.execute_chain(steps).await
-}

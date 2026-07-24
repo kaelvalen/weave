@@ -5,10 +5,7 @@ import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { NotesManager } from '@/components/notes/NotesManager';
 import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
-import { KnowledgeBase } from '@/components/knowledge/KnowledgeBase';
 import { LocalModels } from '@/components/models/LocalModels';
-import { Workflows } from '@/components/workflows/Workflows';
-import { Canvas } from '@/components/canvas/Canvas';
 import { ProfilePanel } from '@/components/profile/ProfilePanel';
 import { useEffect } from 'react';
 
@@ -29,14 +26,8 @@ export function Workspace() {
         return <FileManager />;
       case 'notes':
         return <NotesManager />;
-      case 'knowledge':
-        return <KnowledgeBase />;
       case 'models':
         return <LocalModels />;
-      case 'workflows':
-        return <Workflows />;
-      case 'canvas':
-        return <Canvas />;
       default:
         return <FileManager />;
     }

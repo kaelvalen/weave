@@ -45,7 +45,7 @@ interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 // Custom code block component for ReactMarkdown
-const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) => {
+const CodeBlock = React.memo(function CodeBlock({ inline, className, children, ...props }: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
@@ -102,7 +102,7 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeBlockProps) =>
       {children}
     </code>
   );
-};
+});
 
 function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
   const isUser = role === 'user';
@@ -140,11 +140,20 @@ export const ChatMessage = React.memo(function ChatMessage({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
 
-  const isStreaming = useChatStore((s) => s.isStreaming);
+  const isStreaming = useChatStore((s) => (_isLast ? s.isStreaming : false));
   const editAndResend = useChatStore((s) => s.editAndResend);
   const regenerateResponse = useChatStore((s) => s.regenerateResponse);
   const isAssistant = message.role === 'assistant';
   const showCursor = _isLast && isStreaming && isAssistant;
+
+  const cleanedMarkdown = React.useMemo(() => {
+    return message.content
+      .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
+      .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
+      .replace(/<\/?(?:call|think|thought)[^>]*$/gi, '')
+      .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+      .replace(/\\\((.*?)\\\)/g, '$$$1$$');
+  }, [message.content]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -467,11 +476,7 @@ export const ChatMessage = React.memo(function ChatMessage({
                   rehypePlugins={[rehypeKatex]}
                   components={{ code: CodeBlock }}
                 >
-                  {message.content
-                    .replace(/<\s*think\s*>[\s\S]*?(?:<\/\s*think\s*>|$)/gi, '')
-                    .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
-                    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-                    .replace(/\\\((.*?)\\\)/g, '$$$1$$')}
+                  {cleanedMarkdown}
                 </ReactMarkdown>
               )}
             </div>

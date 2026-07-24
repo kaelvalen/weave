@@ -12,8 +12,9 @@ pub mod runtime;
 pub mod utils;
 
 use core::ai_bridge::AiBridge;
+use core::event_bus::EventBus;
 use core::plugin_manager::PluginManager;
-use core::workflow_engine::WorkflowEngine;
+use core::tool_registry::PluginRegistry;
 use models::chat::ChatMessage;
 use utils::config::AppConfig;
 use utils::errors::WeaveError;
@@ -21,7 +22,8 @@ use utils::errors::WeaveError;
 pub struct AppState {
     pub plugin_manager: Arc<PluginManager>,
     pub ai_bridge: Arc<AiBridge>,
-    pub workflow_engine: Arc<WorkflowEngine>,
+    pub event_bus: Arc<EventBus>,
+    pub tool_registry: Arc<PluginRegistry>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
@@ -56,7 +58,8 @@ impl AppState {
 
         let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone(), canvas_tx.clone()));
         let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
-        let workflow_engine = Arc::new(WorkflowEngine::new(plugin_manager.clone()));
+        let event_bus = Arc::new(EventBus::new(1000));
+        let tool_registry = Arc::new(PluginRegistry::new());
 
         let _ = plugin_manager.discover();
 
@@ -65,7 +68,8 @@ impl AppState {
         Ok(Self {
             plugin_manager,
             ai_bridge,
-            workflow_engine,
+            event_bus,
+            tool_registry,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),

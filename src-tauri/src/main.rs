@@ -56,7 +56,6 @@ fn main() {
             weave::commands::plugin::plugin_list_github_repos,
             weave::commands::plugin::plugin_install_from_github_repo,
             weave::commands::plugin::plugin_install_from_github_release,
-            weave::commands::plugin::workflow_execute_chain,
             weave::commands::system::system_get_config,
             weave::commands::system::system_set_config,
             weave::commands::system::list_provider_models,
@@ -72,12 +71,6 @@ fn main() {
             weave::commands::models::local_server_start,
             weave::commands::models::local_server_stop,
             weave::commands::models::local_model_switch,
-            weave::commands::knowledge::list_knowledge_files,
-            weave::commands::knowledge::upload_knowledge_file,
-            weave::commands::knowledge::delete_knowledge_file,
-            weave::commands::knowledge::index_knowledge_files,
-            weave::commands::knowledge::search_knowledge,
-            weave::commands::knowledge::get_knowledge_index_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

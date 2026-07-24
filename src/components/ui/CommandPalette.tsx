@@ -7,9 +7,6 @@ import {
   Settings as SettingsIcon,
   MessageCircle,
   FileText,
-  BookOpen,
-  Workflow,
-  LayoutTemplate,
   Brain,
 } from 'lucide-react';
 
@@ -34,24 +31,6 @@ export function CommandPalette() {
         onSelect: () => setActiveView('files'),
       },
       { id: 'notes', label: 'Go to Notes', icon: FileText, onSelect: () => setActiveView('notes') },
-      {
-        id: 'knowledge',
-        label: 'Go to Knowledge',
-        icon: BookOpen,
-        onSelect: () => setActiveView('knowledge'),
-      },
-      {
-        id: 'workflows',
-        label: 'Go to Workflows',
-        icon: Workflow,
-        onSelect: () => setActiveView('workflows'),
-      },
-      {
-        id: 'canvas',
-        label: 'Go to Canvas',
-        icon: LayoutTemplate,
-        onSelect: () => setActiveView('canvas'),
-      },
       {
         id: 'plugins',
         label: 'Go to Plugins',

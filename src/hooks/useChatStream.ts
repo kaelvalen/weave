@@ -42,8 +42,8 @@ export function useChatStream() {
 
         unlistenRef.current = unlisten;
 
-        // Flush buffer every 60ms to optimize React re-renders (approx 16fps)
-        flushInterval = setInterval(flush, 60);
+        // Flush buffer every 35ms (~30fps) for silky smooth typing animations
+        flushInterval = setInterval(flush, 35);
       } catch (err) {
         console.warn('Failed to setup stream listener:', err);
       }

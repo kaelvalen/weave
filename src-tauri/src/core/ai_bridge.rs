@@ -20,6 +20,10 @@ struct OpenAiRequest {
     temperature: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f64>,
     stream: bool,
 }
 
@@ -123,6 +127,12 @@ impl AiBridge {
             config,
             llama_server: Arc::new(tokio::sync::Mutex::new(None)),
         }
+    }
+
+    pub fn get_local_models_dir() -> std::path::PathBuf {
+        dirs::home_dir()
+            .map(|h| h.join("Models").join("llama.cpp"))
+            .unwrap_or_else(|| std::path::PathBuf::from("./models"))
     }
 
     pub async fn chat(
@@ -376,6 +386,8 @@ impl AiBridge {
             messages: openai_messages,
             temperature,
             max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
+            frequency_penalty: Some(0.3),
+            presence_penalty: Some(0.3),
             stream: false,
         };
 
@@ -582,6 +594,8 @@ impl AiBridge {
             messages: kimi_messages,
             temperature,
             max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
+            frequency_penalty: None,
+            presence_penalty: None,
             stream: false,
         };
 
@@ -607,16 +621,48 @@ impl AiBridge {
         Ok(content)
     }
 
+fn prune_chat_messages(messages: &[ChatMessage], max_tokens: usize) -> Vec<ChatMessage> {
+    if messages.is_empty() {
+        return Vec::new();
+    }
+
+    let system_msgs: Vec<ChatMessage> = messages.iter().filter(|m| m.role == ChatRole::System).cloned().collect();
+    let non_system: Vec<ChatMessage> = messages.iter().filter(|m| m.role != ChatRole::System).cloned().collect();
+
+    let sys_tokens: usize = system_msgs.iter().map(|m| m.content.len() / 3).sum();
+    let budget = if max_tokens > sys_tokens { max_tokens - sys_tokens } else { 3000 };
+
+    let mut kept_non_system: Vec<ChatMessage> = Vec::new();
+    let mut current_tokens = 0;
+
+    for m in non_system.into_iter().rev() {
+        let m_tokens = m.content.len() / 3 + 20;
+        if current_tokens + m_tokens > budget && !kept_non_system.is_empty() {
+            break;
+        }
+        current_tokens += m_tokens;
+        kept_non_system.push(m);
+    }
+
+    kept_non_system.reverse();
+    let mut result = system_msgs;
+    result.extend(kept_non_system);
+    result
+}
+
 fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<&str>) -> Vec<OpenAiMessage> {
     let model_lower = model.to_lowercase();
     let is_gemma = model_lower.contains("gemma");
     let is_local = model_lower.contains(".gguf") || api_url.map(|u| u.contains("8080") || u.contains("11434") || u.contains("localhost") || u.contains("127.0.0.1")).unwrap_or(false);
 
+    let max_budget = if is_local { 18000 } else { 100000 };
+    let pruned_input = Self::prune_chat_messages(messages, max_budget);
+
     if is_gemma || is_local {
         let mut sys_text = String::new();
         let mut filtered: Vec<ChatMessage> = Vec::new();
 
-        for m in messages {
+        for m in &pruned_input {
             if m.content.trim().is_empty() {
                 continue;
             }
@@ -716,11 +762,14 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
         
         let openai_messages = Self::build_openai_messages(&messages, model, api_url);
 
+        let temp = if temperature == 0.0 { 0.7 } else { temperature };
         let request = OpenAiRequest {
             model: model.to_string(),
             messages: openai_messages,
-            temperature,
+            temperature: temp,
             max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
+            frequency_penalty: Some(0.3),
+            presence_penalty: Some(0.3),
             stream: true,
         };
 
@@ -741,7 +790,11 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
         use futures::StreamExt;
         
         let mut buffer = Vec::new();
+        let mut generated_text = String::new();
+        let mut stop_stream = false;
+
         while let Some(chunk_result) = stream.next().await {
+            if stop_stream { break; }
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
             
@@ -758,6 +811,19 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
                     if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
                         if let Some(content) = json.choices.get(0)
                             .and_then(|c| c.delta.content.clone()) {
+                            generated_text.push_str(&content);
+
+                            // Detect degenerate local model repetition loop
+                            if generated_text.len() > 120 {
+                                let tail = &generated_text[generated_text.len() - 35..];
+                                let count = generated_text.matches(tail).count();
+                                if count >= 4 {
+                                    tracing::warn!("Infinite streaming repetition loop detected. Halting generation stream.");
+                                    stop_stream = true;
+                                    break;
+                                }
+                            }
+
                             let _ = tx.send(content).await;
                         }
                     }
@@ -903,8 +969,17 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
             };
 
             if needs_restart {
-                let model_path = format!("/home/kael/Models/llama.cpp/{}", model);
+                let model_path = Self::get_local_models_dir().join(model);
                 
+                // Kill any lingering process using port 8080 first
+                let _ = tokio::process::Command::new("fuser")
+                    .arg("-k")
+                    .arg("8080/tcp")
+                    .output()
+                    .await;
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
                 // Start new server
                 use tokio::process::Command;
                 let child = Command::new("llama-server")
@@ -921,12 +996,27 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
                     .map_err(|e| WeaveError::LocalLlmNotAvailable(format!("Failed to start llama-server: {}", e)))?;
                 
                 *server_guard = Some((model.to_string(), child));
-                
-                // Wait for server to start (simple 3 second sleep for now)
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                drop(server_guard);
+
+                // Active health check polling loop (up to 6s)
+                let health_url = "http://localhost:8080/health";
+                let mut ready = false;
+                for _ in 0..20 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                    if let Ok(resp) = client.get(health_url).send().await {
+                        if resp.status().is_success() {
+                            ready = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !ready {
+                    tracing::warn!("llama-server started but health check timed out on port 8080");
+                }
+            } else {
+                drop(server_guard);
             }
-            
-            drop(server_guard);
 
             return Self::stream_openai_internal(
                 client,
@@ -1050,6 +1140,8 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
             messages: kimi_messages,
             temperature,
             max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
+            frequency_penalty: None,
+            presence_penalty: None,
             stream: true,
         };
 
@@ -1230,9 +1322,9 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
                     }
                 }
 
-                // 2. Scan /home/kael/Models/llama.cpp for .gguf files (including subdirectories)
-                let gguf_root = "/home/kael/Models/llama.cpp";
-                if let Ok(entries) = std::fs::read_dir(gguf_root) {
+                // 2. Scan ~/Models/llama.cpp for .gguf files (including subdirectories)
+                let gguf_root = Self::get_local_models_dir();
+                if let Ok(entries) = std::fs::read_dir(&gguf_root) {
                     for entry in entries.filter_map(Result::ok) {
                         let path = entry.path();
                         if path.is_dir() {
@@ -1259,7 +1351,7 @@ fn build_openai_messages(messages: &[ChatMessage], model: &str, api_url: Option<
                 }
 
                 if models.is_empty() {
-                    return Err(WeaveError::LocalLlmNotAvailable("No local models found (checked Ollama and /home/kael/Models/llama.cpp)".to_string()));
+                    return Err(WeaveError::LocalLlmNotAvailable("No local models found (checked Ollama and local models directory)".to_string()));
                 }
 
                 Ok(models)

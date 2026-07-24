@@ -6,10 +6,7 @@ export type View =
   | 'files'
   | 'settings'
   | 'notes'
-  | 'knowledge'
   | 'models'
-  | 'workflows'
-  | 'canvas'
   | 'profile';
 
 export interface ProviderConfig {

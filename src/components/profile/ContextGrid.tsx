@@ -47,7 +47,7 @@ export function ContextGrid({
 }
 
 /* ── Column 1: Identity Card ── */
-function IdentityCard({
+export function IdentityCard({
   profile,
   onUpdateIdentity,
 }: {
@@ -160,7 +160,7 @@ function IdentityCard({
 }
 
 /* ── Column 2: Active Context Card ── */
-function ActiveContextCard({
+export function ActiveContextCard({
   profile,
   onAddTechTag,
   onRemoveTechTag,
@@ -273,7 +273,7 @@ function ActiveContextCard({
 }
 
 /* ── Column 3: AI Behavior Card ── */
-function BehaviorCard({
+export function BehaviorCard({
   profile,
   onUpdateBehavior,
   isSaving,
@@ -284,20 +284,44 @@ function BehaviorCard({
 }) {
   const [directives, setDirectives] = useState(profile.ai_directives);
 
+  const presets = [
+    {
+      label: '🚀 Senior Tech Lead',
+      text: 'Be extremely concise, direct, and authoritative. Enforce strict type safety, modular design, and clean architecture.',
+    },
+    {
+      label: '🇹🇷 Türkçe Açıklama',
+      text: 'Kodu değiştirmeden önce mantığını kısa Türkçe cümlelerle özetle. Kodu eksiksiz ve temiz yaz.',
+    },
+    {
+      label: '🛡️ Defensive Security',
+      text: 'Focus on strict parameter validation, sanitization, boundary checks, and robust error handling.',
+    },
+    {
+      label: '⚡ Speed & Minimal',
+      text: 'Output bare minimum necessary code without unnecessary commentary or boilerplate.',
+    },
+  ];
+
+  const applyPreset = (text: string) => {
+    setDirectives(text);
+    onUpdateBehavior(text);
+  };
+
   return (
     <div className="bg-card/40 border border-border/30 rounded-xl p-5 backdrop-blur-sm flex flex-col justify-between hover:border-border/60 transition-all space-y-4">
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
-            <Terminal className="w-3 h-3 text-amber-500" />
-            <span>AI Behavior & Tone</span>
+            <Terminal className="w-3.5 h-3.5 text-amber-500" />
+            <span className="font-bold text-foreground">AI Directives & Rules</span>
           </div>
           {isSaving && <span className="text-[10px] font-mono text-primary animate-pulse">Syncing...</span>}
         </div>
 
         <div className="space-y-2">
           <span className="text-[10px] font-mono uppercase text-muted-foreground block">
-            Tone, Rules & Output Constraints
+            System Directive Injection
           </span>
           <textarea
             value={directives}
@@ -305,17 +329,36 @@ function BehaviorCard({
             onBlur={() => onUpdateBehavior(directives)}
             rows={5}
             placeholder="e.g. Always answer concisely. Prefer functional components. Use Turkish for explanations..."
-            className="w-full rounded-lg border border-border/40 bg-background/50 p-2.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 resize-y leading-relaxed transition-all placeholder:text-muted-foreground/50"
+            className="w-full rounded-xl border border-border/50 bg-background/60 p-3 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 resize-y leading-relaxed transition-all placeholder:text-muted-foreground/50 shadow-inner"
           />
+
+          {/* Quick Presets */}
+          <div className="pt-2">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase block mb-1.5">
+              Quick Preset Templates:
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {presets.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => applyPreset(p.text)}
+                  className="text-[10px] font-mono px-2 py-1 rounded-lg bg-muted/50 hover:bg-primary/10 hover:text-primary border border-border/40 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="pt-3 border-t border-border/20 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
         <div className="flex items-center gap-1">
           <MessageSquare className="w-3 h-3 text-amber-500/80" />
-          <span>Strict Adherence</span>
+          <span>System Prompt Header</span>
         </div>
-        <span className="text-amber-500 font-semibold">High Priority</span>
+        <span className="text-amber-500 font-semibold">Priority #1</span>
       </div>
     </div>
   );

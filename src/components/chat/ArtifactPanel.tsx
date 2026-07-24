@@ -7,7 +7,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Canvas } from '@/components/canvas/Canvas';
 import { toast } from 'sonner';
 
 export function ArtifactPanel() {
@@ -89,9 +88,7 @@ export function ArtifactPanel() {
 
       {/* Content Viewer Body */}
       <div className="flex-1 overflow-hidden font-sans leading-relaxed relative">
-        {activeArtifact.type === 'canvas' ? (
-          <Canvas />
-        ) : isCode ? (
+        {isCode ? (
           <div className="p-6 h-full overflow-y-auto">
             <SyntaxHighlighter
               language={activeArtifact.language || 'text'}

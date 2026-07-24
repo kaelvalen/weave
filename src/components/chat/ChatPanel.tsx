@@ -113,7 +113,11 @@ export function ChatPanel({
 
   useEffect(() => {
     if (bottomRef.current && isPinnedToBottom) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      if (isStreaming) {
+        bottomRef.current.scrollIntoView({ behavior: 'auto' });
+      } else {
+        bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   }, [messages, isStreaming, isPinnedToBottom]);
 
@@ -304,10 +308,9 @@ export function ChatPanel({
           </div>
 
           {/* ── Messages ── */}
-          <ScrollArea className="flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0" onScroll={handleScroll}>
             <div
               ref={scrollContainerRef}
-              onScroll={handleScroll}
               className="flex flex-col max-w-4xl mx-auto w-full min-w-0 pr-3 sm:pr-4"
             >
               {!hasMessages ? (

@@ -196,29 +196,7 @@ impl PluginManager {
                 .capability("coder.format", r#"{"directory":"."}"#, "Format project files")
                 .capability("coder.lint", r#"{"directory":"."}"#, "Lint project code")
                 .capability("coder.dependencies", r#"{"directory":"."}"#, "List project dependencies")
-                .build(),
-
-            PluginBuilder::builtin("com.weave.builtin.canvas", "Canvas AI")
-                .description("Interact with the visual infinite canvas to create and manage diagrams, notes, and UI layouts")
-                .category(PluginCategory::Ai)
-                .capability("canvas.add_node", r##"{"type":"shapeNode","data":{"shapeType":"rectangle","backgroundColor":"#3b82f6"},"position":{"x":100,"y":100}}"##, "Add a node to the canvas. Types: shapeNode, textNode, noteNode, codeNode, imageNode")
-                .capability("canvas.update_node", r#"{"id":"ai_node_123","data":{"text":"Hello"}}"#, "Update the data of an existing node")
-                .capability("canvas.delete_node", r#"{"id":"ai_node_123"}"#, "Delete a node from the canvas by its ID")
-                .capability("canvas.connect_nodes", r#"{"source":"ai_node_1","target":"ai_node_2","label":"connects to"}"#, "Connect two canvas nodes with a visual arrow edge")
-                .capability("canvas.clear", r#"{}"#, "Clear all nodes from the canvas")
-                .capability("canvas.export", r#"{}"#, "Trigger a save dialog to export the canvas to a file")
-                .capability("canvas.import", r#"{}"#, "Trigger an open dialog to import a canvas from a file")
-                .build(),
-
-            PluginBuilder::builtin("com.weave.builtin.workflow", "Workflows AI")
-                .description("Create, read, update, and manage automated AI workflow pipelines and execution templates")
-                .category(PluginCategory::Ai)
-                .capability("workflow.create", r#"{"name":"My Workflow","description":"Auto build and test","nodes":[],"edges":[]}"#, "Create a new automated workflow template")
-                .capability("workflow.list", r#"{}"#, "List all saved workflow templates")
-                .capability("workflow.get", r#"{"id":"wf_123"}"#, "Get the definition of a workflow by ID")
-                .capability("workflow.delete", r#"{"id":"wf_123"}"#, "Delete a saved workflow template by ID")
-                .build(),
-        ]
+                .build(),        ]
     }
 
     pub fn discover(&self) -> Result<Vec<Plugin>, WeaveError> {
@@ -463,8 +441,7 @@ impl PluginManager {
         prompt.push_str("4. **Error Recovery**: If a tool call fails (e.g., tests fail, command errors), DO NOT GIVE UP. Analyze the error output, fix the code, and try again.\n");
         prompt.push_str("5. **Refactoring**: Use `coder.apply_diff` for surgical edits. IMPORTANT: Keep `old_str` as SHORT and unique as possible (e.g. 1-5 lines). Do not pass the entire file as `old_str`! Only use `coder.write_file` for new files or massive rewrites.\n");
         prompt.push_str("6. **Note Organization**: Use `note.create`, `note.update`, `note.toggle_pin`, and `note.search` to actively document findings, pin important architecture notes, and organize research with tags.\n");
-        prompt.push_str("7. **User Memory & Learning**: Actively use `memory.store` to remember important user preferences, coding style rules, or tech stack details discovered during conversations. Check existing user facts with `memory.recall` when making architectural decisions.\n");
-        prompt.push_str("8. **Canvas & Diagram Creation**: When asked to create a canvas, diagram, Turing machine, flowchart, or visual layout, YOU MUST CALL `canvas.add_node` AND `canvas.connect_nodes` DIRECTLY. Do NOT output plain text instructions or JSON schemas explaining how to create a canvas; EXECUTE the tool calls using `<call plugin=\"canvas.add_node\">...</call>`!\n\n");
+        prompt.push_str("7. **DIRECT EXECUTION OVER EXPLANATION**: ABSOLUTELY NEVER explain to the user how to use tools, write text guides listing capabilities, or output pseudo-JSON code blocks explaining commands. When the user asks to create a note, write a file, search code, or run tests, YOU MUST EXECUTE THE TOOL CALL IMMEDIATELY using `<call plugin=\"capability_name\">{\"param\":\"value\"}</call>`!\n\n");
         prompt.push_str("## Tool Usage Rules\n");
         prompt.push_str("- Output ONLY: <call plugin=\"capability_name\">{\"param\":\"value\"}</call> when using a tool.\n");
         prompt.push_str("- You will receive the tool result in the next turn.\n");
@@ -531,6 +508,10 @@ impl PluginManager {
         }
 
         prompt.push_str("\n## Example Flow\n");
+        prompt.push_str("User: Create a note called PyTorch Notes\n");
+        prompt.push_str("You: <call plugin=\"note.create\">{\"title\":\"PyTorch Notes\",\"content\":\"# PyTorch Basics\\nPyTorch is an open-source machine learning framework...\",\"tags\":[\"python\",\"ai\"]}</call>\n");
+        prompt.push_str("[System returns note created]\n");
+        prompt.push_str("You: I have created the PyTorch note for you.\n\n");
         prompt.push_str("User: Fix the bug in auth.ts\n");
         prompt.push_str("You: <call plugin=\"coder.read_file\">{\"path\":\"src/auth.ts\"}</call>\n");
         prompt.push_str("[System returns file content]\n");

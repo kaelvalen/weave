@@ -31,13 +31,18 @@ function extractArtifactsFromCalls(calls: PluginCall[]): ActiveArtifact[] {
       const title = path.split('/').pop() || path;
       const content = (params.content as string) || (params.new_str as string) || (typeof call.result === 'string' ? call.result : '');
       artifacts.push({ title, type: 'file', content, path });
-    } else if (cap.includes('canvas')) {
-      const title = (params.text as string) || (params.title as string) || 'Canvas Diagram';
-      artifacts.push({ title, type: 'canvas', content: JSON.stringify(params, null, 2) });
     }
   }
 
-  return artifacts;
+  // Deduplicate by title & type to prevent card flooding
+  const uniqueArtifacts: ActiveArtifact[] = [];
+  for (const art of artifacts) {
+    if (!uniqueArtifacts.some((a) => a.title === art.title && a.type === art.type)) {
+      uniqueArtifacts.push(art);
+    }
+  }
+
+  return uniqueArtifacts;
 }
 
 export function AgentActivityAccordion({

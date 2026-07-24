@@ -1,4 +1,4 @@
-import { Cpu, Download, Activity, Trash2, StopCircle, HardDrive, Play, Square } from 'lucide-react';
+import { Cpu, Download, Activity, Trash2, StopCircle, HardDrive, Play, Square, Search, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -41,6 +41,23 @@ export function LocalModels() {
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<LocalServerStatus | null>(null);
   const [serverBusy, setServerBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('weave_favorite_models');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = (name: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name];
+      localStorage.setItem('weave_favorite_models', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const fetchModels = async () => {
     try {
@@ -201,11 +218,22 @@ export function LocalModels() {
         <div className="flex-1 grid grid-cols-3 gap-6 pb-32 min-h-0">
           {/* Main List */}
           <div className="col-span-2 border rounded-xl bg-card overflow-hidden flex flex-col">
-            <div className="border-b px-6 py-4 bg-muted/20 flex justify-between items-center">
-              <h3 className="font-semibold">Installed Models</h3>
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                {models.length} Models
-              </span>
+            <div className="border-b px-6 py-3 bg-muted/20 flex justify-between items-center gap-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm">Installed Models</h3>
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-mono">
+                  {models.length} Models
+                </span>
+              </div>
+              <div className="relative w-64">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search installed models..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 h-8 text-xs font-mono"
+                />
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {activeDownload && !activeDownload.done && (
@@ -239,30 +267,60 @@ export function LocalModels() {
                   </p>
                 </div>
               ) : (
-                models.map((m) => (
-                  <div
-                    key={m.name}
-                    className="flex justify-between items-center p-4 border rounded-lg hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center">
-                        <Cpu className="w-5 h-5 text-muted-foreground" />
+                models
+                  .filter((m) => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .sort((a, b) => {
+                    const isFavA = favorites.includes(a.name);
+                    const isFavB = favorites.includes(b.name);
+                    if (isFavA && !isFavB) return -1;
+                    if (!isFavA && isFavB) return 1;
+                    return a.name.localeCompare(b.name);
+                  })
+                  .map((m) => {
+                    const isFav = favorites.includes(m.name);
+                    return (
+                      <div
+                        key={m.name}
+                        className="flex justify-between items-center p-4 border rounded-lg hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center">
+                            <Cpu className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-sm">{m.name}</h4>
+                              {isFav && (
+                                <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-0.5">
+                                  <Star className="w-3 h-3 fill-amber-500" /> Favorite
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatBytes(m.size_bytes)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                            onClick={() => toggleFavorite(m.name)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Star className={`w-4 h-4 ${isFav ? 'fill-foreground text-foreground' : ''}`} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            onClick={() => setModelToDelete(m.name)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-medium text-sm">{m.name}</h4>
-                        <p className="text-xs text-muted-foreground">{formatBytes(m.size_bytes)}</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                      onClick={() => setModelToDelete(m.name)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))
+                    );
+                  })
               )}
             </div>
           </div>

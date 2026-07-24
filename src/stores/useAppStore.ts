@@ -2,11 +2,11 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { View } from '@/types/app';
 
-export type CapabilityTab = 'context' | 'files' | 'notes' | 'knowledge' | 'models' | 'workflows' | 'canvas' | 'plugins';
+export type CapabilityTab = 'context' | 'files' | 'notes' | 'models' | 'plugins';
 
 export interface ActiveArtifact {
   id?: string;
-  type: 'note' | 'file' | 'markdown' | 'code' | 'canvas';
+  type: 'note' | 'file' | 'markdown' | 'code';
   title: string;
   content: string;
   path?: string;

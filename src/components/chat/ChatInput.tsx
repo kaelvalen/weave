@@ -23,11 +23,10 @@ import {
   X,
   Square,
   Sparkles,
-  LayoutGrid,
-  Workflow,
   Cpu,
   Code2,
   FolderOpen,
+  Star,
 } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 
@@ -79,20 +78,6 @@ const SLASH_COMMANDS = [
     template: '/note ',
   },
   {
-    command: '/canvas',
-    title: 'AI Canvas',
-    desc: 'Autonomously build visual diagram nodes',
-    icon: LayoutGrid,
-    template: '/canvas ',
-  },
-  {
-    command: '/workflow',
-    title: 'Workflows',
-    desc: 'Execute automated AI pipelines',
-    icon: Workflow,
-    template: '/workflow ',
-  },
-  {
     command: '/code',
     title: 'Code Coder',
     desc: 'Refactor, debug, or write code files',
@@ -130,6 +115,23 @@ export function ChatInput() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('weave_favorite_models');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = (val: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(val) ? prev.filter((item) => item !== val) : [...prev, val];
+      localStorage.setItem('weave_favorite_models', JSON.stringify(next));
+      return next;
+    });
+  };
   const {
     sendMessage,
     isStreaming,
@@ -443,7 +445,7 @@ export function ChatInput() {
                 </span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 rounded-md bg-popover border border-border p-1 shadow-lg" sideOffset={6}>
+              <DropdownMenuContent className="w-64 rounded-md bg-popover border border-border p-1 shadow-lg" sideOffset={6}>
                 <div className="flex items-center px-2 py-1 border-b border-border/50 mb-1">
                   <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
                   <input
@@ -454,23 +456,41 @@ export function ChatInput() {
                     className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground font-mono"
                   />
                 </div>
-                <div className="max-h-48 overflow-y-auto font-mono text-xs">
+                <div className="max-h-56 overflow-y-auto font-mono text-xs">
                   {models
-                    .filter((m) => m.label.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .map((m) => (
-                      <DropdownMenuItem
-                        key={m.value}
-                        onClick={() => {
-                          void setModel(m.value, m.provider);
-                          setDropdownOpen(false);
-                        }}
-                        className={`px-2 py-1.5 rounded text-xs cursor-pointer ${
-                          m.value === selectedModel ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {m.label}
-                      </DropdownMenuItem>
-                    ))}
+                    .filter((m) => m.label.toLowerCase().includes(searchQuery.toLowerCase()) || m.provider.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .sort((a, b) => {
+                      const isFavA = favorites.includes(a.value);
+                      const isFavB = favorites.includes(b.value);
+                      if (isFavA && !isFavB) return -1;
+                      if (!isFavA && isFavB) return 1;
+                      return a.label.localeCompare(b.label);
+                    })
+                    .map((m) => {
+                      const isFav = favorites.includes(m.value);
+                      return (
+                        <DropdownMenuItem
+                          key={m.value}
+                          onClick={() => {
+                            void setModel(m.value, m.provider);
+                            setDropdownOpen(false);
+                          }}
+                          className={`px-2 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between group ${
+                            m.value === selectedModel ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <span className="truncate">{m.label}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(m.value, e)}
+                            title={isFav ? 'Remove favorite' : 'Add to favorites'}
+                            className="p-0.5 rounded hover:bg-background/80 transition-colors"
+                          >
+                            <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-foreground text-foreground' : 'text-muted-foreground/40 group-hover:text-muted-foreground'}`} />
+                          </button>
+                        </DropdownMenuItem>
+                      );
+                    })}
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
