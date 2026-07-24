@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::core::tool_registry::{SideEffectLevel, ToolDefinition};
+use crate::core::tool_registry::ToolDefinition;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityNode {
