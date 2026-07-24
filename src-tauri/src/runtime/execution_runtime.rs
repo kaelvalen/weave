@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::sync::Arc;
-use crate::core::execution_context::ExecutionContext;
-use crate::core::registries::execution_registry::ExecutionRegistry;
+use runtime_kernel::execution_context::ExecutionContext;
+use execution_runtime::execution_registry::ExecutionRegistry;
 use crate::utils::errors::WeaveError;
 
 pub struct ExecutionRuntime {

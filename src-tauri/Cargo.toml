@@ -12,6 +12,14 @@ rust-version = "1.70"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+runtime-kernel = { path = "../crates/runtime-kernel" }
+execution-runtime = { path = "../crates/execution-runtime" }
+planning = { path = "../crates/planning" }
+memory = { path = "../crates/memory" }
+capabilities = { path = "../crates/capabilities" }
+plugin-runtime = { path = "../crates/plugin-runtime" }
+ai-runtime = { path = "../crates/ai-runtime" }
+workflow-runtime = { path = "../crates/workflow-runtime" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"

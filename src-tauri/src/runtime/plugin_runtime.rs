@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::core::plugin_manager::PluginManager;
+use plugin_runtime::plugin_manager::PluginManager;
 use crate::models::plugin::Plugin;
 use crate::utils::errors::WeaveError;
 

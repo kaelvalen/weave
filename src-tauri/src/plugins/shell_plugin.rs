@@ -18,13 +18,13 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 pub struct ShellPlugin;
 
 impl PluginExecutor for ShellPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         ShellPlugin::execute(capability, params, ctx)
     }
 }
 
 impl ShellPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "shell.exec" | "shell.execute" => Self::exec(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),

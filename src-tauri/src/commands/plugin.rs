@@ -1,7 +1,7 @@
 use tauri::State;
 use tracing::{debug, info};
 
-use crate::core::github_plugin::{GithubPluginClient, GithubRepo};
+use plugin_runtime::github_plugin::{GithubPluginClient, GithubRepo};
 use crate::models::plugin::Plugin;
 use crate::AppState;
 use crate::utils::errors::WeaveError;

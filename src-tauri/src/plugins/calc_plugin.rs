@@ -7,13 +7,13 @@ use crate::utils::errors::WeaveError;
 pub struct CalcPlugin;
 
 impl PluginExecutor for CalcPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         Self::execute(capability, params, ctx)
     }
 }
 
 impl CalcPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "calc.eval" => Self::eval(params),
             "calc.convert" => Self::convert(params),

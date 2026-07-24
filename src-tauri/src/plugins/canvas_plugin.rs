@@ -10,7 +10,7 @@ pub struct CanvasPlugin {
 }
 
 impl PluginExecutor for CanvasPlugin {
-    fn execute(&self, capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(&self, capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "canvas.add_node" => self.add_node(params),
             "canvas.update_node" => self.update_node(params),

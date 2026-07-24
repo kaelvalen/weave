@@ -8,13 +8,13 @@ use crate::utils::errors::WeaveError;
 pub struct GitPlugin;
 
 impl PluginExecutor for GitPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         GitPlugin::execute(capability, params, ctx)
     }
 }
 
 impl GitPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "git.status" => Self::status(params),
             "git.init" => Self::init(params),

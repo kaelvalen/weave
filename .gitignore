@@ -48,3 +48,6 @@ __pycache__/
 /external_plugins/
 external_plugins/**/.venv/
 .worktrees/
+
+# Rust
+target/

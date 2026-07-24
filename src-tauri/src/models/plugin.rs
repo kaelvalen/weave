@@ -5,7 +5,7 @@ use std::collections::HashMap;
 /// Trait that all plugin executors must implement.
 /// This provides a unified dispatch interface for both built-in and external plugins.
 pub trait PluginExecutor: Send + Sync {
-    fn execute(&self, capability: &str, params: serde_json::Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<serde_json::Value, crate::utils::errors::WeaveError>;
+    fn execute(&self, capability: &str, params: serde_json::Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<serde_json::Value, crate::utils::errors::WeaveError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
