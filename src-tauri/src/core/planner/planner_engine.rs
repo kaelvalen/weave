@@ -1,21 +1,27 @@
 use std::sync::Arc;
 use serde_json::json;
 
-use crate::core::capability_registry::CapabilityRegistry;
 use crate::core::execution_context::ExecutionContext;
 use crate::core::planner::reflection_engine::ReflectionEngine;
 use crate::core::planner::task_graph::{TaskGraph, TaskNode, TaskStatus};
+use crate::core::registries::execution_registry::ExecutionRegistry;
+use crate::core::registries::planner_index::PlannerIndex;
 use crate::utils::errors::WeaveError;
 
 pub struct PlannerEngine {
-    capability_registry: Arc<CapabilityRegistry>,
+    planner_index: Arc<PlannerIndex>,
+    execution_registry: Arc<ExecutionRegistry>,
     reflection_engine: ReflectionEngine,
 }
 
 impl PlannerEngine {
-    pub fn new(capability_registry: Arc<CapabilityRegistry>) -> Self {
+    pub fn new(
+        planner_index: Arc<PlannerIndex>,
+        execution_registry: Arc<ExecutionRegistry>,
+    ) -> Self {
         Self {
-            capability_registry,
+            planner_index,
+            execution_registry,
             reflection_engine: ReflectionEngine::new(),
         }
     }
@@ -23,8 +29,7 @@ impl PlannerEngine {
     pub fn create_plan(&self, goal: &str) -> TaskGraph {
         let mut graph = TaskGraph::new(uuid::Uuid::new_v4().to_string(), goal);
 
-        // Decompose goal into task nodes using capabilities registered in CapabilityRegistry
-        let tools = self.capability_registry.list_tools();
+        let tools = self.planner_index.list_all();
         let first_tool = tools.first();
 
         let cap_id = first_tool
@@ -60,7 +65,7 @@ impl PlannerEngine {
             for node in executable_nodes {
                 graph.update_status(&node.id, TaskStatus::InProgress, None);
 
-                match self.capability_registry.execute(plugin_id, &node.capability_id, node.params.clone(), ctx) {
+                match self.execution_registry.execute(plugin_id, &node.capability_id, node.params.clone(), ctx) {
                     Ok(output) => {
                         let reflection = self.reflection_engine.evaluate(&graph.goal, &output);
                         if reflection.is_successful {

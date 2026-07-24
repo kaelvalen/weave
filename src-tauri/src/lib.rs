@@ -12,13 +12,19 @@ pub mod runtime;
 pub mod utils;
 
 use core::ai_bridge::AiBridge;
-use core::capability_registry::CapabilityRegistry;
 use core::event_bus::EventBus;
 use core::execution_context::ExecutionContext;
 use core::memory::memory_engine::MemoryEngine;
+use core::observability::Observability;
 use core::planner::planner_engine::PlannerEngine;
 use core::plugin_manager::PluginManager;
-use core::policy_engine::PolicyEngine;
+use core::policy_engine::{PolicyEngine, SecurityPolicy};
+use core::registries::capability_registry::CapabilityRegistry;
+use core::registries::execution_registry::ExecutionRegistry;
+use core::registries::permission_registry::PermissionRegistry;
+use core::registries::planner_index::PlannerIndex;
+use core::resource_manager::ResourceManager;
+use core::scheduler::Scheduler;
 use core::tool_registry::PluginRegistry;
 use core::workflow::workflow_engine::WorkflowEngine;
 use models::chat::ChatMessage;
@@ -31,10 +37,16 @@ pub struct AppState {
     pub event_bus: Arc<EventBus>,
     pub tool_registry: Arc<PluginRegistry>,
     pub capability_registry: Arc<CapabilityRegistry>,
+    pub execution_registry: Arc<ExecutionRegistry>,
+    pub permission_registry: Arc<PermissionRegistry>,
+    pub planner_index: Arc<PlannerIndex>,
     pub policy_engine: Arc<PolicyEngine>,
     pub planner_engine: Arc<PlannerEngine>,
     pub workflow_engine: Arc<WorkflowEngine>,
     pub memory_engine: Arc<MemoryEngine>,
+    pub observability: Arc<Observability>,
+    pub resource_manager: Arc<ResourceManager>,
+    pub scheduler: Arc<Scheduler>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
@@ -44,7 +56,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Result<Self, WeaveError> {
-        info!("Initializing Weave application state...");
+        info!("Initializing Weave AI Runtime Platform state...");
 
         let config = match AppConfig::load() {
             Ok(cfg) => cfg,
@@ -73,14 +85,22 @@ impl AppState {
         let tool_registry = Arc::new(PluginRegistry::new());
 
         let policy_engine = Arc::new(PolicyEngine::default_engine());
-        let capability_registry = Arc::new(CapabilityRegistry::new(plugin_dir.clone(), policy_engine.clone()));
-        let planner_engine = Arc::new(PlannerEngine::new(capability_registry.clone()));
-        let workflow_engine = Arc::new(WorkflowEngine::new(capability_registry.clone()));
+        let capability_registry = Arc::new(CapabilityRegistry::new());
+        let execution_registry = Arc::new(ExecutionRegistry::new());
+        let permission_registry = Arc::new(PermissionRegistry::new(SecurityPolicy::default()));
+        let planner_index = Arc::new(PlannerIndex::new());
+
+        let planner_engine = Arc::new(PlannerEngine::new(planner_index.clone(), execution_registry.clone()));
+        let workflow_engine = Arc::new(WorkflowEngine::new(execution_registry.clone()));
         let memory_engine = Arc::new(MemoryEngine::default_engine());
+
+        let observability = Arc::new(Observability::new());
+        let resource_manager = Arc::new(ResourceManager::default_manager());
+        let scheduler = Arc::new(Scheduler::new(event_bus.clone()));
 
         let _ = plugin_manager.discover();
 
-        info!("Weave application state initialized successfully");
+        info!("Weave AI Runtime Platform state initialized successfully");
 
         Ok(Self {
             plugin_manager,
@@ -88,10 +108,16 @@ impl AppState {
             event_bus,
             tool_registry,
             capability_registry,
+            execution_registry,
+            permission_registry,
+            planner_index,
             policy_engine,
             planner_engine,
             workflow_engine,
             memory_engine,
+            observability,
+            resource_manager,
+            scheduler,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),

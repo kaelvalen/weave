@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::core::capability_registry::CapabilityRegistry;
 use crate::core::execution_context::ExecutionContext;
+use crate::core::registries::execution_registry::ExecutionRegistry;
 use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,14 +23,14 @@ pub struct WorkflowDefinition {
 }
 
 pub struct WorkflowEngine {
-    capability_registry: Arc<CapabilityRegistry>,
+    execution_registry: Arc<ExecutionRegistry>,
     workflows: parking_lot::RwLock<HashMap<String, WorkflowDefinition>>,
 }
 
 impl WorkflowEngine {
-    pub fn new(capability_registry: Arc<CapabilityRegistry>) -> Self {
+    pub fn new(execution_registry: Arc<ExecutionRegistry>) -> Self {
         Self {
-            capability_registry,
+            execution_registry,
             workflows: parking_lot::RwLock::new(HashMap::new()),
         }
     }
@@ -53,7 +53,7 @@ impl WorkflowEngine {
 
         let mut results = Vec::new();
         for step in wf.steps {
-            let res = self.capability_registry.execute(
+            let res = self.execution_registry.execute(
                 &step.plugin_id,
                 &step.capability,
                 step.params,
