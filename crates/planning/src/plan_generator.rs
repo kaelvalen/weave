@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use planning::goal_analyzer::GoalAnalysis;
-use planning::task_graph::{TaskGraph, TaskNode, TaskStatus};
-use memory::planner_index::PlannerIndex;
+use planning::logical_plan::{LogicalPlan, LogicalNode, ScoredPlan};
+use knowledge::planner_index::PlannerIndex;
 
 pub trait PlanGeneratorTrait: Send + Sync {
-    fn generate_plan(&self, analysis: &GoalAnalysis) -> TaskGraph;
+    fn generate_plan(&self, analysis: &GoalAnalysis) -> Vec<ScoredPlan>;
 }
 
 pub struct SemanticVectorPlanGenerator {
@@ -21,30 +21,24 @@ impl SemanticVectorPlanGenerator {
 }
 
 impl PlanGeneratorTrait for SemanticVectorPlanGenerator {
-    fn generate_plan(&self, analysis: &GoalAnalysis) -> TaskGraph {
-        let mut graph = TaskGraph::new(uuid::Uuid::new_v4().to_string(), &analysis.raw_goal);
+    fn generate_plan(&self, analysis: &GoalAnalysis) -> Vec<ScoredPlan> {
+        let mut plan = LogicalPlan::new(&analysis.raw_goal);
 
         for sub in &analysis.sub_goals {
-            let ranked = self.planner_index.rank_capabilities(&sub.intent);
-            let tool_id = ranked
-                .first()
-                .map(|t| t.id.clone())
-                .unwrap_or_else(|| "file.read".into());
-
-            graph.add_node(TaskNode {
+            plan.add_node(LogicalNode {
                 id: sub.id.clone(),
-                title: sub.description.clone(),
-                description: format!("Execute intent '{}' using capability '{}'", sub.intent, tool_id),
-                capability_id: tool_id,
-                params: json!({"query": analysis.raw_goal, "input": analysis.raw_goal}),
-                inputs: HashMap::new(),
-                output_bindings: HashMap::new(),
+                description: sub.description.clone(),
+                intent: sub.intent.clone(),
                 dependencies: sub.preconditions.clone(),
-                status: TaskStatus::Created,
-                output: None,
             });
         }
 
-        graph
+        // For now, return a single scored plan. 
+        // A more advanced planner would generate multiple variants and score them.
+        vec![ScoredPlan {
+            score: 0.95,
+            confidence: 0.9,
+            plan,
+        }]
     }
 }

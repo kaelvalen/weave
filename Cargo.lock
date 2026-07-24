@@ -2528,6 +2528,13 @@ dependencies = [
 [[package]]
 name = "knowledge"
 version = "0.1.0"
+dependencies = [
+ "runtime-kernel",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "lazy_static"
@@ -3358,6 +3365,7 @@ name = "planning"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "knowledge",
  "memory",
  "parking_lot",
  "runtime-kernel",
@@ -3992,6 +4000,7 @@ name = "runtime-kernel"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "memory-stats",
  "parking_lot",
  "serde",
  "serde_json",
@@ -3999,6 +4008,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "wait-timeout",
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use runtime_kernel::event_bus::{EventBus, SystemEvent};
+use crate::event_bus::{EventBus, SystemEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditEventType {

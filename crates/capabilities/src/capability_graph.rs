@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::capability::Capability;
-use crate::artifact::Artifact;
+use runtime_kernel::artifact::Artifact;
 
 pub struct CapabilityGraph {
     // Capability -> requires -> Capability -> produces -> Artifact

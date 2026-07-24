@@ -1,5 +1,4 @@
 pub mod typed_contract;
-pub mod artifact;
 pub mod capability;
 pub mod execution_registry;
 pub mod permission_registry;

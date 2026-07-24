@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::errors::WeaveError;
+use crate::errors::KernelError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubsystemStatus {
@@ -14,9 +14,9 @@ pub enum SubsystemStatus {
 #[async_trait]
 pub trait KernelSubsystem: Send + Sync {
     fn name(&self) -> &'static str;
-    async fn init(&self) -> Result<(), WeaveError>;
-    async fn start(&self) -> Result<(), WeaveError>;
-    async fn shutdown(&self) -> Result<(), WeaveError>;
+    async fn init(&self) -> Result<(), KernelError>;
+    async fn start(&self) -> Result<(), KernelError>;
+    async fn shutdown(&self) -> Result<(), KernelError>;
     fn status(&self) -> SubsystemStatus;
 }
 
@@ -33,12 +33,12 @@ impl PlanningSubsystem {
 #[async_trait]
 impl KernelSubsystem for PlanningSubsystem {
     fn name(&self) -> &'static str { "PlanningSubsystem" }
-    async fn init(&self) -> Result<(), WeaveError> {
+    async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), WeaveError> { Ok(()) }
-    async fn shutdown(&self) -> Result<(), WeaveError> {
+    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
@@ -58,12 +58,12 @@ impl ExecutionSubsystem {
 #[async_trait]
 impl KernelSubsystem for ExecutionSubsystem {
     fn name(&self) -> &'static str { "ExecutionSubsystem" }
-    async fn init(&self) -> Result<(), WeaveError> {
+    async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), WeaveError> { Ok(()) }
-    async fn shutdown(&self) -> Result<(), WeaveError> {
+    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
@@ -83,12 +83,12 @@ impl MemorySubsystem {
 #[async_trait]
 impl KernelSubsystem for MemorySubsystem {
     fn name(&self) -> &'static str { "MemorySubsystem" }
-    async fn init(&self) -> Result<(), WeaveError> {
+    async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), WeaveError> { Ok(()) }
-    async fn shutdown(&self) -> Result<(), WeaveError> {
+    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
@@ -108,12 +108,12 @@ impl StorageSubsystem {
 #[async_trait]
 impl KernelSubsystem for StorageSubsystem {
     fn name(&self) -> &'static str { "StorageSubsystem" }
-    async fn init(&self) -> Result<(), WeaveError> {
+    async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), WeaveError> { Ok(()) }
-    async fn shutdown(&self) -> Result<(), WeaveError> {
+    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }

@@ -7,3 +7,7 @@ pub mod event_store;
 pub mod observability;
 pub mod subsystem;
 pub mod kernel;
+pub mod errors;
+pub mod event_bus;
+pub mod artifact;
+pub mod task_graph;

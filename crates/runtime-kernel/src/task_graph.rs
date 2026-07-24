@@ -3,8 +3,9 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{info, warn};
 
-use runtime_kernel::execution_context::ExecutionContext;
-use crate::utils::errors::WeaveError;
+use crate::execution_context::ExecutionContext;
+use crate::artifact::ExecutionArtifact;
+use crate::errors::KernelError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -41,11 +42,11 @@ pub struct TaskNode {
     pub description: String,
     pub capability_id: String,
     pub params: Value,
-    pub inputs: HashMap<String, Value>,
+    pub inputs: HashMap<String, ExecutionArtifact>,
     pub output_bindings: HashMap<String, String>, // Maps parent output key -> child input parameter name
     pub dependencies: Vec<String>,                 // Parent node IDs that must complete first
     pub status: TaskStatus,
-    pub output: Option<Value>,
+    pub output: Option<ExecutionArtifact>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +90,7 @@ impl TaskGraph {
 
     /// Resolves dataflow bindings from parent node outputs into child node inputs.
     pub fn resolve_dataflow_inputs(&mut self, node_id: &str) {
-        let parent_outputs: Vec<(String, HashMap<String, String>, Option<Value>)> = {
+        let parent_outputs: Vec<(String, HashMap<String, String>, Option<ExecutionArtifact>)> = {
             if let Some(node) = self.nodes.get(node_id) {
                 let bindings = node.output_bindings.clone();
                 node.dependencies
@@ -105,11 +106,13 @@ impl TaskGraph {
 
         if let Some(target_node) = self.nodes.get_mut(node_id) {
             for (_parent_id, bindings, parent_output) in parent_outputs {
-                if let Some(output_val) = parent_output {
-                    for (out_key, in_key) in bindings {
-                        if let Some(field_val) = output_val.get(&out_key).cloned().or(Some(output_val.clone())) {
-                            target_node.inputs.insert(in_key, field_val);
-                        }
+                if let Some(output_artifact) = parent_output {
+                    // We bind the entire artifact to the input key since it's strongly typed.
+                    // If output_bindings specifically asked for a key, we might need a way to extract it.
+                    // For now, in an artifact-centric design, the artifact *is* the value.
+                    // If out_key == "artifact" or something generic, we map it directly.
+                    for (_out_key, in_key) in bindings {
+                        target_node.inputs.insert(in_key, output_artifact.clone());
                     }
                 }
             }
@@ -211,7 +214,7 @@ impl TaskGraph {
         batches
     }
 
-    pub async fn saga_rollback(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), WeaveError> {
+    pub async fn saga_rollback(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), KernelError> {
         warn!("Executing SAGA transactional rollback for TaskGraph: {} starting at failed node: {}", self.id, failed_node);
 
         let sort_order = self.topological_sort().unwrap_or_default();
@@ -224,10 +227,10 @@ impl TaskGraph {
                     info!("SAGA compensation executed for node: {}", node_id);
                     node.status = TaskStatus::Compensating;
 
-                    if let Some(ref memory) = ctx.memory {
-                        let key = format!("saga_compensation:{}", node_id);
-                        let _ = memory.store(&key, "SAGA node compensation completed", "compensation").await;
-                    }
+                    ctx.event_bus.publish(crate::event_bus::SystemEvent::TaskStatusChanged {
+                        task_id: node_id.clone(),
+                        status: "Compensated".to_string(),
+                    });
 
                     node.status = TaskStatus::Compensated;
                 }
@@ -237,7 +240,7 @@ impl TaskGraph {
         Ok(())
     }
 
-    pub fn update_status(&mut self, node_id: &str, status: TaskStatus, output: Option<Value>) {
+    pub fn update_status(&mut self, node_id: &str, status: TaskStatus, output: Option<ExecutionArtifact>) {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.status = status;
             if let Some(out) = output {

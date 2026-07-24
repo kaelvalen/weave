@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 use wait_timeout::ChildExt;
-use crate::utils::errors::WeaveError;
+use crate::errors::KernelError;
 
 pub struct SandboxShell {
     pub cwd: PathBuf,
@@ -22,7 +22,7 @@ impl SandboxShell {
         }
     }
 
-    pub fn execute(&self, binary: &str, args: &[String]) -> Result<Value, WeaveError> {
+    pub fn execute(&self, binary: &str, args: &[String]) -> Result<Value, KernelError> {
         let start = Instant::now();
 
         // 1. Sanitize Environment
@@ -41,11 +41,11 @@ impl SandboxShell {
         cmd.stderr(Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| {
-            WeaveError::PluginError(format!("Sandbox spawn failed for '{}': {}", binary, e))
+            KernelError::PluginError(format!("Sandbox spawn failed for '{}': {}", binary, e))
         })?;
 
         let timeout = Duration::from_secs(self.timeout_secs);
-        match child.wait_timeout(timeout).map_err(|e| WeaveError::PluginError(format!("Timeout error: {}", e)))? {
+        match child.wait_timeout(timeout).map_err(|e| KernelError::PluginError(format!("Timeout error: {}", e)))? {
             Some(status) => {
                 let duration = start.elapsed().as_millis();
 
@@ -77,7 +77,7 @@ impl SandboxShell {
             }
             None => {
                 let _ = child.kill();
-                Err(WeaveError::PluginError(format!(
+                Err(KernelError::PluginError(format!(
                     "Sandboxed execution of '{}' timed out after {}s",
                     binary, self.timeout_secs
                 )))
@@ -89,14 +89,14 @@ impl SandboxShell {
 pub struct PermissionEnforcer;
 
 impl PermissionEnforcer {
-    pub fn enforce_process_allowlist(binary: &str, allowlist: &[String]) -> Result<(), WeaveError> {
+    pub fn enforce_process_allowlist(binary: &str, allowlist: &[String]) -> Result<(), KernelError> {
         if allowlist.is_empty() {
             return Ok(());
         }
         if allowlist.iter().any(|allowed| allowed == binary || binary.ends_with(allowed)) {
             Ok(())
         } else {
-            Err(WeaveError::PermissionDenied(format!(
+            Err(KernelError::PermissionDenied(format!(
                 "Process '{}' is not in execution allowlist", binary
             )))
         }

@@ -34,3 +34,43 @@ impl<T> Artifact<T> {
         self
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RepositoryData {
+    pub url: String,
+    pub branch: Option<String>,
+    pub commit_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SourceTreeData {
+    pub root_path: String,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SummaryData {
+    pub text: String,
+    pub insights: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ArtifactPayload {
+    Repository(RepositoryData),
+    SourceTree(SourceTreeData),
+    Summary(SummaryData),
+    Markdown(String),
+    Json(serde_json::Value),
+}
+
+impl ArtifactPayload {
+    pub fn as_json(&self) -> Option<&serde_json::Value> {
+        if let Self::Json(val) = self {
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+pub type ExecutionArtifact = Artifact<ArtifactPayload>;

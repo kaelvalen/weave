@@ -1,4 +1,3 @@
-pub mod task_graph;
 pub mod reflection_engine;
 pub mod mod;
 pub mod htn_planner;
@@ -8,3 +7,4 @@ pub mod logical_plan;
 pub mod execution_optimizer;
 pub mod plan_generator;
 pub mod reasoning;
+pub mod physical_planner;

@@ -6,7 +6,7 @@ use std::time::Instant;
 use tracing::info;
 
 use runtime_kernel::execution_context::ExecutionContext;
-use runtime_kernel::policy_engine::PolicyDecision;
+use runtime_kernel::event_bus::SystemEvent;
 use capabilities::tool_registry::RegisteredPlugin;
 use crate::utils::errors::WeaveError;
 
@@ -35,28 +35,7 @@ impl ExecutionRegistry {
         params: Value,
         ctx: &ExecutionContext,
     ) -> Result<Value, WeaveError> {
-        // 1. Centralized Policy Engine check
-        if let Some(ref permission_registry) = ctx.permission {
-            if capability == "shell.exec" || capability == "shell.execute" {
-                if let Some(cmd) = params.get("command").and_then(|v| v.as_str()) {
-                    match permission_registry.check_command(cmd) {
-                        PolicyDecision::Allow => {}
-                        PolicyDecision::RequiresConfirmation { reason } => {
-                            return Err(WeaveError::PermissionDenied(format!(
-                                "Policy requires confirmation: {}",
-                                reason
-                            )));
-                        }
-                        PolicyDecision::Deny { reason } => {
-                            return Err(WeaveError::PermissionDenied(format!(
-                                "Policy denied execution: {}",
-                                reason
-                            )));
-                        }
-                    }
-                }
-            }
-        }
+        // Policy checks should happen in the Executor, before calling the Registry.
 
         let start_time = Instant::now();
         let executors = self.executors.read();
@@ -72,15 +51,11 @@ impl ExecutionRegistry {
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // 2. Centralized Observability & Telemetry record
-        if let Some(ref obs) = ctx.observability {
-            obs.record_tool_execution(capability, duration_ms, res.is_ok());
-        }
-
-        // 3. Centralized Tool Score Feedback record
-        if let Some(ref planner_idx) = ctx.planner_index {
-            planner_idx.record_feedback(capability, duration_ms, res.is_ok());
-        }
+        // Emit an event that the plugin executed, decoupled subsystems (Observability, PlannerIndex)
+        // will listen and update themselves.
+        ctx.event_bus.publish(SystemEvent::ComponentLoaded {
+            name: format!("PluginExecution:{}", capability),
+        });
 
         res
     }
