@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +14,7 @@ pub struct MemoryItem {
     pub timestamp: u64,
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 pub trait MemoryProvider: Send + Sync {
     async fn store(&self, item: MemoryItem) -> Result<(), WeaveError>;
     async fn retrieve(&self, key: &str) -> Result<Option<MemoryItem>, WeaveError>;
@@ -34,7 +33,7 @@ impl InMemoryProvider {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl MemoryProvider for InMemoryProvider {
     async fn store(&self, item: MemoryItem) -> Result<(), WeaveError> {
         self.storage.write().insert(item.key.clone(), item);
@@ -58,13 +57,41 @@ impl MemoryProvider for InMemoryProvider {
     }
 }
 
+pub struct WorkingMemory {
+    buffer: RwLock<HashMap<String, String>>,
+}
+
+impl WorkingMemory {
+    pub fn new() -> Self {
+        Self { buffer: RwLock::new(HashMap::new()) }
+    }
+
+    pub fn set(&self, key: &str, val: &str) {
+        self.buffer.write().insert(key.to_string(), val.to_string());
+    }
+
+    pub fn get(&self, key: &str) -> Option<String> {
+        self.buffer.read().get(key).cloned()
+    }
+
+    pub fn clear(&self) {
+        self.buffer.write().clear();
+    }
+}
+
 pub struct MemoryEngine {
-    provider: Arc<dyn MemoryProvider>,
+    pub working_memory: Arc<WorkingMemory>,
+    pub session_memory: Arc<InMemoryProvider>,
+    pub persistent_knowledge: Arc<dyn MemoryProvider>,
 }
 
 impl MemoryEngine {
-    pub fn new(provider: Arc<dyn MemoryProvider>) -> Self {
-        Self { provider }
+    pub fn new(persistent_knowledge: Arc<dyn MemoryProvider>) -> Self {
+        Self {
+            working_memory: Arc::new(WorkingMemory::new()),
+            session_memory: Arc::new(InMemoryProvider::new()),
+            persistent_knowledge,
+        }
     }
 
     pub fn default_engine() -> Self {
@@ -82,10 +109,10 @@ impl MemoryEngine {
                 .unwrap_or_default()
                 .as_secs(),
         };
-        self.provider.store(item).await
+        self.persistent_knowledge.store(item).await
     }
 
     pub async fn search(&self, query: &str) -> Result<Vec<MemoryItem>, WeaveError> {
-        self.provider.search(query).await
+        self.persistent_knowledge.search(query).await
     }
 }

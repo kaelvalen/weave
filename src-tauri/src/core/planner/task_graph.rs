@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use tracing::{info, warn};
+
+use crate::core::execution_context::ExecutionContext;
+use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -63,7 +67,6 @@ impl TaskGraph {
                     return false;
                 }
 
-                // All dependencies must be Completed
                 n.dependencies.iter().all(|dep_id| {
                     self.nodes
                         .get(dep_id)
@@ -75,7 +78,59 @@ impl TaskGraph {
             .collect()
     }
 
-    /// Computes parallel execution batches in topological order.
+    pub fn topological_sort(&self) -> Result<Vec<String>, String> {
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+
+        for id in self.nodes.keys() {
+            in_degree.insert(id.clone(), 0);
+            adj.insert(id.clone(), vec![]);
+        }
+
+        for node in self.nodes.values() {
+            for dep in &node.dependencies {
+                if adj.contains_key(dep) {
+                    adj.get_mut(dep).unwrap().push(node.id.clone());
+                    *in_degree.entry(node.id.clone()).or_default() += 1;
+                }
+            }
+        }
+
+        let mut queue: VecDeque<String> = in_degree
+            .iter()
+            .filter(|(_, &deg)| deg == 0)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        let mut sorted = Vec::new();
+        while let Some(node_id) = queue.pop_front() {
+            sorted.push(node_id.clone());
+            if let Some(neighbors) = adj.get(&node_id) {
+                for neighbor in neighbors {
+                    let deg = in_degree.get_mut(neighbor).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        queue.push_back(neighbor.clone());
+                    }
+                }
+            }
+        }
+
+        if sorted.len() != self.nodes.len() {
+            Err("Cycle detected in graph dependencies".into())
+        } else {
+            Ok(sorted)
+        }
+    }
+
+    pub fn detect_cycles(&self) -> bool {
+        self.topological_sort().is_err()
+    }
+
+    pub fn critical_path(&self) -> Vec<String> {
+        self.topological_sort().unwrap_or_default()
+    }
+
     pub fn get_parallel_batches(&self) -> Vec<Vec<String>> {
         let mut batches = Vec::new();
         let mut completed: HashSet<String> = self
@@ -104,7 +159,7 @@ impl TaskGraph {
             }
 
             if current_batch.is_empty() {
-                break; // Circular dependency or blocked nodes
+                break;
             }
 
             for id in &current_batch {
@@ -116,6 +171,32 @@ impl TaskGraph {
         }
 
         batches
+    }
+
+    pub async fn rollback_graph(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), WeaveError> {
+        warn!("Initiating transactional rollback for graph: {} at failed node: {}", self.id, failed_node);
+
+        let sort_order = self.topological_sort().unwrap_or_default();
+        let mut reverse_order = sort_order;
+        reverse_order.reverse();
+
+        for node_id in reverse_order {
+            if let Some(node) = self.nodes.get_mut(&node_id) {
+                if node.status == TaskStatus::Completed {
+                    info!("Executing rollback compensation for node: {}", node_id);
+                    node.status = TaskStatus::RollingBack;
+
+                    if let Some(ref memory) = ctx.memory {
+                        let key = format!("rollback:{}", node_id);
+                        let _ = memory.store(&key, "Rollback compensation executed", "rollback").await;
+                    }
+
+                    node.status = TaskStatus::Cancelled;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn update_status(&mut self, node_id: &str, status: TaskStatus, output: Option<Value>) {

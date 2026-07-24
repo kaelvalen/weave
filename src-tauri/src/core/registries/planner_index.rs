@@ -10,22 +10,41 @@ pub struct ToolScore {
     pub failure_count: u64,
     pub failure_rate: f64,
     pub average_latency_ms: u64,
-    pub cost_rating: f64,
+    pub average_cost_usd: f64,
+    pub popularity: u32,
+    pub last_used_timestamp: u64,
 }
 
 pub struct PlannerIndex {
     tools_by_tag: Arc<RwLock<HashMap<String, Vec<ToolDefinition>>>>,
     all_tools: Arc<RwLock<HashMap<String, ToolDefinition>>>,
     tool_scores: Arc<RwLock<HashMap<String, ToolScore>>>,
+    composite_mappings: Arc<RwLock<HashMap<String, Vec<String>>>>,
 }
 
 impl PlannerIndex {
     pub fn new() -> Self {
-        Self {
+        let index = Self {
             tools_by_tag: Arc::new(RwLock::new(HashMap::new())),
             all_tools: Arc::new(RwLock::new(HashMap::new())),
             tool_scores: Arc::new(RwLock::new(HashMap::new())),
-        }
+            composite_mappings: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        index.register_default_composites();
+        index
+    }
+
+    fn register_default_composites(&self) {
+        let mut comp = self.composite_mappings.write();
+        comp.insert(
+            "ReadRepository".into(),
+            vec!["git.status".into(), "file.list".into(), "file.read".into()],
+        );
+        comp.insert(
+            "PerformFullAudit".into(),
+            vec!["sys.info".into(), "file.list".into(), "note.list".into()],
+        );
     }
 
     pub fn index_tool(&self, def: ToolDefinition) {
@@ -41,17 +60,27 @@ impl PlannerIndex {
         }
     }
 
+    pub fn get_composite_sub_capabilities(&self, composite_id: &str) -> Vec<String> {
+        let comp = self.composite_mappings.read();
+        comp.get(composite_id).cloned().unwrap_or_default()
+    }
+
     pub fn record_feedback(&self, tool_id: &str, duration_ms: u64, success: bool) {
         let mut scores = self.tool_scores.write();
         let score = scores.entry(tool_id.to_string()).or_default();
 
         score.usage_count += 1;
+        score.popularity += 1;
         if !success {
             score.failure_count += 1;
         }
 
         score.failure_rate = (score.failure_count as f64) / (score.usage_count as f64);
         score.average_latency_ms = (score.average_latency_ms * (score.usage_count - 1) + duration_ms) / score.usage_count;
+        score.last_used_timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
     }
 
     pub fn rank_capabilities(&self, intent: &str) -> Vec<ToolDefinition> {
@@ -80,7 +109,6 @@ impl PlannerIndex {
                 }
 
                 if let Some(s) = scores.get(&t.id) {
-                    // Penalty for high failure rate
                     score -= s.failure_rate * 5.0;
                 }
 

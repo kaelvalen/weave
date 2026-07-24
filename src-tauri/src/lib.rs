@@ -13,6 +13,7 @@ pub mod utils;
 
 use core::ai_bridge::AiBridge;
 use core::event_bus::EventBus;
+use core::event_sourcing::EventSourcingStore;
 use core::execution_context::ExecutionContext;
 use core::memory::memory_engine::MemoryEngine;
 use core::observability::Observability;
@@ -35,6 +36,7 @@ pub struct AppState {
     pub plugin_manager: Arc<PluginManager>,
     pub ai_bridge: Arc<AiBridge>,
     pub event_bus: Arc<EventBus>,
+    pub event_store: Arc<EventSourcingStore>,
     pub tool_registry: Arc<PluginRegistry>,
     pub capability_registry: Arc<CapabilityRegistry>,
     pub execution_registry: Arc<ExecutionRegistry>,
@@ -82,6 +84,7 @@ impl AppState {
         let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone(), canvas_tx.clone()));
         let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
         let event_bus = Arc::new(EventBus::new(1000));
+        let event_store = Arc::new(EventSourcingStore::new());
         let tool_registry = Arc::new(PluginRegistry::new());
 
         let policy_engine = Arc::new(PolicyEngine::default_engine());
@@ -106,6 +109,7 @@ impl AppState {
             plugin_manager,
             ai_bridge,
             event_bus,
+            event_store,
             tool_registry,
             capability_registry,
             execution_registry,
@@ -140,6 +144,7 @@ impl AppState {
             self.permission_registry.clone(),
             self.scheduler.clone(),
             self.planner_index.clone(),
+            self.event_store.clone(),
         )
     }
 }

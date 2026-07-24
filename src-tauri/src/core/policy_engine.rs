@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -10,11 +10,12 @@ pub enum PolicyDecision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityPolicy {
-    pub allowed_workspace_roots: Vec<PathBuf>,
+    pub allowed_workspace_roots: Vec<std::path::PathBuf>,
     pub read_only_mode: bool,
     pub command_allowlist: Vec<String>,
     pub command_blocklist: Vec<String>,
     pub allowed_network_domains: Vec<String>,
+    pub max_task_budget_usd: f64,
 }
 
 impl Default for SecurityPolicy {
@@ -45,6 +46,7 @@ impl Default for SecurityPolicy {
                 ":(){ :|:& };:".into(),
             ],
             allowed_network_domains: vec!["*".into()],
+            max_task_budget_usd: 5.0,
         }
     }
 }
@@ -69,7 +71,6 @@ impl PolicyEngine {
             };
         }
 
-        // Canonicalize path check if possible
         let path_str = target_path.to_string_lossy();
         if path_str.contains("/..") || path_str.contains("../") {
             return PolicyDecision::Deny {
@@ -110,6 +111,29 @@ impl PolicyEngine {
             PolicyDecision::Deny {
                 reason: format!("Domain '{}' is not permitted", domain),
             }
+        }
+    }
+
+    pub fn check_budget_limit(&self, estimated_cost: f64) -> PolicyDecision {
+        if estimated_cost > self.policy.max_task_budget_usd {
+            PolicyDecision::RequiresConfirmation {
+                reason: format!(
+                    "Estimated cost (${:.2}) exceeds task budget limit (${:.2})",
+                    estimated_cost, self.policy.max_task_budget_usd
+                ),
+            }
+        } else {
+            PolicyDecision::Allow
+        }
+    }
+
+    pub fn check_failure_streak(&self, tool_id: &str, failure_rate: f64) -> PolicyDecision {
+        if failure_rate >= 0.8 {
+            PolicyDecision::Deny {
+                reason: format!("Capability '{}' blocked due to excessive failure rate ({:.0}%)", tool_id, failure_rate * 100.0),
+            }
+        } else {
+            PolicyDecision::Allow
         }
     }
 }

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::config::AppConfig;
 use crate::core::event_bus::EventBus;
+use crate::core::event_sourcing::EventSourcingStore;
 use crate::core::memory::memory_engine::MemoryEngine;
-use core::option::Option;
 use crate::core::observability::Observability;
 use crate::core::registries::permission_registry::PermissionRegistry;
 use crate::core::registries::planner_index::PlannerIndex;
@@ -32,6 +32,7 @@ pub struct ExecutionContext {
     pub permission: Option<Arc<PermissionRegistry>>,
     pub scheduler: Option<Arc<Scheduler>>,
     pub planner_index: Option<Arc<PlannerIndex>>,
+    pub event_store: Option<Arc<EventSourcingStore>>,
     pub cancellation_token: CancellationToken,
     pub progress_tx: Option<tokio::sync::mpsc::Sender<ProgressMessage>>,
 }
@@ -53,6 +54,7 @@ impl ExecutionContext {
             permission: None,
             scheduler: None,
             planner_index: None,
+            event_store: None,
             cancellation_token: CancellationToken::new(),
             progress_tx: None,
         }
@@ -65,13 +67,43 @@ impl ExecutionContext {
         permission: Arc<PermissionRegistry>,
         scheduler: Arc<Scheduler>,
         planner_index: Arc<PlannerIndex>,
+        event_store: Arc<EventSourcingStore>,
     ) -> Self {
         self.memory = Some(memory);
         self.observability = Some(observability);
         self.permission = Some(permission);
         self.scheduler = Some(scheduler);
         self.planner_index = Some(planner_index);
+        self.event_store = Some(event_store);
         self
+    }
+
+    pub fn memory(&self) -> Option<&Arc<MemoryEngine>> {
+        self.memory.as_ref()
+    }
+
+    pub fn events(&self) -> &Arc<EventBus> {
+        &self.event_bus
+    }
+
+    pub fn policy(&self) -> Option<&Arc<PermissionRegistry>> {
+        self.permission.as_ref()
+    }
+
+    pub fn metrics(&self) -> Option<&Arc<Observability>> {
+        self.observability.as_ref()
+    }
+
+    pub fn scheduler(&self) -> Option<&Arc<Scheduler>> {
+        self.scheduler.as_ref()
+    }
+
+    pub fn planner_index(&self) -> Option<&Arc<PlannerIndex>> {
+        self.planner_index.as_ref()
+    }
+
+    pub fn event_store(&self) -> Option<&Arc<EventSourcingStore>> {
+        self.event_store.as_ref()
     }
 
     pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
