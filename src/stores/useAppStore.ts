@@ -19,6 +19,8 @@ interface AppState {
   isLeftSidebarOpen: boolean;
   isRightPanelOpen: boolean;
   activeArtifact: ActiveArtifact | null;
+  /** File path the Files view should open/reveal on next mount (one-shot). */
+  pendingFileReveal: string | null;
   isReady: boolean;
   appVersion: string;
   lastConfigUpdate: number;
@@ -32,6 +34,7 @@ interface AppState {
   openCapability: (tab: CapabilityTab) => void;
   openArtifact: (artifact: ActiveArtifact) => void;
   closeArtifact: () => void;
+  setPendingFileReveal: (path: string | null) => void;
   setReady: (ready: boolean) => void;
   setVersion: (v: string) => void;
   refreshConfig: () => void;
@@ -45,6 +48,7 @@ export const useAppStore = create<AppState>()(
     isLeftSidebarOpen: true,
     isRightPanelOpen: false,
     activeArtifact: null,
+    pendingFileReveal: null,
     isReady: false,
     appVersion: '0.2.0',
     lastConfigUpdate: 0,
@@ -101,6 +105,12 @@ export const useAppStore = create<AppState>()(
     closeArtifact: () => {
       set((state) => {
         state.activeArtifact = null;
+      });
+    },
+
+    setPendingFileReveal: (path: string | null) => {
+      set((state) => {
+        state.pendingFileReveal = path;
       });
     },
 

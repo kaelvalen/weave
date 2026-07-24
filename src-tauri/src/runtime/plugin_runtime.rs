@@ -1,8 +1,8 @@
+use crate::models::plugin::Plugin;
+use crate::plugin_manager::PluginManager;
+use crate::utils::errors::WeaveError;
 use std::path::PathBuf;
 use std::sync::Arc;
-use plugin_runtime::plugin_manager::PluginManager;
-use crate::models::plugin::Plugin;
-use crate::utils::errors::WeaveError;
 
 pub struct PluginRuntime {
     manager: Arc<PluginManager>,

@@ -8,6 +8,8 @@ import {
   MessageCircle,
   FileText,
   Brain,
+  Activity,
+  Boxes,
 } from 'lucide-react';
 
 export function CommandPalette() {
@@ -23,6 +25,30 @@ export function CommandPalette() {
         label: 'Go to Chat',
         icon: MessageCircle,
         onSelect: () => setActiveView('chat'),
+      },
+      {
+        id: 'execution',
+        label: 'Go to Execution',
+        icon: Activity,
+        onSelect: () => setActiveView('execution'),
+      },
+      {
+        id: 'artifacts',
+        label: 'Go to Artifacts',
+        icon: Package,
+        onSelect: () => setActiveView('artifacts'),
+      },
+      {
+        id: 'memory',
+        label: 'Go to Memory',
+        icon: Brain,
+        onSelect: () => setActiveView('memory'),
+      },
+      {
+        id: 'capabilities',
+        label: 'Go to Capabilities',
+        icon: Boxes,
+        onSelect: () => setActiveView('capabilities'),
       },
       {
         id: 'files',

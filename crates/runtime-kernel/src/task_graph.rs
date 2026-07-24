@@ -3,9 +3,9 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{info, warn};
 
-use crate::execution_context::ExecutionContext;
 use crate::artifact::ExecutionArtifact;
 use crate::errors::KernelError;
+use crate::execution_context::ExecutionContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -44,7 +44,7 @@ pub struct TaskNode {
     pub params: Value,
     pub inputs: HashMap<String, ExecutionArtifact>,
     pub output_bindings: HashMap<String, String>, // Maps parent output key -> child input parameter name
-    pub dependencies: Vec<String>,                 // Parent node IDs that must complete first
+    pub dependencies: Vec<String>,                // Parent node IDs that must complete first
     pub status: TaskStatus,
     pub output: Option<ExecutionArtifact>,
 }
@@ -96,7 +96,9 @@ impl TaskGraph {
                 node.dependencies
                     .iter()
                     .filter_map(|dep_id| {
-                        self.nodes.get(dep_id).map(|dep_node| (dep_id.clone(), bindings.clone(), dep_node.output.clone()))
+                        self.nodes.get(dep_id).map(|dep_node| {
+                            (dep_id.clone(), bindings.clone(), dep_node.output.clone())
+                        })
                     })
                     .collect()
             } else {
@@ -214,9 +216,17 @@ impl TaskGraph {
         batches
     }
 
-    pub async fn saga_rollback(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), KernelError> {
-        warn!("Executing SAGA transactional rollback for TaskGraph: {} starting at failed node: {}", self.id, failed_node);
+    pub async fn saga_rollback(
+        &mut self,
+        failed_node: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<(), KernelError> {
+        warn!(
+            "Executing SAGA transactional rollback for TaskGraph: {} starting at failed node: {}",
+            self.id, failed_node
+        );
 
+        let goal_id = self.id.clone();
         let sort_order = self.topological_sort().unwrap_or_default();
         let mut reverse_order = sort_order;
         reverse_order.reverse();
@@ -227,10 +237,20 @@ impl TaskGraph {
                     info!("SAGA compensation executed for node: {}", node_id);
                     node.status = TaskStatus::Compensating;
 
-                    ctx.event_bus.publish(crate::event_bus::SystemEvent::TaskStatusChanged {
-                        task_id: node_id.clone(),
-                        status: "Compensated".to_string(),
-                    });
+                    ctx.event_bus
+                        .publish(crate::event_bus::SystemEvent::TaskStatusChanged {
+                            task_id: node_id.clone(),
+                            status: "Compensated".to_string(),
+                        });
+
+                    let mut event = crate::runtime_event::RuntimeEvent::new(
+                        crate::runtime_event::RuntimeEventKind::TaskStatusChanged,
+                        node_id.clone(),
+                        format!("Task {} status changed: Compensated", node_id),
+                    );
+                    event.goal_id = Some(goal_id.clone());
+                    event.capability = Some(node.capability_id.clone());
+                    ctx.event_bus.publish_runtime(event);
 
                     node.status = TaskStatus::Compensated;
                 }
@@ -240,7 +260,12 @@ impl TaskGraph {
         Ok(())
     }
 
-    pub fn update_status(&mut self, node_id: &str, status: TaskStatus, output: Option<ExecutionArtifact>) {
+    pub fn update_status(
+        &mut self,
+        node_id: &str,
+        status: TaskStatus,
+        output: Option<ExecutionArtifact>,
+    ) {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.status = status;
             if let Some(out) = output {
@@ -250,10 +275,14 @@ impl TaskGraph {
     }
 
     pub fn is_completed(&self) -> bool {
-        self.nodes.values().all(|n| n.status == TaskStatus::Completed)
+        self.nodes
+            .values()
+            .all(|n| n.status == TaskStatus::Completed)
     }
 
     pub fn is_failed(&self) -> bool {
-        self.nodes.values().any(|n| matches!(n.status, TaskStatus::Failed { .. }))
+        self.nodes
+            .values()
+            .any(|n| matches!(n.status, TaskStatus::Failed { .. }))
     }
 }

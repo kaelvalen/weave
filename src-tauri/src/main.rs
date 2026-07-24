@@ -22,7 +22,13 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            use tauri::Manager;
             let app_handle = app.handle().clone();
+
+            // Bridge structured runtime events to the frontend.
+            app.state::<weave::AppState>()
+                .spawn_runtime_event_bridge(app_handle.clone());
+
             tauri::async_runtime::spawn(async move {
                 use tauri::Emitter;
                 while let Ok(msg) = canvas_rx.recv().await {
@@ -63,6 +69,7 @@ fn main() {
             weave::commands::system::system_get_version,
             weave::commands::system::system_open_plugin_dir,
             weave::commands::system::system_set_cwd,
+            weave::commands::runtime::runtime_get_observability,
             weave::commands::models::list_local_models,
             weave::commands::models::delete_local_model,
             weave::commands::models::download_local_model,

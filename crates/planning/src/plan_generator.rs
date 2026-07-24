@@ -2,8 +2,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use planning::goal_analyzer::GoalAnalysis;
-use planning::logical_plan::{LogicalPlan, LogicalNode, ScoredPlan};
+use crate::goal_analyzer::GoalAnalysis;
+use crate::logical_plan::{LogicalNode, LogicalPlan, ScoredPlan};
 use knowledge::planner_index::PlannerIndex;
 
 pub trait PlanGeneratorTrait: Send + Sync {
@@ -33,7 +33,7 @@ impl PlanGeneratorTrait for SemanticVectorPlanGenerator {
             });
         }
 
-        // For now, return a single scored plan. 
+        // For now, return a single scored plan.
         // A more advanced planner would generate multiple variants and score them.
         vec![ScoredPlan {
             score: 0.95,

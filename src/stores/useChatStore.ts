@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
 import { useAppStore } from './useAppStore';
 import { extractError } from '@/lib/errors';
+import { isDestructiveCapability } from '@/lib/capabilities';
 import { useApprovalModeStore } from './useApprovalModeStore';
 
 interface ChatState {
@@ -127,7 +128,11 @@ function inferCapabilityFromJson(json: string): string | null {
 }
 
 /** Parse the parameter payload for a tool call, tolerating fenced code blocks and unclosed tags. */
-function parseToolParams(paramsStr: string, capName: string, isStreaming = false): Record<string, unknown> | null {
+function parseToolParams(
+  paramsStr: string,
+  capName: string,
+  isStreaming = false
+): Record<string, unknown> | null {
   try {
     let clean = (paramsStr || '{}').trim();
     if (clean.startsWith('```json')) {
@@ -187,7 +192,10 @@ function parseToolParams(paramsStr: string, capName: string, isStreaming = false
  *  Supports `<call plugin="...">...</call>` (with or without a closing tag)
  *  and raw JSON fallback for models that don't use XML tags.
  *  Malformed calls are returned as failures so callers can log them. */
-function parseToolCalls(content: string, isStreaming = false): {
+function parseToolCalls(
+  content: string,
+  isStreaming = false
+): {
   calls: ParsedToolCall[];
   failures: ToolParseFailure[];
 } {
@@ -392,7 +400,11 @@ export const useChatStore = create<ChatState>()(
                 .getState()
                 .executeCapability(call.plugin_id, 'coder.revert_file', { path: call.params.path })
                 .then(() => {
-                  window.dispatchEvent(new CustomEvent('weave:file-modified', { detail: { path: call.params.path, capability: 'coder.revert_file' } }));
+                  window.dispatchEvent(
+                    new CustomEvent('weave:file-modified', {
+                      detail: { path: call.params.path, capability: 'coder.revert_file' },
+                    })
+                  );
                   window.dispatchEvent(new Event('weave-fs-refresh'));
                 })
                 .catch((err) => toast.error(extractError(err)));
@@ -685,17 +697,7 @@ export const useChatStore = create<ChatState>()(
       // Non-destructive tools (read, list, calc, search, etc.) execute autonomously.
       // In `accept-edits` mode the user has pre-approved all destructive calls for the session,
       // so we skip the per-call prompt (behaves like other coders' "Accept Edits").
-      const DESTRUCTIVE_CAPS = new Set([
-        'file.write',
-        'file.delete',
-        'coder.write_file',
-        'coder.apply_diff',
-        'coder.revert_file',
-        'shell.exec',
-        'shell.run',
-        'note.delete',
-      ]);
-      const hasDestructive = validCalls.some((c) => DESTRUCTIVE_CAPS.has(c.capName));
+      const hasDestructive = validCalls.some((c) => isDestructiveCapability(c.capName));
       const approvalMode = useApprovalModeStore.getState().mode;
       const requiresApproval = hasDestructive && approvalMode === 'ask';
 
@@ -730,7 +732,7 @@ export const useChatStore = create<ChatState>()(
           try {
             const res = await usePluginStore
               .getState()
-              .executeCapability(call.pluginId, call.capName, call.params);
+              .executeCapability(call.pluginId, call.capName, call.params, messageId);
             const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
             set((state) => {
               const assistantMsg = state.messages.find((m) => m.id === messageId);
@@ -746,9 +748,13 @@ export const useChatStore = create<ChatState>()(
               }
             });
             if (
-              ['coder.write_file', 'coder.apply_diff', 'coder.apply_patch', 'coder.revert_file', 'file.write'].includes(
-                call.capName
-              ) &&
+              [
+                'coder.write_file',
+                'coder.apply_diff',
+                'coder.apply_patch',
+                'coder.revert_file',
+                'file.write',
+              ].includes(call.capName) &&
               call.params &&
               typeof call.params.path === 'string'
             ) {
@@ -885,7 +891,7 @@ export const useChatStore = create<ChatState>()(
 
       usePluginStore
         .getState()
-        .executeCapability(call.plugin_id, capName, call.params)
+        .executeCapability(call.plugin_id, capName, call.params, messageId)
         .then((res) => {
           const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
 
@@ -902,9 +908,13 @@ export const useChatStore = create<ChatState>()(
           });
           saveSession();
           if (
-            ['coder.write_file', 'coder.apply_diff', 'coder.apply_patch', 'coder.revert_file', 'file.write'].includes(
-              capName
-            ) &&
+            [
+              'coder.write_file',
+              'coder.apply_diff',
+              'coder.apply_patch',
+              'coder.revert_file',
+              'file.write',
+            ].includes(capName) &&
             call.params &&
             typeof call.params.path === 'string'
           ) {

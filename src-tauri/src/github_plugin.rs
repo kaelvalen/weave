@@ -4,8 +4,8 @@ use std::process::Command;
 use std::time::Duration;
 use tracing::{info, warn};
 
-use plugin_runtime::plugin_manager::PluginManager;
 use crate::models::plugin::Plugin;
+use crate::plugin_manager::PluginManager;
 use crate::utils::errors::WeaveError;
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
@@ -126,7 +126,13 @@ impl GithubPluginClient {
         ensure_git_available()?;
 
         let output = Command::new("git")
-            .args(["clone", "--depth", "1", repo_url, dest.to_string_lossy().as_ref()])
+            .args([
+                "clone",
+                "--depth",
+                "1",
+                repo_url,
+                dest.to_string_lossy().as_ref(),
+            ])
             .output()?;
 
         if !output.status.success() {
@@ -173,7 +179,8 @@ impl GithubPluginClient {
         let plugin_dir = crate::utils::config::AppConfig::plugin_dir()?;
         let dest = plugin_dir.join(&asset.name);
 
-        self.download_file(&asset.browser_download_url, &dest).await?;
+        self.download_file(&asset.browser_download_url, &dest)
+            .await?;
         info!(
             "Downloaded release asset from {} to {:?}",
             asset.browser_download_url, dest

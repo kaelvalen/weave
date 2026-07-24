@@ -176,7 +176,7 @@ export function FileManager() {
   const [editorDirty, setEditorDirty] = useState(false);
   const [pendingSelect, setPendingSelect] = useState<FSNode | null>(null);
   const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false);
-  
+
   // IDE Architecture State
   const [sidebarTab, setSidebarTab] = useState<'explorer' | 'git' | 'search'>('explorer');
   const [openedTabs, setOpenedTabs] = useState<FSNode[]>([]);
@@ -274,6 +274,23 @@ export function FileManager() {
     window.addEventListener('weave:file-modified', handleFileModified);
     return () => window.removeEventListener('weave:file-modified', handleFileModified);
   }, []);
+
+  // Consume one-shot reveal requests (e.g. "Open in Files" from Artifacts).
+  // Selects the file and opens an editor tab; deep tree expansion is skipped
+  // because directories load lazily — same trade-off as the handler above.
+  const pendingFileReveal = useAppStore((s) => s.pendingFileReveal);
+  const setPendingFileReveal = useAppStore((s) => s.setPendingFileReveal);
+  useEffect(() => {
+    if (!pendingFileReveal) return;
+    setPendingFileReveal(null);
+    const fileName = pendingFileReveal.split(/[/\\]/).pop() || pendingFileReveal;
+    const node: FSNode = { name: fileName, path: pendingFileReveal, type: 'file' };
+    setSelectedFile(node);
+    setOpenedTabs((prev) => {
+      if (prev.some((t) => t.path === node.path)) return prev;
+      return [...prev, node];
+    });
+  }, [pendingFileReveal, setPendingFileReveal]);
 
   const handleManualRefresh = async () => {
     setIsLoading(true);
@@ -387,14 +404,19 @@ export function FileManager() {
     setAiLoading(true);
     try {
       let prompt = '';
-      if (actionType === 'explain') prompt = `Explain the architecture, purpose, and key logic of the file at path "${selectedFile.path}" concisely in bullet points.`;
-      else if (actionType === 'bugs') prompt = `Analyze the code in "${selectedFile.path}" for potential bugs, security vulnerabilities, edge cases, or performance bottlenecks.`;
-      else if (actionType === 'refactor') prompt = `Suggest clean refactorings, TypeScript/Rust best practices, or generate boilerplate unit tests for "${selectedFile.path}".`;
+      if (actionType === 'explain')
+        prompt = `Explain the architecture, purpose, and key logic of the file at path "${selectedFile.path}" concisely in bullet points.`;
+      else if (actionType === 'bugs')
+        prompt = `Analyze the code in "${selectedFile.path}" for potential bugs, security vulnerabilities, edge cases, or performance bottlenecks.`;
+      else if (actionType === 'refactor')
+        prompt = `Suggest clean refactorings, TypeScript/Rust best practices, or generate boilerplate unit tests for "${selectedFile.path}".`;
 
       if (!isChatExpanded) toggleChat(true);
       await useChatStore.getState().sendMessage(prompt);
       if (actionType === 'bugs') {
-        setAiDiagnostics('Bug & security analysis sent to Weave Agent. Check the right sidebar for detailed findings.');
+        setAiDiagnostics(
+          'Bug & security analysis sent to Weave Agent. Check the right sidebar for detailed findings.'
+        );
         setBottomDrawerOpen(true);
         setBottomTab('diagnostics');
       }
@@ -459,7 +481,9 @@ export function FileManager() {
                   className="text-xs font-bold tracking-wide truncate uppercase text-foreground"
                   title={currentRoot === '.' ? 'Local Files' : currentRoot}
                 >
-                  {currentRoot === '.' ? 'Workspace Tree' : currentRoot.split('/').pop() || currentRoot}
+                  {currentRoot === '.'
+                    ? 'Workspace Tree'
+                    : currentRoot.split('/').pop() || currentRoot}
                 </h3>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -503,7 +527,9 @@ export function FileManager() {
                 </div>
               ) : filteredRootNodes.length === 0 ? (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {searchQuery.trim() ? 'No files match your search.' : 'No files in this directory.'}
+                  {searchQuery.trim()
+                    ? 'No files match your search.'
+                    : 'No files in this directory.'}
                 </div>
               ) : (
                 filteredRootNodes.map((item) => (
@@ -554,7 +580,10 @@ export function FileManager() {
                     })}
                     <span className="truncate max-w-[140px]">{tab.name}</span>
                     {isSelected && editorDirty && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Unsaved changes" />
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
+                        title="Unsaved changes"
+                      />
                     )}
                     <button
                       type="button"
@@ -581,7 +610,9 @@ export function FileManager() {
                     })
                   )}
                   <span className="text-xs font-bold text-foreground">{selectedFile.name}</span>
-                  {editorDirty && <span className="text-[10px] text-amber-500 font-mono font-bold">(Dirty)</span>}
+                  {editorDirty && (
+                    <span className="text-[10px] text-amber-500 font-mono font-bold">(Dirty)</span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -623,7 +654,8 @@ export function FileManager() {
               </div>
               <h3 className="text-base font-bold text-foreground mb-1">No File Selected</h3>
               <p className="text-xs text-muted-foreground max-w-sm text-center">
-                Select a file from the workspace tree on the left to inspect, edit, or analyze with AI.
+                Select a file from the workspace tree on the left to inspect, edit, or analyze with
+                AI.
               </p>
             </div>
           )}
@@ -642,8 +674,14 @@ export function FileManager() {
           ) : (
             <div className="h-7 border-t border-border/60 bg-card/80 px-3 flex items-center justify-between text-[11px] font-mono text-muted-foreground shrink-0 select-none">
               <div className="flex items-center gap-3">
-                <span className="truncate max-w-xs" title={currentRoot}>Root: {currentRoot}</span>
-                {editorDirty && <span className="text-amber-500 font-bold flex items-center gap-1">• Unsaved Changes</span>}
+                <span className="truncate max-w-xs" title={currentRoot}>
+                  Root: {currentRoot}
+                </span>
+                {editorDirty && (
+                  <span className="text-amber-500 font-bold flex items-center gap-1">
+                    • Unsaved Changes
+                  </span>
+                )}
               </div>
               <button
                 type="button"

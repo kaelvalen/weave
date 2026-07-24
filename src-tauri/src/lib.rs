@@ -4,32 +4,23 @@ use std::sync::atomic::AtomicBool;
 use tokio::process::Child;
 use tracing::info;
 
+pub mod ai_bridge;
 pub mod commands;
-pub mod core;
+pub mod github_plugin;
 pub mod models;
+pub mod plugin_loader;
+pub mod plugin_manager;
 pub mod plugins;
 pub mod runtime;
 pub mod utils;
 
-use core::ai_bridge::AiBridge;
-use core::event_bus::EventBus;
-use core::event_sourcing::EventSourcingStore;
-use core::execution_context::ExecutionContext;
-use core::kernel::RuntimeKernel;
-use core::memory::memory_engine::MemoryEngine;
-use core::observability::Observability;
-use core::planner::planner_engine::PlannerEngine;
-use core::plugin_manager::PluginManager;
-use core::policy_engine::{PolicyEngine, SecurityPolicy};
-use core::registries::capability_registry::CapabilityRegistry;
-use core::registries::execution_registry::ExecutionRegistry;
-use core::registries::permission_registry::PermissionRegistry;
-use core::registries::planner_index::PlannerIndex;
-use core::resource_manager::ResourceManager;
-use core::scheduler::Scheduler;
-use core::tool_registry::PluginRegistry;
-use core::workflow::workflow_engine::WorkflowEngine;
+use ai_bridge::AiBridge;
 use models::chat::ChatMessage;
+use plugin_manager::PluginManager;
+use runtime_kernel::event_bus::EventBus;
+use runtime_kernel::event_store::EventSourcingStore;
+use runtime_kernel::execution_context::ExecutionContext;
+use runtime_kernel::observability::Observability;
 use utils::config::AppConfig;
 use utils::errors::WeaveError;
 
@@ -38,19 +29,7 @@ pub struct AppState {
     pub ai_bridge: Arc<AiBridge>,
     pub event_bus: Arc<EventBus>,
     pub event_store: Arc<EventSourcingStore>,
-    pub tool_registry: Arc<PluginRegistry>,
-    pub capability_registry: Arc<CapabilityRegistry>,
-    pub execution_registry: Arc<ExecutionRegistry>,
-    pub permission_registry: Arc<PermissionRegistry>,
-    pub planner_index: Arc<PlannerIndex>,
-    pub policy_engine: Arc<PolicyEngine>,
-    pub planner_engine: Arc<PlannerEngine>,
-    pub workflow_engine: Arc<WorkflowEngine>,
-    pub memory_engine: Arc<MemoryEngine>,
     pub observability: Arc<Observability>,
-    pub resource_manager: Arc<ResourceManager>,
-    pub scheduler: Arc<Scheduler>,
-    pub runtime_kernel: Arc<RuntimeKernel>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
@@ -87,34 +66,7 @@ impl AppState {
         let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
         let event_bus = Arc::new(EventBus::new(1000));
         let event_store = Arc::new(EventSourcingStore::new());
-        let tool_registry = Arc::new(PluginRegistry::new());
-
-        let policy_engine = Arc::new(PolicyEngine::default_engine());
-        let capability_registry = Arc::new(CapabilityRegistry::new());
-        let execution_registry = Arc::new(ExecutionRegistry::new());
-        let permission_registry = Arc::new(PermissionRegistry::new(SecurityPolicy::default()));
-        let planner_index = Arc::new(PlannerIndex::new());
-
-        let planner_engine = Arc::new(PlannerEngine::new(planner_index.clone()));
-        let workflow_engine = Arc::new(WorkflowEngine::new(execution_registry.clone()));
-        let memory_engine = Arc::new(MemoryEngine::default_engine());
-
         let observability = Arc::new(Observability::new());
-        let resource_manager = Arc::new(ResourceManager::default_manager());
-        let scheduler = Arc::new(Scheduler::new(event_bus.clone()));
-
-        let runtime_kernel = Arc::new(RuntimeKernel::new(
-            planner_engine.clone(),
-            execution_registry.clone(),
-            capability_registry.clone(),
-            permission_registry.clone(),
-            planner_index.clone(),
-            memory_engine.clone(),
-            event_store.clone(),
-            observability.clone(),
-            resource_manager.clone(),
-            scheduler.clone(),
-        ));
 
         let _ = plugin_manager.discover();
 
@@ -125,19 +77,7 @@ impl AppState {
             ai_bridge,
             event_bus,
             event_store,
-            tool_registry,
-            capability_registry,
-            execution_registry,
-            permission_registry,
-            planner_index,
-            policy_engine,
-            planner_engine,
-            workflow_engine,
-            memory_engine,
             observability,
-            resource_manager,
-            scheduler,
-            runtime_kernel,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),
@@ -148,19 +88,41 @@ impl AppState {
 
     pub fn create_execution_context(&self, session_id: &str) -> ExecutionContext {
         let workspace = std::env::current_dir().unwrap_or_default();
+        let config_json = Arc::new(RwLock::new(
+            serde_json::to_value(&*self.config.read()).unwrap_or_default(),
+        ));
 
         ExecutionContext::new(
             session_id.to_string(),
             workspace,
-            self.config.clone(),
+            config_json,
             self.event_bus.clone(),
-        ).with_subsystems(
-            self.memory_engine.clone(),
-            self.observability.clone(),
-            self.permission_registry.clone(),
-            self.scheduler.clone(),
-            self.planner_index.clone(),
-            self.event_store.clone(),
         )
+        .with_subsystems(self.observability.clone(), self.event_store.clone())
+    }
+
+    /// Bridge structured runtime events from the kernel event bus to the
+    /// frontend as Tauri `runtime-event` emissions. Spawns a background task;
+    /// call once during app setup.
+    pub fn spawn_runtime_event_bridge(&self, app_handle: tauri::AppHandle) {
+        use tauri::Emitter;
+
+        let mut rx = self.event_bus.subscribe_runtime();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(event) => {
+                        if let Err(e) = app_handle.emit("runtime-event", &event) {
+                            tracing::warn!("Failed to emit runtime-event to frontend: {}", e);
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        tracing::warn!("Runtime event bridge lagged, skipped {} events", skipped);
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
     }
 }

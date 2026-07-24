@@ -1,13 +1,13 @@
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, Emitter, State};
+use std::sync::Mutex;
+use sysinfo::System;
+use tauri::State as TauriState;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use futures::StreamExt;
-use sysinfo::System;
-use std::sync::Mutex;
-use tauri::State as TauriState;
 
 use crate::AppState;
 use crate::utils::errors::WeaveError;
@@ -20,6 +20,7 @@ pub struct LocalModelInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SystemStats {
+    pub cpu_usage: f32,
     pub ram_usage: u64,
     pub ram_total: u64,
 }
@@ -30,7 +31,10 @@ pub struct SysinfoState {
 }
 
 fn get_models_dir(app: &AppHandle) -> PathBuf {
-    let mut path = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("~/.weave"));
+    let mut path = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("~/.weave"));
     path.push("models");
     path
 }
@@ -52,7 +56,11 @@ pub async fn list_local_models(app: AppHandle) -> Result<Vec<LocalModelInfo>, St
             if let Some(ext) = path.extension() {
                 if ext == "gguf" {
                     if let Ok(metadata) = entry.metadata().await {
-                        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        let name = path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
                         models.push(LocalModelInfo {
                             name,
                             size_bytes: metadata.len(),
@@ -86,10 +94,16 @@ struct DownloadProgress {
 }
 
 #[tauri::command]
-pub async fn download_local_model(app: AppHandle, url: String, filename: String) -> Result<(), String> {
+pub async fn download_local_model(
+    app: AppHandle,
+    url: String,
+    filename: String,
+) -> Result<(), String> {
     let models_dir = get_models_dir(&app);
     if !models_dir.exists() {
-        fs::create_dir_all(&models_dir).await.map_err(|e| e.to_string())?;
+        fs::create_dir_all(&models_dir)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     let mut file_path = models_dir.clone();
@@ -97,18 +111,22 @@ pub async fn download_local_model(app: AppHandle, url: String, filename: String)
 
     let app_clone = app.clone();
     let filename_clone = filename.clone();
-    
+
     // Spawn a background task so the command returns immediately and doesn't block the UI
     tokio::spawn(async move {
-        let emit_progress = |downloaded: u64, total: Option<u64>, done: bool, error: Option<String>| {
-            let _ = app_clone.emit("download-progress", DownloadProgress {
-                filename: filename_clone.clone(),
-                downloaded,
-                total,
-                done,
-                error,
-            });
-        };
+        let emit_progress =
+            |downloaded: u64, total: Option<u64>, done: bool, error: Option<String>| {
+                let _ = app_clone.emit(
+                    "download-progress",
+                    DownloadProgress {
+                        filename: filename_clone.clone(),
+                        downloaded,
+                        total,
+                        done,
+                        error,
+                    },
+                );
+            };
 
         let response = match reqwest::get(&url).await {
             Ok(r) => r,
@@ -146,7 +164,7 @@ pub async fn download_local_model(app: AppHandle, url: String, filename: String)
                         return;
                     }
                     downloaded += chunk.len() as u64;
-                    
+
                     // Throttle emits to avoid UI freeze
                     if last_emit.elapsed().as_millis() > 200 {
                         emit_progress(downloaded, total_size, false, None);
@@ -170,10 +188,18 @@ pub async fn download_local_model(app: AppHandle, url: String, filename: String)
 
 #[tauri::command]
 pub fn get_system_stats(state: State<'_, SysinfoState>) -> Result<SystemStats, String> {
-    let mut sys = state.sys.lock().map_err(|e| format!("System info lock poisoned: {}", e))?;
+    let mut sys = state
+        .sys
+        .lock()
+        .map_err(|e| format!("System info lock poisoned: {}", e))?;
     sys.refresh_memory();
-    
+    // CPU usage is computed against the previous refresh; with the frontend
+    // polling periodically the first call may read 0% and later calls report
+    // the average load over the interval between polls.
+    sys.refresh_cpu_usage();
+
     Ok(SystemStats {
+        cpu_usage: sys.global_cpu_info().cpu_usage(),
         ram_usage: sys.used_memory(),
         ram_total: sys.total_memory(),
     })
@@ -235,7 +261,9 @@ async fn ollama_set_keep_alive(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| WeaveError::LocalLlmNotAvailable(format!("Failed contacting Ollama: {}", e)))?;
+        .map_err(|e| {
+            WeaveError::LocalLlmNotAvailable(format!("Failed contacting Ollama: {}", e))
+        })?;
 
     if response.status().is_success() {
         return Ok(());
@@ -263,11 +291,10 @@ pub async fn local_model_switch(
     next_model: Option<String>,
     app_state: TauriState<'_, AppState>,
 ) -> Result<LocalModelSwitchStatus, WeaveError> {
-    let previous_model = previous_model
-        .and_then(|m| {
-            let t = m.trim().to_string();
-            if t.is_empty() { None } else { Some(t) }
-        });
+    let previous_model = previous_model.and_then(|m| {
+        let t = m.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
     let next_model = next_model.and_then(|m| {
         let t = m.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
@@ -491,5 +518,10 @@ async fn probe_url(url: &str) -> bool {
     } else {
         format!("{}/api/tags", url)
     };
-    client.get(&probe_url).send().await.map(|r| r.status().is_success()).unwrap_or(false)
+    client
+        .get(&probe_url)
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
 }

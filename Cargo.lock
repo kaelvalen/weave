@@ -1282,6 +1282,7 @@ name = "execution-runtime"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "capabilities",
  "parking_lot",
  "runtime-kernel",
  "serde",
@@ -1289,6 +1290,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 
@@ -2529,6 +2531,9 @@ dependencies = [
 name = "knowledge"
 version = "0.1.0"
 dependencies = [
+ "capabilities",
+ "memory",
+ "parking_lot",
  "runtime-kernel",
  "serde",
  "serde_json",
@@ -4000,6 +4005,7 @@ name = "runtime-kernel"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "memory-stats",
  "parking_lot",
  "serde",
@@ -4007,6 +4013,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
  "wait-timeout",
 ]
@@ -7150,6 +7157,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 

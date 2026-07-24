@@ -1,4 +1,4 @@
-use planning::task_graph::TaskGraph;
+use runtime_kernel::task_graph::TaskGraph;
 
 pub struct TopologicalOptimizer;
 

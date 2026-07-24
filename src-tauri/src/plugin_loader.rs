@@ -19,7 +19,9 @@ impl DynamicPluginLoader {
 
     pub fn validate_manifest(&self, manifest: &Manifest) -> Result<(), WeaveError> {
         if manifest.plugin.id.is_empty() || manifest.plugin.name.is_empty() {
-            return Err(WeaveError::InvalidManifest("Manifest contains empty plugin ID or name".into()));
+            return Err(WeaveError::InvalidManifest(
+                "Manifest contains empty plugin ID or name".into(),
+            ));
         }
         Ok(())
     }
@@ -29,7 +31,10 @@ impl DynamicPluginLoader {
     }
 
     pub fn discover_dir(&self, plugin_dir: &PathBuf) -> Result<Vec<Plugin>, WeaveError> {
-        info!("DynamicPluginLoader running pipeline on directory: {:?}", plugin_dir);
+        info!(
+            "DynamicPluginLoader running pipeline on directory: {:?}",
+            plugin_dir
+        );
         let mut discovered = Vec::new();
 
         if !plugin_dir.exists() {
@@ -45,7 +50,10 @@ impl DynamicPluginLoader {
                     if self.validate_manifest(&manifest).is_ok() {
                         let plugin = manifest.to_plugin(Some(path.clone()), false);
                         if self.health_check(&plugin) {
-                            info!("Validated & published plugin: {} ({})", plugin.name, plugin.id);
+                            info!(
+                                "Validated & published plugin: {} ({})",
+                                plugin.name, plugin.id
+                            );
                             discovered.push(plugin);
                         }
                     }

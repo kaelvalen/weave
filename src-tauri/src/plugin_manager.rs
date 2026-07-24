@@ -7,17 +7,17 @@ use tracing::{info, warn};
 use crate::models::manifest::Manifest;
 use crate::models::plugin::*;
 use crate::plugins::calc_plugin::CalcPlugin;
+use crate::plugins::canvas_plugin::CanvasPlugin;
+use crate::plugins::coder_plugin::CoderPlugin;
 use crate::plugins::file_plugin::FilePlugin;
-use crate::plugins::note_plugin::NotePlugin;
-use crate::plugins::sys_plugin::SysPlugin;
-use crate::plugins::shell_plugin::ShellPlugin;
-use crate::plugins::web_plugin::WebPlugin;
-use crate::plugins::sqlite_plugin::SqlitePlugin;
 use crate::plugins::git_plugin::GitPlugin;
 use crate::plugins::http_plugin::HttpPlugin;
 use crate::plugins::memory_plugin::MemoryPlugin;
-use crate::plugins::coder_plugin::CoderPlugin;
-use crate::plugins::canvas_plugin::CanvasPlugin;
+use crate::plugins::note_plugin::NotePlugin;
+use crate::plugins::shell_plugin::ShellPlugin;
+use crate::plugins::sqlite_plugin::SqlitePlugin;
+use crate::plugins::sys_plugin::SysPlugin;
+use crate::plugins::web_plugin::WebPlugin;
 use crate::plugins::workflow_plugin::WorkflowPlugin;
 use crate::utils::errors::WeaveError;
 
@@ -29,7 +29,10 @@ pub struct PluginManager {
 }
 
 impl PluginManager {
-    pub fn new(plugin_dir: PathBuf, canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>) -> Self {
+    pub fn new(
+        plugin_dir: PathBuf,
+        canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
+    ) -> Self {
         let builtin = Self::create_builtin_plugins();
         let mut plugins = HashMap::new();
         let mut executors: HashMap<String, Box<dyn PluginExecutor>> = HashMap::new();
@@ -55,8 +58,14 @@ impl PluginManager {
         executors.insert("com.weave.builtin.http".into(), Box::new(HttpPlugin));
         executors.insert("com.weave.builtin.memory".into(), Box::new(MemoryPlugin));
         executors.insert("com.weave.builtin.coder".into(), Box::new(CoderPlugin));
-        executors.insert("com.weave.builtin.canvas".into(), Box::new(CanvasPlugin { canvas_tx }));
-        executors.insert("com.weave.builtin.workflow".into(), Box::new(WorkflowPlugin));
+        executors.insert(
+            "com.weave.builtin.canvas".into(),
+            Box::new(CanvasPlugin { canvas_tx }),
+        );
+        executors.insert(
+            "com.weave.builtin.workflow".into(),
+            Box::new(WorkflowPlugin),
+        );
 
         Self {
             plugins: Arc::new(RwLock::new(plugins)),
@@ -224,7 +233,9 @@ impl PluginManager {
                             all_plugins.push(plugin);
                         }
                     }
-                    Err(e) => { warn!("Failed to load .wpk plugin at {:?}: {}", path, e); }
+                    Err(e) => {
+                        warn!("Failed to load .wpk plugin at {:?}: {}", path, e);
+                    }
                 }
             } else if path.is_dir() {
                 let manifest_path = path.join("manifest.toml");
@@ -235,7 +246,9 @@ impl PluginManager {
                                 all_plugins.push(plugin);
                             }
                         }
-                        Err(e) => { warn!("Failed to load plugin at {:?}: {}", path, e); }
+                        Err(e) => {
+                            warn!("Failed to load plugin at {:?}: {}", path, e);
+                        }
                     }
                 }
             }
@@ -266,8 +279,9 @@ impl PluginManager {
         let mut archive = zip::ZipArchive::new(file)?;
         let mut manifest_content = String::new();
         {
-            let mut manifest_file = archive.by_name("manifest.toml")
-                .map_err(|_| WeaveError::InvalidManifest("manifest.toml not found in .wpk".to_string()))?;
+            let mut manifest_file = archive.by_name("manifest.toml").map_err(|_| {
+                WeaveError::InvalidManifest("manifest.toml not found in .wpk".to_string())
+            })?;
             use std::io::Read;
             manifest_file.read_to_string(&mut manifest_content)?;
         }
@@ -315,10 +329,14 @@ impl PluginManager {
 
     pub fn load(&self, plugin_id: &str) -> Result<Plugin, WeaveError> {
         let mut plugins = self.plugins.write();
-        let plugin = plugins.get_mut(plugin_id)
+        let plugin = plugins
+            .get_mut(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
         if plugin.is_loaded() {
-            info!("Plugin {} is already loaded, returning existing state", plugin_id);
+            info!(
+                "Plugin {} is already loaded, returning existing state",
+                plugin_id
+            );
             return Ok(plugin.clone());
         }
 
@@ -347,7 +365,8 @@ impl PluginManager {
 
     pub fn activate(&self, plugin_id: &str) -> Result<Plugin, WeaveError> {
         let mut plugins = self.plugins.write();
-        let plugin = plugins.get_mut(plugin_id)
+        let plugin = plugins
+            .get_mut(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
         plugin.state = PluginState::Active;
         info!("Activated plugin: {} ({})", plugin.name, plugin.id);
@@ -356,10 +375,13 @@ impl PluginManager {
 
     pub fn unload(&self, plugin_id: &str) -> Result<(), WeaveError> {
         let mut plugins = self.plugins.write();
-        let plugin = plugins.get_mut(plugin_id)
+        let plugin = plugins
+            .get_mut(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
         if plugin.is_builtin {
-            return Err(WeaveError::PluginError("Cannot unload built-in plugins".to_string()));
+            return Err(WeaveError::PluginError(
+                "Cannot unload built-in plugins".to_string(),
+            ));
         }
         plugin.state = PluginState::Unloaded;
         info!("Unloaded plugin: {} ({})", plugin.name, plugin.id);
@@ -371,7 +393,9 @@ impl PluginManager {
     }
 
     pub fn get_loaded(&self) -> Vec<Plugin> {
-        self.plugins.read().values()
+        self.plugins
+            .read()
+            .values()
             .filter(|p| p.is_loaded() || p.is_active())
             .cloned()
             .collect()
@@ -388,13 +412,15 @@ impl PluginManager {
         params: serde_json::Value,
         ctx: &runtime_kernel::execution_context::ExecutionContext,
     ) -> Result<serde_json::Value, WeaveError> {
-        let plugin = self.get_plugin(plugin_id)
+        let plugin = self
+            .get_plugin(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
 
         if !plugin.has_capability(capability) {
-            return Err(WeaveError::CapabilityNotFound(
-                format!("{} does not provide '{}'", plugin_id, capability)
-            ));
+            return Err(WeaveError::CapabilityNotFound(format!(
+                "{} does not provide '{}'",
+                plugin_id, capability
+            )));
         }
 
         info!("Executing capability: {}::{}", plugin_id, capability);
@@ -414,7 +440,9 @@ impl PluginManager {
             }
             #[cfg(not(feature = "wasm-runtime"))]
             {
-                return Err(WeaveError::PluginError("WASM runtime feature is not enabled".to_string()));
+                return Err(WeaveError::PluginError(
+                    "WASM runtime feature is not enabled".to_string(),
+                ));
             }
         }
 
@@ -424,13 +452,16 @@ impl PluginManager {
             return executor.execute(capability, params, ctx);
         }
 
-        Err(WeaveError::PluginError(
-            format!("No executor registered for plugin: {}", plugin_id)
-        ))
+        Err(WeaveError::PluginError(format!(
+            "No executor registered for plugin: {}",
+            plugin_id
+        )))
     }
 
     pub fn find_plugins_for_capability(&self, capability: &str) -> Vec<Plugin> {
-        self.plugins.read().values()
+        self.plugins
+            .read()
+            .values()
             .filter(|p| p.has_capability(capability))
             .cloned()
             .collect()
@@ -456,8 +487,18 @@ impl PluginManager {
 
         for plugin in self.get_loaded() {
             for cap in &plugin.capabilities.provide {
-                let schema = plugin.capabilities.schemas.get(cap).map(|s| s.as_str()).unwrap_or("{}");
-                let desc = plugin.capabilities.descriptions.get(cap).map(|s| s.as_str()).unwrap_or("");
+                let schema = plugin
+                    .capabilities
+                    .schemas
+                    .get(cap)
+                    .map(|s| s.as_str())
+                    .unwrap_or("{}");
+                let desc = plugin
+                    .capabilities
+                    .descriptions
+                    .get(cap)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
                 if desc.is_empty() {
                     prompt.push_str(&format!("- **{}**: Schema: `{}`\n", cap, schema));
                 } else {
@@ -467,12 +508,24 @@ impl PluginManager {
         }
 
         if let Ok(memory) = MemoryPlugin::read_memory() {
-            let profile = memory.get("_user_profile").cloned().unwrap_or_else(MemoryPlugin::default_profile);
+            let profile = memory
+                .get("_user_profile")
+                .cloned()
+                .unwrap_or_else(MemoryPlugin::default_profile);
             prompt.push_str("\n## User Profile & Learned Memory Context\n");
-            let name = profile.get("name").and_then(|v| v.as_str()).unwrap_or("Weave User");
-            let role = profile.get("role").and_then(|v| v.as_str()).unwrap_or("Developer");
+            let name = profile
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Weave User");
+            let role = profile
+                .get("role")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Developer");
             let bio = profile.get("bio").and_then(|v| v.as_str()).unwrap_or("");
-            let directives = profile.get("ai_directives").and_then(|v| v.as_str()).unwrap_or("");
+            let directives = profile
+                .get("ai_directives")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             prompt.push_str(&format!("- **User Identity**: {} ({})\n", name, role));
             if !bio.is_empty() {
                 prompt.push_str(&format!("- **Bio/About**: {}\n", bio));
@@ -480,7 +533,10 @@ impl PluginManager {
             if let Some(stack) = profile.get("tech_stack").and_then(|v| v.as_array()) {
                 let stack_str: Vec<&str> = stack.iter().filter_map(|s| s.as_str()).collect();
                 if !stack_str.is_empty() {
-                    prompt.push_str(&format!("- **Tech Stack & Preferences**: {}\n", stack_str.join(", ")));
+                    prompt.push_str(&format!(
+                        "- **Tech Stack & Preferences**: {}\n",
+                        stack_str.join(", ")
+                    ));
                 }
             }
             if !directives.is_empty() {
@@ -492,12 +548,32 @@ impl PluginManager {
                 if !k.starts_with('_') {
                     if let Some(obj) = v.as_object() {
                         let content = obj.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                        let source = obj.get("source").and_then(|s| s.as_str()).unwrap_or("conversation");
-                        let conf = obj.get("confidence").and_then(|c| c.as_f64()).unwrap_or(0.85);
-                        let tags = obj.get("tags").and_then(|t| t.as_array())
-                            .map(|arr| arr.iter().filter_map(|val| val.as_str()).collect::<Vec<_>>().join(", "))
+                        let source = obj
+                            .get("source")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("conversation");
+                        let conf = obj
+                            .get("confidence")
+                            .and_then(|c| c.as_f64())
+                            .unwrap_or(0.85);
+                        let tags = obj
+                            .get("tags")
+                            .and_then(|t| t.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|val| val.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            })
                             .unwrap_or_else(|| "general".to_string());
-                        facts.push(format!("  - [{:.0}% confidence, from {}] `{}`: {} (tags: {})", conf * 100.0, source, k, content, tags));
+                        facts.push(format!(
+                            "  - [{:.0}% confidence, from {}] `{}`: {} (tags: {})",
+                            conf * 100.0,
+                            source,
+                            k,
+                            content,
+                            tags
+                        ));
                     } else {
                         facts.push(format!("  - `{}`: {}", k, v));
                     }
@@ -518,7 +594,8 @@ impl PluginManager {
         prompt.push_str("[System returns note created]\n");
         prompt.push_str("You: I have created the PyTorch note for you.\n\n");
         prompt.push_str("User: Fix the bug in auth.ts\n");
-        prompt.push_str("You: <call plugin=\"coder.read_file\">{\"path\":\"src/auth.ts\"}</call>\n");
+        prompt
+            .push_str("You: <call plugin=\"coder.read_file\">{\"path\":\"src/auth.ts\"}</call>\n");
         prompt.push_str("[System returns file content]\n");
         prompt.push_str("You: <call plugin=\"coder.apply_diff\">{\"path\":\"src/auth.ts\", \"old_str\":\"if (user == null)\", \"new_str\":\"if (!user || user.locked)\"}</call>\n");
         prompt.push_str("[System returns success]\n");
@@ -528,4 +605,3 @@ impl PluginManager {
         prompt
     }
 }
-

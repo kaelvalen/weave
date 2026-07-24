@@ -5,10 +5,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::info;
 
-use runtime_kernel::execution_context::ExecutionContext;
-use runtime_kernel::event_bus::SystemEvent;
-use capabilities::tool_registry::RegisteredPlugin;
 use crate::utils::errors::WeaveError;
+use capabilities::tool_registry::RegisteredPlugin;
+use runtime_kernel::event_bus::SystemEvent;
+use runtime_kernel::execution_context::ExecutionContext;
+use runtime_kernel::runtime_event::{RuntimeEvent, RuntimeEventKind};
 
 pub struct ExecutionRegistry {
     executors: Arc<RwLock<HashMap<String, Arc<dyn RegisteredPlugin>>>>,
@@ -53,9 +54,25 @@ impl ExecutionRegistry {
 
         // Emit an event that the plugin executed, decoupled subsystems (Observability, PlannerIndex)
         // will listen and update themselves.
+        // NOTE: ComponentLoaded is a legacy misuse kept for compatibility;
+        // the structured runtime topic below is the canonical signal.
         ctx.event_bus.publish(SystemEvent::ComponentLoaded {
             name: format!("PluginExecution:{}", capability),
         });
+
+        let mut event = RuntimeEvent::new(
+            if res.is_ok() {
+                RuntimeEventKind::StepSucceeded
+            } else {
+                RuntimeEventKind::StepFailed
+            },
+            uuid::Uuid::new_v4().to_string(),
+            format!("Executed {}::{}", plugin_id, capability),
+        );
+        event.plugin_id = Some(plugin_id.to_string());
+        event.capability = Some(capability.to_string());
+        event.latency_ms = Some(duration_ms);
+        ctx.event_bus.publish_runtime(event);
 
         res
     }

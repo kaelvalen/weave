@@ -2,9 +2,9 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use planning::goal_analyzer::GoalAnalysis;
-use planning::plan_generator::PlanGeneratorTrait;
-use planning::logical_plan::{LogicalPlan, LogicalNode, ScoredPlan};
+use crate::goal_analyzer::GoalAnalysis;
+use crate::logical_plan::{LogicalNode, LogicalPlan, ScoredPlan};
+use crate::plan_generator::PlanGeneratorTrait;
 use knowledge::planner_index::PlannerIndex;
 
 pub struct HTNPlanner {
@@ -17,7 +17,12 @@ impl HTNPlanner {
     }
 
     /// Hierarchical decomposition of compound goal tasks into primitive capability nodes
-    fn decompose_compound_task(&self, intent: &str, raw_goal: &str, step_idx: usize) -> Vec<LogicalNode> {
+    fn decompose_compound_task(
+        &self,
+        intent: &str,
+        raw_goal: &str,
+        step_idx: usize,
+    ) -> Vec<LogicalNode> {
         let mut nodes = Vec::new();
         // Base case: recursive HTN
         if intent.contains("analyze") {
@@ -64,7 +69,8 @@ impl PlanGeneratorTrait for HTNPlanner {
         let mut plan = LogicalPlan::new(&analysis.raw_goal);
 
         for (idx, sub) in analysis.sub_goals.iter().enumerate() {
-            let decomposed_nodes = self.decompose_compound_task(&sub.intent, &analysis.raw_goal, idx);
+            let decomposed_nodes =
+                self.decompose_compound_task(&sub.intent, &analysis.raw_goal, idx);
             for node in decomposed_nodes {
                 plan.add_node(node);
             }

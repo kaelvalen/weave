@@ -25,7 +25,8 @@ interface PluginState {
   executeCapability: (
     pluginId: string,
     cap: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    traceId?: string
   ) => Promise<unknown>;
   getPluginIdForCapability: (cap: string) => string | undefined;
   getPluginsByCategory: (cat: PluginCategory) => Plugin[];
@@ -165,8 +166,13 @@ export const usePluginStore = create<PluginState>()(
         }
       },
 
-      executeCapability: async (pluginId: string, cap: string, params: Record<string, unknown>) => {
-        return invoke('plugin_execute', { pluginId, capability: cap, params });
+      executeCapability: async (
+        pluginId: string,
+        cap: string,
+        params: Record<string, unknown>,
+        traceId?: string
+      ) => {
+        return invoke('plugin_execute', { pluginId, capability: cap, params, traceId });
       },
 
       getPluginIdForCapability: (cap: string) => {

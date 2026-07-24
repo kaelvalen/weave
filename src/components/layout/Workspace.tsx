@@ -7,6 +7,10 @@ import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { LocalModels } from '@/components/models/LocalModels';
 import { ProfilePanel } from '@/components/profile/ProfilePanel';
+import { ExecutionView } from '@/components/execution/ExecutionView';
+import { CapabilitiesView } from '@/components/capabilities/CapabilitiesView';
+import { ArtifactsView } from '@/components/artifacts/ArtifactsView';
+import { MemoryView } from '@/components/memory/MemoryView';
 import { useEffect } from 'react';
 
 export function Workspace() {
@@ -16,6 +20,14 @@ export function Workspace() {
     switch (activeView) {
       case 'chat':
         return <ChatCommandCenter />;
+      case 'execution':
+        return <ExecutionView />;
+      case 'artifacts':
+        return <ArtifactsView />;
+      case 'memory':
+        return <MemoryView />;
+      case 'capabilities':
+        return <CapabilitiesView />;
       case 'plugins':
         return <PluginMarket />;
       case 'settings':

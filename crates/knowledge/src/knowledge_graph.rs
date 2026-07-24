@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use memory::planner_index::PlannerIndex;
-use memory::vector_index::CapabilityVectorIndex;
+use crate::planner_index::PlannerIndex;
 use capabilities::tool_registry::ToolDefinition;
+use memory::vector_index::CapabilityVectorIndex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityNode {
@@ -78,7 +78,10 @@ impl CapabilityKnowledgeGraph {
     }
 
     pub fn traverse_implements(&self, capability_id: &str) -> Option<String> {
-        self.nodes.read().get(capability_id).map(|n| n.plugin_id.clone())
+        self.nodes
+            .read()
+            .get(capability_id)
+            .map(|n| n.plugin_id.clone())
     }
 
     pub fn traverse_produces_artifacts(&self, capability_id: &str) -> Vec<String> {
@@ -122,7 +125,11 @@ impl CapabilityKnowledgeGraph {
         }
     }
 
-    pub fn search_by_vector(&self, query_embedding: &[f32], top_k: usize) -> Vec<(CapabilityNode, f32)> {
+    pub fn search_by_vector(
+        &self,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> Vec<(CapabilityNode, f32)> {
         let nodes = self.nodes.read();
         let mut matches: Vec<(CapabilityNode, f32)> = nodes
             .values()
@@ -155,6 +162,10 @@ impl CapabilityKnowledgeGraph {
     }
 
     pub fn as_tool_definitions(&self) -> Vec<ToolDefinition> {
-        self.nodes.read().values().map(|n| n.to_tool_definition()).collect()
+        self.nodes
+            .read()
+            .values()
+            .map(|n| n.to_tool_definition())
+            .collect()
     }
 }
