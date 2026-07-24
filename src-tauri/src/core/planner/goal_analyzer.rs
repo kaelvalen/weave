@@ -15,14 +15,20 @@ pub struct GoalAnalysis {
     pub sub_goals: Vec<SubGoal>,
 }
 
-pub struct GoalAnalyzer;
+pub trait GoalAnalyzerTrait: Send + Sync {
+    fn analyze(&self, goal: &str) -> GoalAnalysis;
+}
 
-impl GoalAnalyzer {
+pub struct HeuristicGoalAnalyzer;
+
+impl HeuristicGoalAnalyzer {
     pub fn new() -> Self {
         Self
     }
+}
 
-    pub fn analyze(&self, goal: &str) -> GoalAnalysis {
+impl GoalAnalyzerTrait for HeuristicGoalAnalyzer {
+    fn analyze(&self, goal: &str) -> GoalAnalysis {
         let lower = goal.to_lowercase();
         let mut sub_goals = Vec::new();
 

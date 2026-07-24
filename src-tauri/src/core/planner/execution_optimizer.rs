@@ -1,18 +1,23 @@
 use crate::core::planner::task_graph::TaskGraph;
 
-pub struct ExecutionOptimizer;
+pub trait PlanOptimizerTrait: Send + Sync {
+    fn optimize(&self, graph: &mut TaskGraph) -> Result<(), String>;
+}
 
-impl ExecutionOptimizer {
+pub struct TopologicalOptimizer;
+
+impl TopologicalOptimizer {
     pub fn new() -> Self {
         Self
     }
+}
 
-    pub fn optimize(&self, graph: &mut TaskGraph) -> Result<(), String> {
+impl PlanOptimizerTrait for TopologicalOptimizer {
+    fn optimize(&self, graph: &mut TaskGraph) -> Result<(), String> {
         if graph.detect_cycles() {
             return Err("Cycle detected in generated TaskGraph".into());
         }
 
-        // Verify topological sorting ordering
         let _sort_order = graph.topological_sort()?;
         let _critical_path = graph.critical_path();
 

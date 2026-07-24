@@ -14,6 +14,13 @@ pub enum TaskStatus {
     WaitingPermission { reason: String },
     WaitingUser { prompt: String },
     Running,
+    Paused,
+    Blocked,
+    Skipped,
+    Expired,
+    TimedOut,
+    Compensating,
+    Compensated,
     Retrying { attempt: u32 },
     RollingBack,
     Cancelled,
@@ -34,7 +41,9 @@ pub struct TaskNode {
     pub description: String,
     pub capability_id: String,
     pub params: Value,
-    pub dependencies: Vec<String>, // Parent node IDs that must complete first
+    pub inputs: HashMap<String, Value>,
+    pub output_bindings: HashMap<String, String>, // Maps parent output key -> child input parameter name
+    pub dependencies: Vec<String>,                 // Parent node IDs that must complete first
     pub status: TaskStatus,
     pub output: Option<Value>,
 }
@@ -76,6 +85,35 @@ impl TaskGraph {
             })
             .cloned()
             .collect()
+    }
+
+    /// Resolves dataflow bindings from parent node outputs into child node inputs.
+    pub fn resolve_dataflow_inputs(&mut self, node_id: &str) {
+        let parent_outputs: Vec<(String, HashMap<String, String>, Option<Value>)> = {
+            if let Some(node) = self.nodes.get(node_id) {
+                let bindings = node.output_bindings.clone();
+                node.dependencies
+                    .iter()
+                    .filter_map(|dep_id| {
+                        self.nodes.get(dep_id).map(|dep_node| (dep_id.clone(), bindings.clone(), dep_node.output.clone()))
+                    })
+                    .collect()
+            } else {
+                vec![]
+            }
+        };
+
+        if let Some(target_node) = self.nodes.get_mut(node_id) {
+            for (_parent_id, bindings, parent_output) in parent_outputs {
+                if let Some(output_val) = parent_output {
+                    for (out_key, in_key) in bindings {
+                        if let Some(field_val) = output_val.get(&out_key).cloned().or(Some(output_val.clone())) {
+                            target_node.inputs.insert(in_key, field_val);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn topological_sort(&self) -> Result<Vec<String>, String> {
@@ -173,8 +211,8 @@ impl TaskGraph {
         batches
     }
 
-    pub async fn rollback_graph(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), WeaveError> {
-        warn!("Initiating transactional rollback for graph: {} at failed node: {}", self.id, failed_node);
+    pub async fn saga_rollback(&mut self, failed_node: &str, ctx: &ExecutionContext) -> Result<(), WeaveError> {
+        warn!("Executing SAGA transactional rollback for TaskGraph: {} starting at failed node: {}", self.id, failed_node);
 
         let sort_order = self.topological_sort().unwrap_or_default();
         let mut reverse_order = sort_order;
@@ -183,15 +221,15 @@ impl TaskGraph {
         for node_id in reverse_order {
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 if node.status == TaskStatus::Completed {
-                    info!("Executing rollback compensation for node: {}", node_id);
-                    node.status = TaskStatus::RollingBack;
+                    info!("SAGA compensation executed for node: {}", node_id);
+                    node.status = TaskStatus::Compensating;
 
                     if let Some(ref memory) = ctx.memory {
-                        let key = format!("rollback:{}", node_id);
-                        let _ = memory.store(&key, "Rollback compensation executed", "rollback").await;
+                        let key = format!("saga_compensation:{}", node_id);
+                        let _ = memory.store(&key, "SAGA node compensation completed", "compensation").await;
                     }
 
-                    node.status = TaskStatus::Cancelled;
+                    node.status = TaskStatus::Compensated;
                 }
             }
         }

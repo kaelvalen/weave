@@ -84,7 +84,9 @@ impl WorkingMemory {
 
 pub struct MemoryEngine {
     pub working_memory: Arc<WorkingMemory>,
-    pub session_memory: Arc<InMemoryProvider>,
+    pub episode_memory: Arc<InMemoryProvider>,
+    pub semantic_memory: Arc<InMemoryProvider>,
+    pub procedural_memory: Arc<InMemoryProvider>,
     pub persistent_knowledge: Arc<dyn MemoryProvider>,
 }
 
@@ -92,7 +94,9 @@ impl MemoryEngine {
     pub fn new(persistent_knowledge: Arc<dyn MemoryProvider>) -> Self {
         Self {
             working_memory: Arc::new(WorkingMemory::new()),
-            session_memory: Arc::new(InMemoryProvider::new()),
+            episode_memory: Arc::new(InMemoryProvider::new()),
+            semantic_memory: Arc::new(InMemoryProvider::new()),
+            procedural_memory: Arc::new(InMemoryProvider::new()),
             persistent_knowledge,
         }
     }
@@ -115,7 +119,34 @@ impl MemoryEngine {
         self.persistent_knowledge.store(item).await
     }
 
-    /// Consolidates short-lived working memory items into persistent knowledge
+    pub async fn store_episode(&self, task_id: &str, trajectory: &str) -> Result<(), WeaveError> {
+        let item = MemoryItem {
+            key: format!("episode:{}", task_id),
+            content: trajectory.to_string(),
+            category: "episode".to_string(),
+            tags: vec!["trajectory".to_string()],
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+        self.episode_memory.store(item).await
+    }
+
+    pub async fn store_procedural(&self, tool_id: &str, workflow_pattern: &str) -> Result<(), WeaveError> {
+        let item = MemoryItem {
+            key: format!("procedural:{}", tool_id),
+            content: workflow_pattern.to_string(),
+            category: "procedural".to_string(),
+            tags: vec!["workflow".to_string()],
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+        self.procedural_memory.store(item).await
+    }
+
     pub async fn consolidate(&self) -> Result<usize, WeaveError> {
         let items = self.working_memory.drain();
         let count = items.len();
@@ -125,7 +156,6 @@ impl MemoryEngine {
         Ok(count)
     }
 
-    /// Compresses / prunes low-relevance memory items
     pub async fn compress(&self, max_items: usize) -> Result<(), WeaveError> {
         let all_items = self.persistent_knowledge.search("").await?;
         if all_items.len() > max_items {

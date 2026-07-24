@@ -11,6 +11,8 @@ pub enum WeaveError {
     AiError(String),
     #[error("Planner error: {0}")]
     PlannerError(String),
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
     #[error("Invalid manifest: {0}")]
     InvalidManifest(String),
     #[error("Capability not found: {0}")]

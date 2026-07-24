@@ -24,6 +24,8 @@ pub struct ProgressMessage {
 #[derive(Clone)]
 pub struct ExecutionContext {
     pub session_id: String,
+    pub trace_id: String,
+    pub span_id: String,
     pub workspace_root: PathBuf,
     pub config: Arc<RwLock<AppConfig>>,
     pub event_bus: Arc<EventBus>,
@@ -46,6 +48,8 @@ impl ExecutionContext {
     ) -> Self {
         Self {
             session_id,
+            trace_id: uuid::Uuid::new_v4().to_string(),
+            span_id: uuid::Uuid::new_v4().to_string(),
             workspace_root,
             config,
             event_bus,
@@ -76,6 +80,12 @@ impl ExecutionContext {
         self.planner_index = Some(planner_index);
         self.event_store = Some(event_store);
         self
+    }
+
+    pub fn child_span(&self) -> Self {
+        let mut child = self.clone();
+        child.span_id = uuid::Uuid::new_v4().to_string();
+        child
     }
 
     pub fn memory(&self) -> Option<&Arc<MemoryEngine>> {

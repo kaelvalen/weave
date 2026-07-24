@@ -60,22 +60,23 @@ impl RuntimeKernel {
         }
     }
 
-    /// Primary Orchestration Entry Point: Goal -> Planner -> Policy -> Execution -> CQRS Projections & Memory
+    /// Async Dataflow Orchestration Entry Point: Goal -> Planner -> Policy -> Execution -> SAGA Rollback -> CQRS & Memory
     pub async fn execute_goal(
         &self,
         goal: &str,
         plugin_id: &str,
         ctx: &ExecutionContext,
     ) -> Result<Value, WeaveError> {
-        info!("RuntimeKernel orchestrating goal execution: '{}'", goal);
+        let span_ctx = ctx.child_span();
+        info!("RuntimeKernel orchestrating goal (trace_id: {}, span_id: {}): '{}'", span_ctx.trace_id, span_ctx.span_id, goal);
 
         // 1. Audit Task Created
         self.event_store.append(
             AuditEventType::TaskCreated {
-                task_id: ctx.session_id.clone(),
+                task_id: span_ctx.session_id.clone(),
                 goal: goal.to_string(),
             },
-            json!({"goal": goal}),
+            json!({"goal": goal, "trace_id": span_ctx.trace_id}),
         );
 
         // 2. Pure Planner creates candidate TaskGraph
@@ -88,14 +89,24 @@ impl RuntimeKernel {
             json!({"plan_id": graph.id}),
         );
 
-        // 3. Execution Loop with Topological Batching
+        // 3. Async Parallel Dataflow Batch Execution Loop
         let batches = graph.get_parallel_batches();
         for batch in batches {
             for node_id in batch {
-                let (cap_id, params) = {
+                graph.resolve_dataflow_inputs(&node_id);
+                graph.update_status(&node_id, TaskStatus::Running, None);
+
+                let (cap_id, mut params, inputs) = {
                     let node = graph.nodes.get(&node_id).unwrap();
-                    (node.capability_id.clone(), node.params.clone())
+                    (node.capability_id.clone(), node.params.clone(), node.inputs.clone())
                 };
+
+                // Merge dataflow inputs into execution params
+                if let Some(obj) = params.as_object_mut() {
+                    for (k, v) in inputs {
+                        obj.insert(k, v);
+                    }
+                }
 
                 // Policy Check
                 if cap_id == "shell.exec" || cap_id == "shell.execute" {
@@ -107,14 +118,12 @@ impl RuntimeKernel {
                                 None,
                             );
 
-                            // Trigger Transactional Rollback
-                            let _ = graph.rollback_graph(&node_id, ctx).await;
+                            let _ = graph.saga_rollback(&node_id, &span_ctx).await;
                             return Err(WeaveError::PermissionDenied(format!("Policy denied command: {}", cmd)));
                         }
                     }
                 }
 
-                // Audit Execution Started
                 self.event_store.append(
                     AuditEventType::ExecutionStarted {
                         task_id: node_id.clone(),
@@ -123,11 +132,18 @@ impl RuntimeKernel {
                     json!({"params": params}),
                 );
 
-                graph.update_status(&node_id, TaskStatus::Running, None);
+                let exec_reg = self.execution_registry.clone();
+                let plugin = plugin_id.to_string();
+                let cap = cap_id.clone();
+                let p = params.clone();
+                let c = span_ctx.clone();
 
-                // Execution Registry Dispatch
-                match self.execution_registry.execute(plugin_id, &cap_id, params, ctx) {
-                    Ok(output) => {
+                let handle = tokio::spawn(async move {
+                    exec_reg.execute(&plugin, &cap, p, &c)
+                });
+
+                match handle.await {
+                    Ok(Ok(output)) => {
                         graph.update_status(&node_id, TaskStatus::Completed, Some(output.clone()));
                         self.event_store.append(
                             AuditEventType::ExecutionFinished {
@@ -138,7 +154,7 @@ impl RuntimeKernel {
                             json!({"output": output}),
                         );
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         graph.update_status(
                             &node_id,
                             TaskStatus::Failed { error: e.to_string() },
@@ -154,9 +170,19 @@ impl RuntimeKernel {
                             json!({"error": e.to_string()}),
                         );
 
-                        // Trigger Transactional Rollback
-                        let _ = graph.rollback_graph(&node_id, ctx).await;
+                        let _ = graph.saga_rollback(&node_id, &span_ctx).await;
                         return Err(e);
+                    }
+                    Err(join_err) => {
+                        let err_msg = format!("Task node join error: {}", join_err);
+                        graph.update_status(
+                            &node_id,
+                            TaskStatus::Failed { error: err_msg.clone() },
+                            None,
+                        );
+
+                        let _ = graph.saga_rollback(&node_id, &span_ctx).await;
+                        return Err(WeaveError::ExecutionError(err_msg));
                     }
                 }
             }

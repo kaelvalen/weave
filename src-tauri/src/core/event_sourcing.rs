@@ -34,9 +34,18 @@ pub struct CQRSReadModel {
     pub capability_usage_counts: HashMap<String, u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+    pub snapshot_id: String,
+    pub timestamp: u64,
+    pub records_count: usize,
+    pub read_model: CQRSReadModel,
+}
+
 pub struct EventSourcingStore {
     records: Arc<RwLock<Vec<AuditRecord>>>,
     read_model: Arc<RwLock<CQRSReadModel>>,
+    snapshots: Arc<RwLock<Vec<Snapshot>>>,
 }
 
 impl EventSourcingStore {
@@ -44,6 +53,7 @@ impl EventSourcingStore {
         Self {
             records: Arc::new(RwLock::new(Vec::new())),
             read_model: Arc::new(RwLock::new(CQRSReadModel::default())),
+            snapshots: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -83,6 +93,30 @@ impl EventSourcingStore {
             }
             _ => {}
         }
+    }
+
+    pub fn create_snapshot(&self) -> Snapshot {
+        let snap = Snapshot {
+            snapshot_id: uuid::Uuid::new_v4().to_string(),
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            records_count: self.records.read().len(),
+            read_model: self.read_model.read().clone(),
+        };
+
+        self.snapshots.write().push(snap.clone());
+        snap
+    }
+
+    pub fn restore_snapshot(&self, snap: &Snapshot) {
+        *self.read_model.write() = snap.read_model.clone();
+    }
+
+    pub fn replay_events_from_timestamp(&self, from_timestamp: u64) -> Vec<AuditRecord> {
+        let records = self.records.read();
+        records.iter().filter(|r| r.timestamp >= from_timestamp).cloned().collect()
     }
 
     pub fn list_records(&self) -> Vec<AuditRecord> {

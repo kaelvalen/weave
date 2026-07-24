@@ -1,20 +1,27 @@
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::core::planner::goal_analyzer::GoalAnalysis;
 use crate::core::planner::task_graph::{TaskGraph, TaskNode, TaskStatus};
 use crate::core::registries::planner_index::PlannerIndex;
 
-pub struct PlanGenerator {
+pub trait PlanGeneratorTrait: Send + Sync {
+    fn generate_plan(&self, analysis: &GoalAnalysis) -> TaskGraph;
+}
+
+pub struct SemanticVectorPlanGenerator {
     planner_index: Arc<PlannerIndex>,
 }
 
-impl PlanGenerator {
+impl SemanticVectorPlanGenerator {
     pub fn new(planner_index: Arc<PlannerIndex>) -> Self {
         Self { planner_index }
     }
+}
 
-    pub fn generate_plan(&self, analysis: &GoalAnalysis) -> TaskGraph {
+impl PlanGeneratorTrait for SemanticVectorPlanGenerator {
+    fn generate_plan(&self, analysis: &GoalAnalysis) -> TaskGraph {
         let mut graph = TaskGraph::new(uuid::Uuid::new_v4().to_string(), &analysis.raw_goal);
 
         for sub in &analysis.sub_goals {
@@ -27,9 +34,11 @@ impl PlanGenerator {
             graph.add_node(TaskNode {
                 id: sub.id.clone(),
                 title: sub.description.clone(),
-                description: format!("Execute intent '{}' using tool '{}'", sub.intent, tool_id),
+                description: format!("Execute intent '{}' using capability '{}'", sub.intent, tool_id),
                 capability_id: tool_id,
                 params: json!({"query": analysis.raw_goal, "input": analysis.raw_goal}),
+                inputs: HashMap::new(),
+                output_bindings: HashMap::new(),
                 dependencies: sub.preconditions.clone(),
                 status: TaskStatus::Created,
                 output: None,
