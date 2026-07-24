@@ -4,6 +4,7 @@ pub mod mod;
 pub mod htn_planner;
 pub mod goal_analyzer;
 pub mod planner_engine;
-pub mod execution_plan;
+pub mod logical_plan;
 pub mod execution_optimizer;
 pub mod plan_generator;
+pub mod reasoning;
