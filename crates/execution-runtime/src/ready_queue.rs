@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use parking_lot::RwLock;
+use std::collections::VecDeque;
 
 pub struct ReadyQueue {
     queue: RwLock<VecDeque<String>>,

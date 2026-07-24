@@ -1,9 +1,9 @@
+use crate::utils::errors::WeaveError;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use serde_json::{json, Value};
 use wait_timeout::ChildExt;
-use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone)]
 pub struct ExecSpec {
@@ -26,10 +26,15 @@ pub fn execute_subprocess(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| WeaveError::PluginError(format!("Failed to spawn process {}: {}", spec.binary, e)))?;
+        .map_err(|e| {
+            WeaveError::PluginError(format!("Failed to spawn process {}: {}", spec.binary, e))
+        })?;
 
     let timeout = Duration::from_secs(timeout_secs);
-    match child.wait_timeout(timeout).map_err(|e| WeaveError::PluginError(format!("Timeout error: {}", e)))? {
+    match child
+        .wait_timeout(timeout)
+        .map_err(|e| WeaveError::PluginError(format!("Timeout error: {}", e)))?
+    {
         Some(status) => {
             let duration = start.elapsed().as_millis();
 
@@ -59,10 +64,17 @@ pub fn execute_subprocess(
 
             if is_test {
                 // Parse test results using framework-specific parser
-                let (passed, failed) = super::parser::parse_test_results(&stdout_str, test_framework.unwrap_or(""));
+                let (passed, failed) =
+                    super::parser::parse_test_results(&stdout_str, test_framework.unwrap_or(""));
                 if let Some(obj) = result_json.as_object_mut() {
-                    obj.insert("tests_passed".to_string(), passed.map_or(Value::Null, |v| json!(v)));
-                    obj.insert("tests_failed".to_string(), failed.map_or(Value::Null, |v| json!(v)));
+                    obj.insert(
+                        "tests_passed".to_string(),
+                        passed.map_or(Value::Null, |v| json!(v)),
+                    );
+                    obj.insert(
+                        "tests_failed".to_string(),
+                        failed.map_or(Value::Null, |v| json!(v)),
+                    );
                 }
             }
 

@@ -9,8 +9,8 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
-use crate::AppState;
 use crate::utils::errors::WeaveError;
+use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocalModelInfo {
@@ -293,11 +293,19 @@ pub async fn local_model_switch(
 ) -> Result<LocalModelSwitchStatus, WeaveError> {
     let previous_model = previous_model.and_then(|m| {
         let t = m.trim().to_string();
-        if t.is_empty() { None } else { Some(t) }
+        if t.is_empty() {
+            None
+        } else {
+            Some(t)
+        }
     });
     let next_model = next_model.and_then(|m| {
         let t = m.trim().to_string();
-        if t.is_empty() { None } else { Some(t) }
+        if t.is_empty() {
+            None
+        } else {
+            Some(t)
+        }
     });
 
     if previous_model == next_model {
@@ -526,7 +534,6 @@ async fn probe_url(url: &str) -> bool {
         .unwrap_or(false)
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct LocalModelDetails {
     pub quant: Option<String>,
@@ -584,10 +591,10 @@ fn ggml_type_name(file_type: u32) -> Option<&'static str> {
 /// (9) are variable-length and return None.
 fn gguf_primitive_size(value_type: u32) -> Option<u64> {
     match value_type {
-        0 | 1 | 7 => Some(1),     // u8, i8, bool
-        2 | 3 => Some(2),         // u16, i16
-        4 | 5 | 6 => Some(4),     // u32, i32, f32
-        10 | 11 | 12 => Some(8),  // u64, i64, f64
+        0 | 1 | 7 => Some(1),    // u8, i8, bool
+        2 | 3 => Some(2),        // u16, i16
+        4 | 5 | 6 => Some(4),    // u32, i32, f32
+        10 | 11 | 12 => Some(8), // u64, i64, f64
         _ => None,
     }
 }

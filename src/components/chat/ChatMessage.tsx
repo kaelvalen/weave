@@ -9,10 +9,11 @@ import { AgentActivityAccordion } from './AgentActivityAccordion';
 import { ArtifactCard } from './ArtifactCard';
 import { ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight } from 'lucide-react';
 import { GoalCard } from '@/components/workspace/GoalCard';
-import { ExecutionSection } from '@/components/workspace/ExecutionSection';
-import { SectionLabel } from '@/components/workspace/SectionLabel';
-import { usePlanForGoal, useStepsForGoal } from '@/components/workspace/runtimeSelectors';
+import { GoalTrace } from '@/components/execution/ExecutionPanel';
+import { usePlanForGoal, useStepsForGoal, useGoalStats } from '@/components/workspace/runtimeSelectors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -214,6 +215,19 @@ export const ChatMessage = React.memo(function ChatMessage({
   const executionPlan = usePlanForGoal(message.id);
   const hasRuntimeExecution = isAssistant && (executionSteps.length > 0 || executionPlan != null);
 
+  const pairedMessageId = useChatStore((s) => {
+    if (message.role === 'assistant') return null;
+    const idx = s.messages.findIndex((m) => m.id === message.id);
+    if (idx !== -1 && idx + 1 < s.messages.length) {
+      const next = s.messages[idx + 1];
+      if (next.role === 'assistant') return next.id;
+    }
+    return null;
+  });
+  
+  const statsTargetId = pairedMessageId ?? message.id;
+  const stats = useGoalStats(statsTargetId);
+
   const cleanedMarkdown = React.useMemo(() => {
     return message.content
       .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
@@ -325,9 +339,11 @@ export const ChatMessage = React.memo(function ChatMessage({
 
   // ── User message → GOAL card ──
   if (!isAssistant) {
+
     return (
       <div className="group px-4 sm:px-6 py-1.5">
         <GoalCard
+          stats={stats}
           headerRight={
             <>
               <span className="text-[10px] font-mono text-muted-foreground/60">
@@ -425,11 +441,9 @@ export const ChatMessage = React.memo(function ChatMessage({
       )}
 
       {/* Execution section — live plan + step timeline sourced from runtime events */}
-      <ExecutionSection
-        plan={executionPlan}
-        steps={executionSteps}
-        live={_isLast && isStreaming}
-      />
+      <div className="my-3">
+        <GoalTrace goalId={message.id} defaultOpen={isStreaming || !hasRuntimeExecution} />
+      </div>
 
       {/* Fallback: metadata-driven activity for history without runtime events */}
       {hasPluginCalls && !hasRuntimeExecution && (
@@ -503,36 +517,45 @@ export const ChatMessage = React.memo(function ChatMessage({
 
       {/* Output section — the execution's de-emphasized text result */}
       {(hasOutputContent || showsCompletedNotice) && (
-        <SectionLabel className="mb-1.5 mt-2">Output</SectionLabel>
+        <Collapsible defaultOpen={!hasRuntimeExecution} className="mt-2">
+          <div className="flex items-center gap-2 mb-1.5">
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors group/summary">
+              <ChevronRight className="w-3.5 h-3.5 transition-transform group-data-[state=open]/summary:rotate-90" />
+              Assistant Summary
+            </CollapsibleTrigger>
+          </div>
+          <CollapsibleContent>
+            <div className="text-sm text-foreground leading-relaxed break-words w-full font-sans pl-2 border-l-2 border-border/50 ml-1">
+              {imagesBlock}
+              {showsExecutingPlaceholder ? (
+                <div className="flex items-center gap-1.5 py-1 font-mono text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Executing...</span>
+                  {showCursor && <span className="streaming-cursor" />}
+                </div>
+              ) : (
+                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
+                  {showsCompletedNotice ? (
+                    <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in">
+                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Autonomous task execution completed successfully.</span>
+                    </div>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{ code: CodeBlock }}
+                    >
+                      {cleanedMarkdown}
+                    </ReactMarkdown>
+                  )}
+                </div>
+              )}
+              {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
-      <div className="text-sm text-foreground leading-relaxed break-words w-full font-sans">
-        {imagesBlock}
-        {showsExecutingPlaceholder ? (
-          <div className="flex items-center gap-1.5 py-1 font-mono text-xs text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Executing...</span>
-            {showCursor && <span className="streaming-cursor" />}
-          </div>
-        ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
-            {showsCompletedNotice ? (
-              <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in">
-                <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                <span>Autonomous task execution completed successfully.</span>
-              </div>
-            ) : (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={{ code: CodeBlock }}
-              >
-                {cleanedMarkdown}
-              </ReactMarkdown>
-            )}
-          </div>
-        )}
-        {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
-      </div>
     </div>
   );
 });

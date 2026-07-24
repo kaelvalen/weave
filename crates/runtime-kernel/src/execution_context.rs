@@ -1,8 +1,8 @@
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
-use serde::{Deserialize, Serialize};
 
 use crate::event_bus::EventBus;
 use crate::event_store::EventSourcingStore;
@@ -99,12 +99,14 @@ impl ExecutionContext {
 
     pub async fn report_progress(&self, task_id: &str, step: &str, percent: f32, msg: &str) {
         if let Some(ref tx) = self.progress_tx {
-            let _ = tx.send(ProgressMessage {
-                task_id: task_id.to_string(),
-                step: step.to_string(),
-                progress_percent: percent,
-                message: msg.to_string(),
-            }).await;
+            let _ = tx
+                .send(ProgressMessage {
+                    task_id: task_id.to_string(),
+                    step: step.to_string(),
+                    progress_percent: percent,
+                    message: msg.to_string(),
+                })
+                .await;
         }
     }
 }

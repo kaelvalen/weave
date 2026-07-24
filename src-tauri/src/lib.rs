@@ -1,6 +1,6 @@
 use parking_lot::RwLock;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::process::Child;
 use tracing::info;
 

@@ -8,13 +8,22 @@ use crate::utils::errors::WeaveError;
 pub struct GitPlugin;
 
 impl PluginExecutor for GitPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         GitPlugin::execute(capability, params, ctx)
     }
 }
 
 impl GitPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "git.status" => Self::status(params),
             "git.init" => Self::init(params),
@@ -30,13 +39,20 @@ impl GitPlugin {
     fn run_git_command(args: &[&str], cwd: Option<&str>) -> Result<String, WeaveError> {
         let mut cmd = Command::new("git");
         cmd.args(args);
-        if let Some(dir) = cwd { cmd.current_dir(dir); }
-        let output = cmd.output().map_err(|e| WeaveError::PluginError(format!("Failed to execute git: {}", e)))?;
+        if let Some(dir) = cwd {
+            cmd.current_dir(dir);
+        }
+        let output = cmd
+            .output()
+            .map_err(|e| WeaveError::PluginError(format!("Failed to execute git: {}", e)))?;
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
             let error = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(WeaveError::PluginError(format!("Git error: {}", error.trim())))
+            Err(WeaveError::PluginError(format!(
+                "Git error: {}",
+                error.trim()
+            )))
         }
     }
 
@@ -51,20 +67,29 @@ impl GitPlugin {
         let cwd = params.get("directory").and_then(|v| v.as_str());
         let mut cmd = Command::new("git");
         cmd.args(&["status", "-s"]);
-        if let Some(dir) = cwd { cmd.current_dir(dir); }
-        let output = cmd.output().map_err(|e| WeaveError::PluginError(format!("Failed to execute git: {}", e)))?;
+        if let Some(dir) = cwd {
+            cmd.current_dir(dir);
+        }
+        let output = cmd
+            .output()
+            .map_err(|e| WeaveError::PluginError(format!("Failed to execute git: {}", e)))?;
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr).to_string();
             if error.contains("not a git repository") || error.contains("fatal:") {
                 info!("Directory {:?} is not a git repository", cwd.unwrap_or("."));
                 return Ok(json!({"status": "", "branch": "", "is_repo": false, "success": true}));
             }
-            return Err(WeaveError::PluginError(format!("Git error: {}", error.trim())));
+            return Err(WeaveError::PluginError(format!(
+                "Git error: {}",
+                error.trim()
+            )));
         }
         let result = String::from_utf8_lossy(&output.stdout).to_string();
         let branch = Self::run_git_command(&["branch", "--show-current"], cwd).unwrap_or_default();
         info!("Executed git.status in {:?}", cwd.unwrap_or("."));
-        Ok(json!({"status": result.trim(), "branch": branch.trim(), "is_repo": true, "success": true}))
+        Ok(
+            json!({"status": result.trim(), "branch": branch.trim(), "is_repo": true, "success": true}),
+        )
     }
 
     fn add(params: Value) -> Result<Value, WeaveError> {
@@ -77,7 +102,9 @@ impl GitPlugin {
 
     fn commit(params: Value) -> Result<Value, WeaveError> {
         let cwd = params.get("directory").and_then(|v| v.as_str());
-        let message = params.get("message").and_then(|v| v.as_str())
+        let message = params
+            .get("message")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'message' parameter".to_string()))?;
         let result = Self::run_git_command(&["commit", "-m", message], cwd)?;
         info!("Executed git.commit in {:?}", cwd.unwrap_or("."));
@@ -89,19 +116,31 @@ impl GitPlugin {
         let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5);
         let limit_str = format!("-{}", limit);
         let result = Self::run_git_command(&["log", "--oneline", &limit_str], cwd)?;
-        info!("Executed git.log (limit {}) in {:?}", limit, cwd.unwrap_or("."));
+        info!(
+            "Executed git.log (limit {}) in {:?}",
+            limit,
+            cwd.unwrap_or(".")
+        );
         Ok(json!({"log": result.trim(), "limit": limit, "success": true}))
     }
 
     fn diff(params: Value) -> Result<Value, WeaveError> {
         let cwd = params.get("directory").and_then(|v| v.as_str());
-        let staged = params.get("staged").and_then(|v| v.as_bool()).unwrap_or(false);
+        let staged = params
+            .get("staged")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let file = params.get("file").and_then(|v| v.as_str());
 
         let mut args = vec!["diff"];
-        if staged { args.push("--cached"); }
+        if staged {
+            args.push("--cached");
+        }
         let file_str;
-        if let Some(f) = file { file_str = f.to_string(); args.push(&file_str); }
+        if let Some(f) = file {
+            file_str = f.to_string();
+            args.push(&file_str);
+        }
 
         let result = Self::run_git_command(&args, cwd)?;
         info!("Executed git.diff in {:?}", cwd.unwrap_or("."));
@@ -112,8 +151,14 @@ impl GitPlugin {
         let cwd = params.get("directory").and_then(|v| v.as_str());
         let result = Self::run_git_command(&["branch", "-a"], cwd)?;
         let current = Self::run_git_command(&["branch", "--show-current"], cwd).unwrap_or_default();
-        let branches: Vec<&str> = result.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        let branches: Vec<&str> = result
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
         info!("Executed git.branch in {:?}", cwd.unwrap_or("."));
-        Ok(json!({"branches": branches, "current": current.trim(), "count": branches.len(), "success": true}))
+        Ok(
+            json!({"branches": branches, "current": current.trim(), "count": branches.len(), "success": true}),
+        )
     }
 }

@@ -2,7 +2,6 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 export type View =
   | 'chat'
-  | 'execution'
   | 'artifacts'
   | 'memory'
   | 'capabilities'

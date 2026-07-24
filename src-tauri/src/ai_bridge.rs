@@ -1115,19 +1115,6 @@ impl AiBridge {
                         {
                             generated_text.push_str(&content);
 
-                            // Detect degenerate local model repetition loop
-                            if generated_text.len() > 120 {
-                                let tail = &generated_text[generated_text.len() - 35..];
-                                let count = generated_text.matches(tail).count();
-                                if count >= 4 {
-                                    tracing::warn!(
-                                        "Infinite streaming repetition loop detected. Halting generation stream."
-                                    );
-                                    stop_stream = true;
-                                    break;
-                                }
-                            }
-
                             let _ = tx.send(content).await;
                         }
                     }

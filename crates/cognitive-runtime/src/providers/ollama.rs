@@ -1,8 +1,8 @@
+use crate::models::chat::ChatMessage;
+use crate::traits::{ChatModel, EmbeddingModel};
+use crate::utils::errors::WeaveError;
 use reqwest::Client;
 use serde_json::json;
-use crate::traits::{ChatModel, EmbeddingModel};
-use crate::models::chat::ChatMessage;
-use crate::utils::errors::WeaveError;
 
 pub struct OllamaProvider {
     client: Client,
@@ -97,10 +97,15 @@ impl EmbeddingModel for OllamaProvider {
             .map_err(|e| WeaveError::AiError(format!("Ollama embedding JSON error: {}", e)))?;
 
         if let Some(arr) = res_json["embedding"].as_array() {
-            let vec: Vec<f32> = arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect();
+            let vec: Vec<f32> = arr
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
             Ok(vec)
         } else {
-            Err(WeaveError::AiError("Invalid Ollama embedding format".into()))
+            Err(WeaveError::AiError(
+                "Invalid Ollama embedding format".into(),
+            ))
         }
     }
 }

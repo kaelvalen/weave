@@ -25,13 +25,22 @@ pub struct Note {
 pub struct NotePlugin;
 
 impl PluginExecutor for NotePlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         NotePlugin::execute(capability, params, ctx)
     }
 }
 
 impl NotePlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "note.create" => Self::create(params),
             "note.list" => Self::list(),
@@ -54,20 +63,41 @@ impl NotePlugin {
     }
 
     fn create(params: Value) -> Result<Value, WeaveError> {
-        let title = params.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Note");
+        let title = params
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Untitled Note");
         let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let tags: Vec<String> = params.get("tags").and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        let tags: Vec<String> = params
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
-        let pinned = params.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
+        let pinned = params
+            .get("pinned")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let notes_dir = AppConfig::notes_dir()?;
         std::fs::create_dir_all(&notes_dir)?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
-        let note = Note { id: id.clone(), title: title.to_string(), content: content.to_string(), created_at: now, updated_at: now, tags, pinned };
+        let note = Note {
+            id: id.clone(),
+            title: title.to_string(),
+            content: content.to_string(),
+            created_at: now,
+            updated_at: now,
+            tags,
+            pinned,
+        };
         let file_path = notes_dir.join(format!("{}.json", id));
-        let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let note_json = serde_json::to_string_pretty(&note)
+            .map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, note_json)?;
         info!("Created note: {} ({}) in {:?}", title, id, file_path);
         Ok(json!({"note": Self::note_to_json(&note), "success": true}))
@@ -81,75 +111,115 @@ impl NotePlugin {
     }
 
     fn get(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let notes_dir = AppConfig::notes_dir()?;
         let file_path = notes_dir.join(format!("{}.json", id));
-        if !file_path.exists() { return Err(WeaveError::PluginError(format!("Note not found: {}", id))); }
+        if !file_path.exists() {
+            return Err(WeaveError::PluginError(format!("Note not found: {}", id)));
+        }
         let content = std::fs::read_to_string(&file_path)?;
-        let note: Note = serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let note: Note =
+            serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
         Ok(json!({"note": Self::note_to_json(&note), "success": true}))
     }
 
     fn update(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let notes_dir = AppConfig::notes_dir()?;
         let file_path = notes_dir.join(format!("{}.json", id));
-        if !file_path.exists() { return Err(WeaveError::PluginError(format!("Note not found: {}", id))); }
+        if !file_path.exists() {
+            return Err(WeaveError::PluginError(format!("Note not found: {}", id)));
+        }
         let content = std::fs::read_to_string(&file_path)?;
-        let mut note: Note = serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
-        if let Some(t) = params.get("title").and_then(|v| v.as_str()) { note.title = t.to_string(); }
-        if let Some(c) = params.get("content").and_then(|v| v.as_str()) { note.content = c.to_string(); }
+        let mut note: Note =
+            serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        if let Some(t) = params.get("title").and_then(|v| v.as_str()) {
+            note.title = t.to_string();
+        }
+        if let Some(c) = params.get("content").and_then(|v| v.as_str()) {
+            note.content = c.to_string();
+        }
         if let Some(tags) = params.get("tags").and_then(|v| v.as_array()) {
-            note.tags = tags.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
+            note.tags = tags
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
         }
         if let Some(p) = params.get("pinned").and_then(|v| v.as_bool()) {
             note.pinned = p;
         }
         note.updated_at = Utc::now();
-        let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let note_json = serde_json::to_string_pretty(&note)
+            .map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, note_json)?;
         info!("Updated note: {} ({})", note.title, id);
         Ok(json!({"note": Self::note_to_json(&note), "success": true}))
     }
 
     fn toggle_pin(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let notes_dir = AppConfig::notes_dir()?;
         let file_path = notes_dir.join(format!("{}.json", id));
-        if !file_path.exists() { return Err(WeaveError::PluginError(format!("Note not found: {}", id))); }
+        if !file_path.exists() {
+            return Err(WeaveError::PluginError(format!("Note not found: {}", id)));
+        }
         let content = std::fs::read_to_string(&file_path)?;
-        let mut note: Note = serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
-        
+        let mut note: Note =
+            serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+
         note.pinned = !note.pinned;
         note.updated_at = Utc::now();
-        
-        let note_json = serde_json::to_string_pretty(&note).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+
+        let note_json = serde_json::to_string_pretty(&note)
+            .map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, note_json)?;
-        info!("Toggled pin for note: {} ({}) -> pinned={}", note.title, id, note.pinned);
+        info!(
+            "Toggled pin for note: {} ({}) -> pinned={}",
+            note.title, id, note.pinned
+        );
         Ok(json!({"note": Self::note_to_json(&note), "success": true}))
     }
 
     fn delete(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let notes_dir = AppConfig::notes_dir()?;
         let file_path = notes_dir.join(format!("{}.json", id));
-        if !file_path.exists() { return Err(WeaveError::PluginError(format!("Note not found: {}", id))); }
+        if !file_path.exists() {
+            return Err(WeaveError::PluginError(format!("Note not found: {}", id)));
+        }
         std::fs::remove_file(&file_path)?;
         info!("Deleted note: {}", id);
         Ok(json!({"deleted_id": id, "success": true}))
     }
 
     fn search(params: Value) -> Result<Value, WeaveError> {
-        let query = params.get("query").and_then(|v| v.as_str())
+        let query = params
+            .get("query")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'query' parameter".to_string()))?;
         let query_lower = query.to_lowercase();
         let notes = Self::load_all_notes()?;
-        let matches: Vec<Value> = notes.iter()
-            .filter(|n| n.title.to_lowercase().contains(&query_lower) || n.content.to_lowercase().contains(&query_lower) || n.tags.iter().any(|t| t.to_lowercase().contains(&query_lower)))
+        let matches: Vec<Value> = notes
+            .iter()
+            .filter(|n| {
+                n.title.to_lowercase().contains(&query_lower)
+                    || n.content.to_lowercase().contains(&query_lower)
+                    || n.tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
+            })
             .map(|n| Self::note_to_json(n))
             .collect();
         info!("Search '{}': {} matches", query, matches.len());
@@ -158,7 +228,9 @@ impl NotePlugin {
 
     fn load_all_notes() -> Result<Vec<Note>, WeaveError> {
         let notes_dir = AppConfig::notes_dir()?;
-        if !notes_dir.exists() { return Ok(Vec::new()); }
+        if !notes_dir.exists() {
+            return Ok(Vec::new());
+        }
         let mut notes = Vec::new();
         for entry in std::fs::read_dir(&notes_dir)? {
             let entry = entry?;
@@ -167,18 +239,20 @@ impl NotePlugin {
                 match std::fs::read_to_string(&path) {
                     Ok(content) => match serde_json::from_str::<Note>(&content) {
                         Ok(note) => notes.push(note),
-                        Err(e) => { warn!("Failed to parse note at {:?}: {}", path, e); }
+                        Err(e) => {
+                            warn!("Failed to parse note at {:?}: {}", path, e);
+                        }
                     },
-                    Err(e) => { warn!("Failed to read note at {:?}: {}", path, e); }
+                    Err(e) => {
+                        warn!("Failed to read note at {:?}: {}", path, e);
+                    }
                 }
             }
         }
-        notes.sort_by(|a, b| {
-            match (a.pinned, b.pinned) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => b.updated_at.cmp(&a.updated_at),
-            }
+        notes.sort_by(|a, b| match (a.pinned, b.pinned) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => b.updated_at.cmp(&a.updated_at),
         });
         Ok(notes)
     }

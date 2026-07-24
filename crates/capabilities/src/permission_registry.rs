@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use std::path::Path;
 use runtime_kernel::policy_engine::{PolicyDecision, PolicyEngine, SecurityPolicy};
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct PermissionRegistry {
     policy_engine: Arc<PolicyEngine>,

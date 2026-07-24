@@ -9,14 +9,38 @@ use crate::event_bus::{EventBus, SystemEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditEventType {
-    TaskCreated { task_id: String, goal: String },
-    TaskPlanned { plan_id: String, node_count: usize },
-    CapabilitySelected { capability_id: String, tool_name: String },
-    PermissionGranted { resource: String },
-    ExecutionStarted { task_id: String, capability_id: String },
-    ExecutionFinished { task_id: String, success: bool, duration_ms: u64 },
-    ReflectionCompleted { task_id: String, score: f32 },
-    RollbackTriggered { plan_id: String, failed_node: String },
+    TaskCreated {
+        task_id: String,
+        goal: String,
+    },
+    TaskPlanned {
+        plan_id: String,
+        node_count: usize,
+    },
+    CapabilitySelected {
+        capability_id: String,
+        tool_name: String,
+    },
+    PermissionGranted {
+        resource: String,
+    },
+    ExecutionStarted {
+        task_id: String,
+        capability_id: String,
+    },
+    ExecutionFinished {
+        task_id: String,
+        success: bool,
+        duration_ms: u64,
+    },
+    ReflectionCompleted {
+        task_id: String,
+        score: f32,
+    },
+    RollbackTriggered {
+        plan_id: String,
+        failed_node: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,9 +86,15 @@ impl StateReducer {
                     }
                 }
                 AuditEventType::CapabilitySelected { capability_id, .. } => {
-                    *model.capability_usage_counts.entry(capability_id.clone()).or_default() += 1;
+                    *model
+                        .capability_usage_counts
+                        .entry(capability_id.clone())
+                        .or_default() += 1;
                 }
-                AuditEventType::TaskPlanned { plan_id, node_count } => {
+                AuditEventType::TaskPlanned {
+                    plan_id,
+                    node_count,
+                } => {
                     model.active_plans.insert(plan_id.clone(), *node_count);
                 }
                 _ => {}
@@ -104,7 +134,12 @@ impl EventSourcingStore {
         self.project_event(&event);
     }
 
-    pub fn append_and_publish(&self, event: AuditEventType, metadata: Value, event_bus: &Arc<EventBus>) {
+    pub fn append_and_publish(
+        &self,
+        event: AuditEventType,
+        metadata: Value,
+        event_bus: &Arc<EventBus>,
+    ) {
         self.append(event.clone(), metadata.clone());
         let _ = event_bus.publish(SystemEvent::TaskStatusChanged {
             task_id: uuid::Uuid::new_v4().to_string(),
@@ -126,9 +161,15 @@ impl EventSourcingStore {
                 }
             }
             AuditEventType::CapabilitySelected { capability_id, .. } => {
-                *model.capability_usage_counts.entry(capability_id.clone()).or_default() += 1;
+                *model
+                    .capability_usage_counts
+                    .entry(capability_id.clone())
+                    .or_default() += 1;
             }
-            AuditEventType::TaskPlanned { plan_id, node_count } => {
+            AuditEventType::TaskPlanned {
+                plan_id,
+                node_count,
+            } => {
                 model.active_plans.insert(plan_id.clone(), *node_count);
             }
             _ => {}
@@ -176,7 +217,11 @@ impl EventSourcingStore {
 
     pub fn replay_events_from_timestamp(&self, from_timestamp: u64) -> Vec<AuditRecord> {
         let records = self.records.read();
-        records.iter().filter(|r| r.timestamp >= from_timestamp).cloned().collect()
+        records
+            .iter()
+            .filter(|r| r.timestamp >= from_timestamp)
+            .cloned()
+            .collect()
     }
 
     pub fn list_records(&self) -> Vec<AuditRecord> {

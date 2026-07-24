@@ -26,23 +26,31 @@ pub struct PlanningSubsystem {
 
 impl PlanningSubsystem {
     pub fn new() -> Self {
-        Self { status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized) }
+        Self {
+            status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized),
+        }
     }
 }
 
 #[async_trait]
 impl KernelSubsystem for PlanningSubsystem {
-    fn name(&self) -> &'static str { "PlanningSubsystem" }
+    fn name(&self) -> &'static str {
+        "PlanningSubsystem"
+    }
     async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn start(&self) -> Result<(), KernelError> {
+        Ok(())
+    }
     async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
-    fn status(&self) -> SubsystemStatus { self.status.read().clone() }
+    fn status(&self) -> SubsystemStatus {
+        self.status.read().clone()
+    }
 }
 
 pub struct ExecutionSubsystem {
@@ -51,23 +59,31 @@ pub struct ExecutionSubsystem {
 
 impl ExecutionSubsystem {
     pub fn new() -> Self {
-        Self { status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized) }
+        Self {
+            status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized),
+        }
     }
 }
 
 #[async_trait]
 impl KernelSubsystem for ExecutionSubsystem {
-    fn name(&self) -> &'static str { "ExecutionSubsystem" }
+    fn name(&self) -> &'static str {
+        "ExecutionSubsystem"
+    }
     async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn start(&self) -> Result<(), KernelError> {
+        Ok(())
+    }
     async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
-    fn status(&self) -> SubsystemStatus { self.status.read().clone() }
+    fn status(&self) -> SubsystemStatus {
+        self.status.read().clone()
+    }
 }
 
 pub struct MemorySubsystem {
@@ -76,23 +92,31 @@ pub struct MemorySubsystem {
 
 impl MemorySubsystem {
     pub fn new() -> Self {
-        Self { status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized) }
+        Self {
+            status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized),
+        }
     }
 }
 
 #[async_trait]
 impl KernelSubsystem for MemorySubsystem {
-    fn name(&self) -> &'static str { "MemorySubsystem" }
+    fn name(&self) -> &'static str {
+        "MemorySubsystem"
+    }
     async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn start(&self) -> Result<(), KernelError> {
+        Ok(())
+    }
     async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
-    fn status(&self) -> SubsystemStatus { self.status.read().clone() }
+    fn status(&self) -> SubsystemStatus {
+        self.status.read().clone()
+    }
 }
 
 pub struct StorageSubsystem {
@@ -101,21 +125,29 @@ pub struct StorageSubsystem {
 
 impl StorageSubsystem {
     pub fn new() -> Self {
-        Self { status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized) }
+        Self {
+            status: parking_lot::RwLock::new(SubsystemStatus::Uninitialized),
+        }
     }
 }
 
 #[async_trait]
 impl KernelSubsystem for StorageSubsystem {
-    fn name(&self) -> &'static str { "StorageSubsystem" }
+    fn name(&self) -> &'static str {
+        "StorageSubsystem"
+    }
     async fn init(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Running;
         Ok(())
     }
-    async fn start(&self) -> Result<(), KernelError> { Ok(()) }
+    async fn start(&self) -> Result<(), KernelError> {
+        Ok(())
+    }
     async fn shutdown(&self) -> Result<(), KernelError> {
         *self.status.write() = SubsystemStatus::Stopped;
         Ok(())
     }
-    fn status(&self) -> SubsystemStatus { self.status.read().clone() }
+    fn status(&self) -> SubsystemStatus {
+        self.status.read().clone()
+    }
 }

@@ -1,8 +1,8 @@
 use tracing::info;
 
-use crate::AppState;
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
+use crate::AppState;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -36,7 +36,12 @@ pub async fn list_provider_models(
         "kimi" => Provider::Kimi,
         "opencode" => Provider::Opencode,
         "local" => Provider::Local,
-        _ => return Err(WeaveError::ConfigError(format!("Unknown provider: {}", provider))),
+        _ => {
+            return Err(WeaveError::ConfigError(format!(
+                "Unknown provider: {}",
+                provider
+            )))
+        }
     };
 
     app_state.ai_bridge.list_models(provider).await

@@ -18,10 +18,13 @@ impl WasmRuntime {
     }
 
     fn plugin_path(plugin: &Plugin) -> Result<&PathBuf, WeaveError> {
-        plugin.path.as_ref().ok_or_else(|| WeaveError::PluginLoadError {
-            plugin_id: plugin.id.clone(),
-            reason: "WASM plugin has no path defined".to_string(),
-        })
+        plugin
+            .path
+            .as_ref()
+            .ok_or_else(|| WeaveError::PluginLoadError {
+                plugin_id: plugin.id.clone(),
+                reason: "WASM plugin has no path defined".to_string(),
+            })
     }
 
     pub fn execute(
@@ -40,8 +43,9 @@ impl WasmRuntime {
             )));
         }
 
-        let wasm_bytes = std::fs::read(&wasm_path)
-            .map_err(|e| WeaveError::WasmRuntimeError(format!("Failed to read WASM file: {}", e)))?;
+        let wasm_bytes = std::fs::read(&wasm_path).map_err(|e| {
+            WeaveError::WasmRuntimeError(format!("Failed to read WASM file: {}", e))
+        })?;
 
         let engine = Engine::default();
         let module = Module::new(&engine, &wasm_bytes).map_err(|e| {
@@ -64,11 +68,12 @@ impl WasmRuntime {
             WeaveError::WasmRuntimeError(format!("Failed to instantiate WASM module: {}", e))
         })?;
 
-        let memory = instance.get_memory(&mut store, "memory").ok_or_else(|| {
-            WeaveError::WasmAbiError {
-                detail: "WASM module must export 'memory'".to_string(),
-            }
-        })?;
+        let memory =
+            instance
+                .get_memory(&mut store, "memory")
+                .ok_or_else(|| WeaveError::WasmAbiError {
+                    detail: "WASM module must export 'memory'".to_string(),
+                })?;
 
         let allocate: TypedFunc<i32, i32> = instance
             .get_typed_func(&mut store, "allocate")
@@ -90,21 +95,12 @@ impl WasmRuntime {
 
         let cap_json = serde_json::to_string(&capability)
             .map_err(|e| WeaveError::Serialization(e.to_string()))?;
-        let params_json = serde_json::to_string(&params)
-            .map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let params_json =
+            serde_json::to_string(&params).map_err(|e| WeaveError::Serialization(e.to_string()))?;
 
-        let cap_ptr = Self::write_string_to_memory(
-            &mut store,
-            &memory,
-            &allocate,
-            &cap_json,
-        )?;
-        let params_ptr = Self::write_string_to_memory(
-            &mut store,
-            &memory,
-            &allocate,
-            &params_json,
-        )?;
+        let cap_ptr = Self::write_string_to_memory(&mut store, &memory, &allocate, &cap_json)?;
+        let params_ptr =
+            Self::write_string_to_memory(&mut store, &memory, &allocate, &params_json)?;
 
         let result_ptr = execute_fn
             .call(&mut store, (cap_ptr, params_ptr))
@@ -122,11 +118,12 @@ impl WasmRuntime {
             .call(&mut store, (result_ptr, result_str.len() as i32))
             .map_err(|e| WeaveError::WasmRuntimeError(format!("deallocate failed: {}", e)))?;
 
-        let value: Value = serde_json::from_str(&result_str)
-            .map_err(|e| WeaveError::Serialization(format!(
+        let value: Value = serde_json::from_str(&result_str).map_err(|e| {
+            WeaveError::Serialization(format!(
                 "Failed to parse WASM result as JSON: {}. Result: {}",
                 e, result_str
-            )))?;
+            ))
+        })?;
 
         Ok(value)
     }
@@ -139,16 +136,16 @@ impl WasmRuntime {
     ) -> Result<i32, WeaveError> {
         let bytes = s.as_bytes();
         let len = bytes.len() as i32;
-        let ptr = allocate.call(&mut *store, len).map_err(|e| {
-            WeaveError::WasmAbiError {
+        let ptr = allocate
+            .call(&mut *store, len)
+            .map_err(|e| WeaveError::WasmAbiError {
                 detail: format!("allocate call failed: {}", e),
-            }
-        })?;
-        memory.write(store, ptr as usize, bytes).map_err(|e| {
-            WeaveError::WasmAbiError {
+            })?;
+        memory
+            .write(store, ptr as usize, bytes)
+            .map_err(|e| WeaveError::WasmAbiError {
                 detail: format!("memory write failed: {}", e),
-            }
-        })?;
+            })?;
         Ok(ptr)
     }
 
@@ -161,21 +158,19 @@ impl WasmRuntime {
         let mut offset = ptr as usize;
         loop {
             let mut buf = [0u8; 1];
-            memory.read(store, offset, &mut buf).map_err(|e| {
-                WeaveError::WasmAbiError {
+            memory
+                .read(store, offset, &mut buf)
+                .map_err(|e| WeaveError::WasmAbiError {
                     detail: format!("memory read failed: {}", e),
-                }
-            })?;
+                })?;
             if buf[0] == 0 {
                 break;
             }
             bytes.push(buf[0]);
             offset += 1;
         }
-        String::from_utf8(bytes).map_err(|e| {
-            WeaveError::WasmAbiError {
-                detail: format!("invalid UTF-8 in WASM result: {}", e),
-            }
+        String::from_utf8(bytes).map_err(|e| WeaveError::WasmAbiError {
+            detail: format!("invalid UTF-8 in WASM result: {}", e),
         })
     }
 }

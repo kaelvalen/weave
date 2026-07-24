@@ -44,7 +44,7 @@ interface LocalServerStatus {
   message: string;
 }
 
-export function LocalModels() {
+export function RuntimeView() {
   const [models, setModels] = useState<LocalModelInfo[]>([]);
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [modelDetails, setModelDetails] = useState<Record<string, LocalModelDetails>>({});
@@ -187,6 +187,7 @@ export function LocalModels() {
       clearInterval(modelStatsInterval);
       unlisten.then((f) => f());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDownload = async () => {
@@ -491,20 +492,22 @@ export function LocalModels() {
               </span>
             </div>
             <div className="p-6 space-y-6">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-muted-foreground font-medium">RAM Usage</span>
-                  <span className="font-mono text-xs">
-                    {formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}
-                  </span>
+              {stats && (
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground font-medium">RAM Usage</span>
+                    <span className="font-mono text-xs">
+                      {formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary/80 transition-all duration-500"
+                      style={{ width: `${(stats.ram_usage / stats.ram_total) * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary/80 transition-all duration-500"
-                    style={{ width: `${(stats.ram_usage / stats.ram_total) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
+              )}
 
               <div className="pt-6 border-t">
                 <h4 className="text-sm font-semibold mb-4">Active Server</h4>

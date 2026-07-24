@@ -1,5 +1,13 @@
-import { useMemo } from 'react';
-import { useRuntimeStore } from '@/stores/useRuntimeStore';
+
+import {
+  useRuntimeStore,
+  stepsForGoal,
+  planForGoal,
+  artifactsForGoal,
+  memoryUpdatesForGoal,
+  goalStats,
+  type GoalStats,
+} from '@/stores/useRuntimeStore';
 import type { ExecutionStep, PlannedStep, RuntimeEvent } from '@/types/runtime';
 
 /**
@@ -120,34 +128,43 @@ export function deriveArtifactsForGoal(events: RuntimeEvent[], goalId: string): 
 
 export function useStepsForGoal(goalId: string): ExecutionStep[] {
   const events = useRuntimeStore((s) => s.events);
-  return useMemo(() => {
-    const helper = storeHelpers().stepsForGoal;
-    if (typeof helper === 'function') return helper(goalId);
-    return deriveStepsForGoal(events, goalId);
-  }, [events, goalId]);
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
+  const helper = storeHelpers().stepsForGoal;
+  if (typeof helper === 'function') return helper(goalId);
+  return stepsForGoal({ events, loadedTraceEvents }, goalId);
 }
 
 export function usePlanForGoal(goalId: string): PlannedStep[] | null {
   const events = useRuntimeStore((s) => s.events);
-  return useMemo(() => {
-    const helper = storeHelpers().planForGoal;
-    if (typeof helper === 'function') return helper(goalId);
-    return derivePlanForGoal(events, goalId);
-  }, [events, goalId]);
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
+  const helper = storeHelpers().planForGoal;
+  if (typeof helper === 'function') return helper(goalId);
+  return planForGoal({ events, loadedTraceEvents }, goalId);
 }
 
 export function useArtifactsForGoals(goalIds: string[]): EventArtifact[] {
   const events = useRuntimeStore((s) => s.events);
-  return useMemo(() => {
-    const helper = storeHelpers().artifactsForGoal;
-    const out: EventArtifact[] = [];
-    for (const goalId of goalIds) {
-      if (typeof helper === 'function') {
-        out.push(...helper(goalId));
-      } else {
-        out.push(...deriveArtifactsForGoal(events, goalId));
-      }
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
+  const helper = storeHelpers().artifactsForGoal;
+  const out: EventArtifact[] = [];
+  for (const goalId of goalIds) {
+    if (typeof helper === 'function') {
+      out.push(...helper(goalId));
+    } else {
+      out.push(...artifactsForGoal({ events, loadedTraceEvents }, goalId));
     }
-    return out;
-  }, [events, goalIds]);
+  }
+  return out;
+}
+
+export function useGoalStats(goalId: string): GoalStats {
+  const events = useRuntimeStore((s) => s.events);
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
+  return goalStats({ events, loadedTraceEvents }, goalId);
+}
+
+export function useMemoryUpdatesForGoal(goalId: string) {
+  const events = useRuntimeStore((s) => s.events);
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
+  return memoryUpdatesForGoal({ events, loadedTraceEvents }, goalId);
 }

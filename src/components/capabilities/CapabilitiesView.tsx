@@ -95,11 +95,12 @@ export function CapabilitiesView() {
   const grouped = useMemo(() => {
     const map = new Map<string, CapabilityRow[]>();
     for (const row of filtered) {
-      const list = map.get(row.plugin.id);
+      const type = row.name.split('.')[0] || row.plugin.id;
+      const list = map.get(type);
       if (list) {
         list.push(row);
       } else {
-        map.set(row.plugin.id, [row]);
+        map.set(type, [row]);
       }
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -178,22 +179,13 @@ export function CapabilitiesView() {
             </div>
           ) : (
             <div className="p-2 flex flex-col gap-3">
-              {grouped.map(([pluginId, caps]) => {
-                const plugin = caps[0].plugin;
-                const isLoaded = loadedPlugins.includes(pluginId);
+              {grouped.map(([type, caps]) => {
                 return (
-                  <div key={pluginId} className="flex flex-col gap-0.5">
+                  <div key={type} className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2 px-2 py-1 font-mono">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        {plugin.name}
+                        {type}
                       </span>
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isLoaded ? 'bg-emerald-500' : 'bg-muted-foreground/40'
-                        }`}
-                        title={isLoaded ? 'loaded' : 'not loaded'}
-                      />
-                      <span className="text-[10px] text-muted-foreground/60">{pluginId}</span>
                     </div>
                     {caps.map((row) => (
                       <button

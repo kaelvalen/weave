@@ -18,7 +18,12 @@ pub struct Artifact<T> {
 }
 
 impl<T> Artifact<T> {
-    pub fn new(artifact_type: &str, version: ArtifactVersion, source_node: &str, payload: T) -> Self {
+    pub fn new(
+        artifact_type: &str,
+        version: ArtifactVersion,
+        source_node: &str,
+        payload: T,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             artifact_type: artifact_type.to_string(),

@@ -1,9 +1,9 @@
+use super::security::{resolve_path, validate_read_access};
+use crate::utils::errors::WeaveError;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use crate::utils::errors::WeaveError;
-use super::security::{resolve_path, validate_read_access};
 
 pub fn parse_test_results(stdout: &str, framework: &str) -> (Option<u32>, Option<u32>) {
     let stdout_lower = stdout.to_lowercase();
@@ -24,7 +24,7 @@ pub fn parse_test_results(stdout: &str, framework: &str) -> (Option<u32>, Option
             // Also handle singular/plural and only passed/failed listed
             let re_passed = Regex::new(r"\b(\d+)\s+passed\b").unwrap();
             let re_failed = Regex::new(r"\b(\d+)\s+failed\b").unwrap();
-            
+
             if let Some(caps) = re_passed.captures(&stdout_lower) {
                 passed = caps.get(1).and_then(|m| m.as_str().parse::<u32>().ok());
             }
@@ -72,23 +72,33 @@ pub fn parse_test_results(stdout: &str, framework: &str) -> (Option<u32>, Option
 }
 
 pub fn extract_symbols(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    
+
     let raw_path = resolve_path(path_str)?;
     let path = validate_read_access(&raw_path)?;
 
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
     let file = File::open(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
     let reader = BufReader::new(file);
 
     // Prepare compiled Regexes for speed
-    let re_rust_fn = Regex::new(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_rust_fn =
+        Regex::new(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_rust_struct = Regex::new(r"^\s*(?:pub\s+)?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_rust_enum = Regex::new(r"^\s*(?:pub\s+)?enum\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_rust_trait = Regex::new(r"^\s*(?:pub\s+)?trait\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
@@ -97,9 +107,11 @@ pub fn extract_symbols(params: Value) -> Result<Value, WeaveError> {
     let re_py_fn = Regex::new(r"^\s*def\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_py_class = Regex::new(r"^\s*class\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
 
-    let re_js_fn = Regex::new(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_js_fn =
+        Regex::new(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_js_class = Regex::new(r"^\s*(?:export\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-    let re_js_interface = Regex::new(r"^\s*(?:export\s+)?interface\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_js_interface =
+        Regex::new(r"^\s*(?:export\s+)?interface\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_js_type = Regex::new(r"^\s*(?:export\s+)?type\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
 
     let re_go_fn = Regex::new(r"^\s*func\s+(?:\([^)]+\)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
@@ -111,17 +123,23 @@ pub fn extract_symbols(params: Value) -> Result<Value, WeaveError> {
 
     for line_result in reader.lines() {
         let line = line_result.map_err(|e| WeaveError::Io(e.to_string()))?;
-        
+
         match ext.as_str() {
             "rs" => {
                 if let Some(caps) = re_rust_fn.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "function", "line": line_num }));
                 } else if let Some(caps) = re_rust_struct.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "struct", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "struct", "line": line_num }),
+                    );
                 } else if let Some(caps) = re_rust_enum.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "enum", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "enum", "line": line_num }),
+                    );
                 } else if let Some(caps) = re_rust_trait.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "trait", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "trait", "line": line_num }),
+                    );
                 } else if let Some(caps) = re_rust_impl.captures(&line) {
                     symbols.push(json!({ "name": format!("impl {}", &caps[1]), "kind": "impl", "line": line_num }));
                 }
@@ -130,25 +148,33 @@ pub fn extract_symbols(params: Value) -> Result<Value, WeaveError> {
                 if let Some(caps) = re_py_fn.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "function", "line": line_num }));
                 } else if let Some(caps) = re_py_class.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "class", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "class", "line": line_num }),
+                    );
                 }
             }
             "js" | "jsx" | "ts" | "tsx" => {
                 if let Some(caps) = re_js_fn.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "function", "line": line_num }));
                 } else if let Some(caps) = re_js_class.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "class", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "class", "line": line_num }),
+                    );
                 } else if let Some(caps) = re_js_interface.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "interface", "line": line_num }));
                 } else if let Some(caps) = re_js_type.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "type", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "type", "line": line_num }),
+                    );
                 }
             }
             "go" => {
                 if let Some(caps) = re_go_fn.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "function", "line": line_num }));
                 } else if let Some(caps) = re_go_struct.captures(&line) {
-                    symbols.push(json!({ "name": caps[1].to_string(), "kind": "struct", "line": line_num }));
+                    symbols.push(
+                        json!({ "name": caps[1].to_string(), "kind": "struct", "line": line_num }),
+                    );
                 } else if let Some(caps) = re_go_interface.captures(&line) {
                     symbols.push(json!({ "name": caps[1].to_string(), "kind": "interface", "line": line_num }));
                 }

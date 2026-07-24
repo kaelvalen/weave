@@ -1,11 +1,16 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Trait that all plugin executors must implement.
 /// This provides a unified dispatch interface for both built-in and external plugins.
 pub trait PluginExecutor: Send + Sync {
-    fn execute(&self, capability: &str, params: serde_json::Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<serde_json::Value, crate::utils::errors::WeaveError>;
+    fn execute(
+        &self,
+        capability: &str,
+        params: serde_json::Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<serde_json::Value, crate::utils::errors::WeaveError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,8 +202,14 @@ impl PluginBuilder {
     /// Register a capability with its schema and description.
     pub fn capability(mut self, name: &str, schema: &str, desc: &str) -> Self {
         self.plugin.capabilities.provide.push(name.to_string());
-        self.plugin.capabilities.schemas.insert(name.to_string(), schema.to_string());
-        self.plugin.capabilities.descriptions.insert(name.to_string(), desc.to_string());
+        self.plugin
+            .capabilities
+            .schemas
+            .insert(name.to_string(), schema.to_string());
+        self.plugin
+            .capabilities
+            .descriptions
+            .insert(name.to_string(), desc.to_string());
         self
     }
 

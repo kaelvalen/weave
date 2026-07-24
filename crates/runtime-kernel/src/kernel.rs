@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::execution_context::ExecutionContext;
 use crate::subsystem::KernelSubsystem;
+use std::sync::Arc;
 
 pub struct Kernel {
     subsystems: Vec<Arc<dyn KernelSubsystem>>,

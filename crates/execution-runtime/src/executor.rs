@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use runtime_kernel::execution_context::ExecutionContext;
 use crate::execution_graph::ExecutionGraph;
-use crate::worker_pool::WorkerPool;
 use crate::retry_policy::RetryPolicy;
+use crate::worker_pool::WorkerPool;
+use runtime_kernel::execution_context::ExecutionContext;
+use std::sync::Arc;
 
 pub struct Executor {
     graph: Arc<ExecutionGraph>,
@@ -30,11 +30,17 @@ impl Executor {
             match next_node {
                 Some(node_id) => {
                     // Acquire permit and spawn task
-                    let _permit = self.worker_pool.acquire().await.map_err(|e| e.to_string())?;
+                    let _permit = self
+                        .worker_pool
+                        .acquire()
+                        .await
+                        .map_err(|e| e.to_string())?;
                     // Simulate execution for now
-                    self.graph.set_state(&node_id, crate::node_state::NodeState::Running);
+                    self.graph
+                        .set_state(&node_id, crate::node_state::NodeState::Running);
                     // ... execution logic ...
-                    self.graph.set_state(&node_id, crate::node_state::NodeState::Completed);
+                    self.graph
+                        .set_state(&node_id, crate::node_state::NodeState::Completed);
                 }
                 None => {
                     // Check if all nodes are completed

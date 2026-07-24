@@ -8,13 +8,22 @@ use crate::utils::errors::WeaveError;
 pub struct SqlitePlugin;
 
 impl PluginExecutor for SqlitePlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         SqlitePlugin::execute(capability, params, ctx)
     }
 }
 
 impl SqlitePlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "db.query" => Self::query(params),
             "db.execute" => Self::execute_statement(params),
@@ -24,12 +33,14 @@ impl SqlitePlugin {
     }
 
     fn query(params: Value) -> Result<Value, WeaveError> {
-        let db_path = params.get("db_path")
+        let db_path = params
+            .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
 
         // Accept both "query" and "sql" parameter names
-        let query = params.get("query")
+        let query = params
+            .get("query")
             .or_else(|| params.get("sql"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'query' parameter".to_string()))?;
@@ -41,12 +52,20 @@ impl SqlitePlugin {
             .arg(db_path)
             .arg(query)
             .output()
-            .map_err(|e| WeaveError::PluginError(format!("Failed to execute sqlite3 CLI: {}. Make sure sqlite3 is installed.", e)))?;
+            .map_err(|e| {
+                WeaveError::PluginError(format!(
+                    "Failed to execute sqlite3 CLI: {}. Make sure sqlite3 is installed.",
+                    e
+                ))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             warn!("Query failed: {}", stderr);
-            return Err(WeaveError::PluginError(format!("SQL Error: {}", stderr.trim())));
+            return Err(WeaveError::PluginError(format!(
+                "SQL Error: {}",
+                stderr.trim()
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -67,16 +86,20 @@ impl SqlitePlugin {
     }
 
     fn execute_statement(params: Value) -> Result<Value, WeaveError> {
-        let db_path = params.get("db_path")
+        let db_path = params
+            .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
 
         // Accept "statement", "query", or "sql"
-        let statement = params.get("statement")
+        let statement = params
+            .get("statement")
             .or_else(|| params.get("query"))
             .or_else(|| params.get("sql"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| WeaveError::PluginError("Missing 'statement' (or 'query') parameter".to_string()))?;
+            .ok_or_else(|| {
+                WeaveError::PluginError("Missing 'statement' (or 'query') parameter".to_string())
+            })?;
 
         info!("Executing SQL Statement on {}: {}", db_path, statement);
 
@@ -84,12 +107,17 @@ impl SqlitePlugin {
             .arg(db_path)
             .arg(statement)
             .output()
-            .map_err(|e| WeaveError::PluginError(format!("Failed to execute sqlite3 CLI: {}", e)))?;
+            .map_err(|e| {
+                WeaveError::PluginError(format!("Failed to execute sqlite3 CLI: {}", e))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             warn!("Statement failed: {}", stderr);
-            return Err(WeaveError::PluginError(format!("SQL Error: {}", stderr.trim())));
+            return Err(WeaveError::PluginError(format!(
+                "SQL Error: {}",
+                stderr.trim()
+            )));
         }
 
         Ok(json!({
@@ -100,7 +128,8 @@ impl SqlitePlugin {
     }
 
     fn list_tables(params: Value) -> Result<Value, WeaveError> {
-        let db_path = params.get("db_path")
+        let db_path = params
+            .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
 
@@ -115,7 +144,10 @@ impl SqlitePlugin {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(WeaveError::PluginError(format!("SQL Error: {}", stderr.trim())));
+            return Err(WeaveError::PluginError(format!(
+                "SQL Error: {}",
+                stderr.trim()
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);

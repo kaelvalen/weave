@@ -12,7 +12,9 @@ impl WorkerPool {
         }
     }
 
-    pub async fn acquire(&self) -> Result<tokio::sync::SemaphorePermit<'_>, tokio::sync::AcquireError> {
+    pub async fn acquire(
+        &self,
+    ) -> Result<tokio::sync::SemaphorePermit<'_>, tokio::sync::AcquireError> {
         self.semaphore.acquire().await
     }
 }

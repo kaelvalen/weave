@@ -1,8 +1,8 @@
+use crate::models::chat::ChatMessage;
+use crate::traits::{ChatModel, EmbeddingModel};
+use crate::utils::errors::WeaveError;
 use reqwest::Client;
 use serde_json::json;
-use crate::traits::{ChatModel, EmbeddingModel};
-use crate::models::chat::ChatMessage;
-use crate::utils::errors::WeaveError;
 
 pub struct OpenAIProvider {
     client: Client,
@@ -58,7 +58,10 @@ impl ChatModel for OpenAIProvider {
             .map_err(|e| WeaveError::AiError(format!("OpenAI JSON decode error: {}", e)))?;
 
         if let Some(error) = res_json.get("error") {
-            return Err(WeaveError::AiError(format!("OpenAI API error: {:?}", error)));
+            return Err(WeaveError::AiError(format!(
+                "OpenAI API error: {:?}",
+                error
+            )));
         }
 
         let content = res_json["choices"][0]["message"]["content"]
@@ -104,10 +107,15 @@ impl EmbeddingModel for OpenAIProvider {
 
         let embedding_val = &res_json["data"][0]["embedding"];
         if let Some(arr) = embedding_val.as_array() {
-            let vec: Vec<f32> = arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect();
+            let vec: Vec<f32> = arr
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
             Ok(vec)
         } else {
-            Err(WeaveError::AiError("Invalid embedding response format".into()))
+            Err(WeaveError::AiError(
+                "Invalid embedding response format".into(),
+            ))
         }
     }
 }

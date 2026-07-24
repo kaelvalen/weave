@@ -12,6 +12,17 @@ import { toast } from 'sonner';
 
 const MEMORY_PLUGIN = 'com.weave.builtin.memory';
 
+function getMemoryCategory(entry: MemoryEvent): 'Working' | 'Episodic' | 'Procedural' | 'Semantic' {
+  const t = entry.tags.map((tag) => tag.toLowerCase());
+  const k = entry.key.toLowerCase();
+  
+  if (t.includes('working') || t.includes('context') || k.includes('current') || k.includes('active')) return 'Working';
+  if (t.includes('procedural') || t.includes('rule') || t.includes('instruction') || k.includes('rule') || k.includes('instruction') || k.includes('directive') || t.includes('manual')) return 'Procedural';
+  if (t.includes('episodic') || t.includes('event') || t.includes('history') || k.includes('event') || k.includes('log') || k.startsWith('run_')) return 'Episodic';
+  
+  return 'Semantic';
+}
+
 function formatTs(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
@@ -120,6 +131,19 @@ export function MemoryView() {
         m.tags.some((t) => t.toLowerCase().includes(q))
     );
   }, [entries, query]);
+
+  const groupedMemory = useMemo(() => {
+    const groups: Record<string, MemoryEvent[]> = {
+      Semantic: [],
+      Procedural: [],
+      Episodic: [],
+      Working: [],
+    };
+    for (const m of filtered) {
+      groups[getMemoryCategory(m)].push(m);
+    }
+    return Object.entries(groups).filter(([, list]) => list.length > 0);
+  }, [filtered]);
 
   const handleTeach = async () => {
     const key = teachKey
@@ -323,96 +347,106 @@ export function MemoryView() {
                   </p>
                 </div>
               ) : (
-                filtered.map((entry) => (
-                  <div
-                    key={entry.key}
-                    className="rounded border border-border bg-card p-3 flex flex-col gap-2"
-                  >
-                    <div className="flex items-center gap-2 font-mono min-w-0">
-                      <span className="text-xs font-semibold text-foreground truncate">
-                        {entry.key}
+                groupedMemory.map(([category, items]) => (
+                  <div key={category} className="flex flex-col gap-2 mt-4 first:mt-0">
+                    <div className="flex items-center gap-2 font-mono px-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        {category} Memory
                       </span>
-                      <span className="px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground flex-shrink-0">
-                        {entry.source}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded border text-[10px] flex-shrink-0 ${
-                          entry.confidence >= 0.8
-                            ? 'border-emerald-500/30 text-emerald-500'
-                            : 'border-amber-500/30 text-amber-500'
-                        }`}
-                      >
-                        {Math.round(entry.confidence * 100)}%
-                      </span>
-                      {entry.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground/70 flex-shrink-0"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                      <span className="text-[10px] text-muted-foreground/60 truncate ml-auto flex-shrink-0">
-                        {formatTs(entry.timestamp)}
-                      </span>
-                      {editingKey !== entry.key && (
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingKey(entry.key);
-                              setEditContent(entry.content);
-                            }}
-                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                            title="Edit entry"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPendingDelete(entry)}
-                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Delete entry"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
+                      <span className="text-[10px] text-muted-foreground/60">{items.length} items</span>
                     </div>
-
-                    {editingKey === entry.key ? (
-                      <div className="flex flex-col gap-1.5">
-                        <Textarea
-                          value={editContent}
-                          onChange={(e) => setEditContent(e.target.value)}
-                          className="text-xs font-mono bg-background border-border min-h-20"
-                          autoFocus
-                        />
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setEditingKey(null)}
-                            className="flex items-center gap-1 px-2 h-6 rounded border border-border font-mono text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    {items.map((entry) => (
+                      <div
+                        key={entry.key}
+                        className="rounded border border-border bg-card p-3 flex flex-col gap-2"
+                      >
+                        <div className="flex items-center gap-2 font-mono min-w-0">
+                          <span className="text-xs font-semibold text-foreground truncate">
+                            {entry.key}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground flex-shrink-0">
+                            {entry.source}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded border text-[10px] flex-shrink-0 ${
+                              entry.confidence >= 0.8
+                                ? 'border-emerald-500/30 text-emerald-500'
+                                : 'border-amber-500/30 text-amber-500'
+                            }`}
                           >
-                            <X className="w-3 h-3" />
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveEdit(entry)}
-                            disabled={!editContent.trim()}
-                            className="flex items-center gap-1 px-2 h-6 rounded border border-emerald-500/30 font-mono text-[11px] text-emerald-500 hover:bg-emerald-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                          >
-                            <Check className="w-3 h-3" />
-                            Save
-                          </button>
+                            {Math.round(entry.confidence * 100)}%
+                          </span>
+                          {entry.tags.map((t) => (
+                            <span
+                              key={t}
+                              className="px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground/70 flex-shrink-0"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          <span className="text-[10px] text-muted-foreground/60 truncate ml-auto flex-shrink-0">
+                            {formatTs(entry.timestamp)}
+                          </span>
+                          {editingKey !== entry.key && (
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingKey(entry.key);
+                                  setEditContent(entry.content);
+                                }}
+                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                                title="Edit entry"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(entry)}
+                                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Delete entry"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
+
+                        {editingKey === entry.key ? (
+                          <div className="flex flex-col gap-1.5">
+                            <Textarea
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              className="text-xs font-mono bg-background border-border min-h-20"
+                              autoFocus
+                            />
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setEditingKey(null)}
+                                className="flex items-center gap-1 px-2 h-6 rounded border border-border font-mono text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(entry)}
+                                disabled={!editContent.trim()}
+                                className="flex items-center gap-1 px-2 h-6 rounded border border-emerald-500/30 font-mono text-[11px] text-emerald-500 hover:bg-emerald-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                              >
+                                <Check className="w-3 h-3" />
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="font-mono text-[11px] text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
+                            {entry.content}
+                          </p>
+                        )}
                       </div>
-                    ) : (
-                      <p className="font-mono text-[11px] text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
-                        {entry.content}
-                      </p>
-                    )}
+                    ))}
                   </div>
                 ))
               )}

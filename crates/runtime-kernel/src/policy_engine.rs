@@ -1,5 +1,5 @@
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PolicyDecision {
@@ -93,18 +93,33 @@ impl PolicyEngine {
         }
 
         let first_word = trimmed.split_whitespace().next().unwrap_or("");
-        if self.policy.command_allowlist.iter().any(|cmd| cmd == first_word) {
+        if self
+            .policy
+            .command_allowlist
+            .iter()
+            .any(|cmd| cmd == first_word)
+        {
             PolicyDecision::Allow
         } else {
             PolicyDecision::RequiresConfirmation {
-                reason: format!("Command '{}' is not in the automatic execution allowlist", first_word),
+                reason: format!(
+                    "Command '{}' is not in the automatic execution allowlist",
+                    first_word
+                ),
             }
         }
     }
 
     pub fn check_network_domain(&self, domain: &str) -> PolicyDecision {
-        if self.policy.allowed_network_domains.contains(&"*".to_string())
-            || self.policy.allowed_network_domains.iter().any(|d| d == domain)
+        if self
+            .policy
+            .allowed_network_domains
+            .contains(&"*".to_string())
+            || self
+                .policy
+                .allowed_network_domains
+                .iter()
+                .any(|d| d == domain)
         {
             PolicyDecision::Allow
         } else {
@@ -130,7 +145,11 @@ impl PolicyEngine {
     pub fn check_failure_streak(&self, tool_id: &str, failure_rate: f64) -> PolicyDecision {
         if failure_rate >= 0.8 {
             PolicyDecision::Deny {
-                reason: format!("Capability '{}' blocked due to excessive failure rate ({:.0}%)", tool_id, failure_rate * 100.0),
+                reason: format!(
+                    "Capability '{}' blocked due to excessive failure rate ({:.0}%)",
+                    tool_id,
+                    failure_rate * 100.0
+                ),
             }
         } else {
             PolicyDecision::Allow

@@ -1,9 +1,9 @@
+use crate::errors::KernelError;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use serde_json::{json, Value};
 use wait_timeout::ChildExt;
-use crate::errors::KernelError;
 
 pub struct SandboxShell {
     pub cwd: PathBuf,
@@ -45,7 +45,10 @@ impl SandboxShell {
         })?;
 
         let timeout = Duration::from_secs(self.timeout_secs);
-        match child.wait_timeout(timeout).map_err(|e| KernelError::PluginError(format!("Timeout error: {}", e)))? {
+        match child
+            .wait_timeout(timeout)
+            .map_err(|e| KernelError::PluginError(format!("Timeout error: {}", e)))?
+        {
             Some(status) => {
                 let duration = start.elapsed().as_millis();
 
@@ -54,11 +57,15 @@ impl SandboxShell {
 
                 if let Some(out) = child.stdout.as_mut() {
                     use std::io::Read;
-                    let _ = out.take(self.max_output_bytes as u64).read_to_end(&mut stdout_buf);
+                    let _ = out
+                        .take(self.max_output_bytes as u64)
+                        .read_to_end(&mut stdout_buf);
                 }
                 if let Some(err) = child.stderr.as_mut() {
                     use std::io::Read;
-                    let _ = err.take(self.max_output_bytes as u64).read_to_end(&mut stderr_buf);
+                    let _ = err
+                        .take(self.max_output_bytes as u64)
+                        .read_to_end(&mut stderr_buf);
                 }
 
                 let stdout_str = String::from_utf8_lossy(&stdout_buf).to_string();
@@ -89,15 +96,22 @@ impl SandboxShell {
 pub struct PermissionEnforcer;
 
 impl PermissionEnforcer {
-    pub fn enforce_process_allowlist(binary: &str, allowlist: &[String]) -> Result<(), KernelError> {
+    pub fn enforce_process_allowlist(
+        binary: &str,
+        allowlist: &[String],
+    ) -> Result<(), KernelError> {
         if allowlist.is_empty() {
             return Ok(());
         }
-        if allowlist.iter().any(|allowed| allowed == binary || binary.ends_with(allowed)) {
+        if allowlist
+            .iter()
+            .any(|allowed| allowed == binary || binary.ends_with(allowed))
+        {
             Ok(())
         } else {
             Err(KernelError::PermissionDenied(format!(
-                "Process '{}' is not in execution allowlist", binary
+                "Process '{}' is not in execution allowlist",
+                binary
             )))
         }
     }

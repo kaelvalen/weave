@@ -98,10 +98,7 @@ mod tests {
             back.params,
             Some(serde_json::json!({"path": "/tmp/out.txt", "limit": 10}))
         );
-        assert_eq!(
-            back.output,
-            Some(serde_json::json!({"bytes_written": 128}))
-        );
+        assert_eq!(back.output, Some(serde_json::json!({"bytes_written": 128})));
         assert_eq!(back.error.as_deref(), Some("boom"));
         assert_eq!(back.ts, event.ts);
     }

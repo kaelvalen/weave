@@ -1,16 +1,16 @@
 use serde_json::{json, Value};
 use std::fs;
 
-use regex::Regex;
-use ignore::WalkBuilder;
-use crate::utils::errors::WeaveError;
-use super::security::{resolve_path, validate_read_access, validate_write_access};
-use super::process::{execute_subprocess, ExecSpec};
-use super::project_detector::{detect_check_command, detect_test_command};
 use super::filesystem;
-use super::patch;
 use super::history;
 use super::parser;
+use super::patch;
+use super::process::{execute_subprocess, ExecSpec};
+use super::project_detector::{detect_check_command, detect_test_command};
+use super::security::{resolve_path, validate_read_access, validate_write_access};
+use crate::utils::errors::WeaveError;
+use ignore::WalkBuilder;
+use regex::Regex;
 
 pub fn route_capability(capability: &str, params: Value) -> Result<Value, WeaveError> {
     match capability {
@@ -41,38 +41,57 @@ pub fn route_capability(capability: &str, params: Value) -> Result<Value, WeaveE
 }
 
 fn run_check(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
-    
+
     let spec = detect_check_command(&path)?;
     execute_subprocess(spec, path, 60, false, None)
 }
 
 fn run_tests(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let filter_val = params.get("filter").and_then(|v| v.as_str());
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
-    
+
     let (spec, framework) = detect_test_command(&path, filter_val)?;
     execute_subprocess(spec, path, 120, true, Some(framework))
 }
 
 fn list_dir(params: Value) -> Result<Value, WeaveError> {
     let path_str = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-    let max_depth = params.get("depth").and_then(|v| v.as_u64()).unwrap_or(2).clamp(1, 5) as usize;
-    let show_hidden = params.get("show_hidden").and_then(|v| v.as_bool()).unwrap_or(false);
+    let max_depth = params
+        .get("depth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(2)
+        .clamp(1, 5) as usize;
+    let show_hidden = params
+        .get("show_hidden")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_read_access(&raw_path)?;
 
     if !path.exists() || !path.is_dir() {
-        return Err(WeaveError::PluginError(format!("Directory not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "Directory not found: {}",
+            path.display()
+        )));
     }
 
     let mut tree_str = String::new();
-    tree_str.push_str(&format!("{}/\n", path.file_name().unwrap_or_default().to_string_lossy()));
+    tree_str.push_str(&format!(
+        "{}/\n",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    ));
 
     let walker = WalkBuilder::new(&path)
         .hidden(!show_hidden)
@@ -89,12 +108,21 @@ fn list_dir(params: Value) -> Result<Value, WeaveError> {
             }
             if let Ok(rel_path) = entry_path.strip_prefix(&path) {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name == "node_modules" || name == "target" || name == ".git" || name == "__pycache__" || name == "dist" || name == ".venv" {
+                if name == "node_modules"
+                    || name == "target"
+                    || name == ".git"
+                    || name == "__pycache__"
+                    || name == "dist"
+                    || name == ".venv"
+                {
                     continue;
                 }
                 let depth = rel_path.components().count();
                 if depth <= max_depth {
-                    entries.push((rel_path.to_path_buf(), entry.file_type().map(|t| t.is_dir()).unwrap_or(false)));
+                    entries.push((
+                        rel_path.to_path_buf(),
+                        entry.file_type().map(|t| t.is_dir()).unwrap_or(false),
+                    ));
                 }
             }
         }
@@ -122,9 +150,14 @@ fn list_dir(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn search(params: Value) -> Result<Value, WeaveError> {
-    let query = params.get("query").and_then(|v| v.as_str())
+    let query = params
+        .get("query")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'query' parameter".to_string()))?;
-    let dir_str = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir_str = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
 
     let raw_path = resolve_path(dir_str)?;
     let path = validate_read_access(&raw_path)?;
@@ -169,9 +202,14 @@ fn search(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn find_references(params: Value) -> Result<Value, WeaveError> {
-    let symbol = params.get("symbol").and_then(|v| v.as_str())
+    let symbol = params
+        .get("symbol")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'symbol' parameter".to_string()))?;
-    let dir_str = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir_str = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
 
     let raw_path = resolve_path(dir_str)?;
     let path = validate_read_access(&raw_path)?;
@@ -220,18 +258,27 @@ fn find_references(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn rename_symbol(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    let old_name = params.get("old_name").and_then(|v| v.as_str())
+    let old_name = params
+        .get("old_name")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'old_name' parameter".to_string()))?;
-    let new_name = params.get("new_name").and_then(|v| v.as_str())
+    let new_name = params
+        .get("new_name")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'new_name' parameter".to_string()))?;
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
 
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
     let content = fs::read_to_string(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
@@ -240,7 +287,10 @@ fn rename_symbol(params: Value) -> Result<Value, WeaveError> {
         .map_err(|e| WeaveError::PluginError(format!("Invalid old name regex: {}", e)))?;
 
     if !re.is_match(&content) {
-        return Err(WeaveError::PluginError(format!("Symbol '{}' not found in file", old_name)));
+        return Err(WeaveError::PluginError(format!(
+            "Symbol '{}' not found in file",
+            old_name
+        )));
     }
 
     history::create_backup(&path)?;
@@ -255,7 +305,10 @@ fn rename_symbol(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn git_status(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
 
@@ -267,7 +320,10 @@ fn git_status(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn git_diff(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
 
@@ -279,8 +335,13 @@ fn git_diff(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn git_commit(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
-    let message = params.get("message").and_then(|v| v.as_str())
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
+    let message = params
+        .get("message")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing commit 'message' parameter".to_string()))?;
 
     let raw_path = resolve_path(dir)?;
@@ -294,7 +355,10 @@ fn git_commit(params: Value) -> Result<Value, WeaveError> {
 }
 
 fn format_code(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_write_access(&raw_path)?;
 
@@ -306,7 +370,11 @@ fn format_code(params: Value) -> Result<Value, WeaveError> {
     } else if path.join("package.json").exists() {
         ExecSpec {
             binary: "npx".to_string(),
-            args: vec!["prettier".to_string(), "--write".to_string(), ".".to_string()],
+            args: vec![
+                "prettier".to_string(),
+                "--write".to_string(),
+                ".".to_string(),
+            ],
         }
     } else if path.join("go.mod").exists() {
         ExecSpec {
@@ -314,21 +382,31 @@ fn format_code(params: Value) -> Result<Value, WeaveError> {
             args: vec!["fmt".to_string(), "./...".to_string()],
         }
     } else {
-        return Err(WeaveError::PluginError("No supported formatter found for project type".to_string()));
+        return Err(WeaveError::PluginError(
+            "No supported formatter found for project type".to_string(),
+        ));
     };
 
     execute_subprocess(spec, path, 30, false, None)
 }
 
 fn lint_code(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
 
     let spec = if path.join("Cargo.toml").exists() {
         ExecSpec {
             binary: "cargo".to_string(),
-            args: vec!["clippy".to_string(), "--".to_string(), "-D".to_string(), "warnings".to_string()],
+            args: vec![
+                "clippy".to_string(),
+                "--".to_string(),
+                "-D".to_string(),
+                "warnings".to_string(),
+            ],
         }
     } else if path.join("package.json").exists() {
         ExecSpec {
@@ -336,14 +414,19 @@ fn lint_code(params: Value) -> Result<Value, WeaveError> {
             args: vec!["eslint".to_string(), ".".to_string()],
         }
     } else {
-        return Err(WeaveError::PluginError("No supported linter found for project type".to_string()));
+        return Err(WeaveError::PluginError(
+            "No supported linter found for project type".to_string(),
+        ));
     };
 
     execute_subprocess(spec, path, 60, false, None)
 }
 
 fn list_dependencies(params: Value) -> Result<Value, WeaveError> {
-    let dir = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+    let dir = params
+        .get("directory")
+        .and_then(|v| v.as_str())
+        .unwrap_or(".");
     let raw_path = resolve_path(dir)?;
     let path = validate_read_access(&raw_path)?;
 
@@ -363,7 +446,9 @@ fn list_dependencies(params: Value) -> Result<Value, WeaveError> {
             args: vec!["list".to_string(), "-m".to_string(), "all".to_string()],
         }
     } else {
-        return Err(WeaveError::PluginError("No supported dependency viewer found for project type".to_string()));
+        return Err(WeaveError::PluginError(
+            "No supported dependency viewer found for project type".to_string(),
+        ));
     };
 
     execute_subprocess(spec, path, 30, false, None)

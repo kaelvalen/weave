@@ -1,7 +1,7 @@
 use chrono::Utc;
 use serde_json::{json, Value};
-use tracing::info;
 use std::env;
+use tracing::info;
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
@@ -9,13 +9,22 @@ use crate::utils::errors::WeaveError;
 pub struct SysPlugin;
 
 impl PluginExecutor for SysPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         SysPlugin::execute(capability, params, ctx)
     }
 }
 
 impl SysPlugin {
-    pub fn execute(capability: &str, _params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        _params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "sys.info" => Self::info(),
             "sys.time" => Self::time(),
@@ -31,7 +40,9 @@ impl SysPlugin {
         let arch = env::consts::ARCH;
         let family = env::consts::FAMILY;
         let hostname = Self::get_hostname();
-        let username = env::var("USER").or_else(|_| env::var("USERNAME")).unwrap_or_default();
+        let username = env::var("USER")
+            .or_else(|_| env::var("USERNAME"))
+            .unwrap_or_default();
 
         info!("System info requested");
 
@@ -78,7 +89,10 @@ impl SysPlugin {
 
     fn disk() -> Result<Value, WeaveError> {
         info!("Disk info requested");
-        let output = std::process::Command::new("df").arg("-h").arg("--output=source,size,used,avail,pcent,target").output();
+        let output = std::process::Command::new("df")
+            .arg("-h")
+            .arg("--output=source,size,used,avail,pcent,target")
+            .output();
         match output {
             Ok(o) if o.status.success() => {
                 let stdout = String::from_utf8_lossy(&o.stdout).to_string();
@@ -86,18 +100,22 @@ impl SysPlugin {
                 let mut disks = Vec::new();
                 for line in lines.iter().skip(1) {
                     let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 6 && !parts[0].starts_with("tmpfs") && !parts[0].starts_with("devtmpfs") {
+                    if parts.len() >= 6
+                        && !parts[0].starts_with("tmpfs")
+                        && !parts[0].starts_with("devtmpfs")
+                    {
                         disks.push(json!({"filesystem": parts[0], "size": parts[1], "used": parts[2], "available": parts[3], "use_percent": parts[4], "mount": parts[5]}));
                     }
                 }
                 Ok(json!({"disks": disks, "count": disks.len(), "success": true}))
             }
-            _ => Ok(json!({"disks": [], "error": "df command not available", "success": false}))
+            _ => Ok(json!({"disks": [], "error": "df command not available", "success": false})),
         }
     }
 
     fn get_hostname() -> String {
-        std::process::Command::new("hostname").output()
+        std::process::Command::new("hostname")
+            .output()
             .ok()
             .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())

@@ -1,10 +1,10 @@
+use crate::utils::errors::WeaveError;
+use execution_runtime::execution_registry::ExecutionRegistry;
+use runtime_kernel::execution_context::ExecutionContext;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use runtime_kernel::execution_context::ExecutionContext;
-use execution_runtime::execution_registry::ExecutionRegistry;
-use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactBinding {
@@ -50,7 +50,10 @@ impl WorkflowEngine {
         self.workflows.write().insert(wf.id.clone(), wf);
     }
 
-    pub fn parse_declarative_json(&self, json_str: &str) -> Result<DeclarativeWorkflow, WeaveError> {
+    pub fn parse_declarative_json(
+        &self,
+        json_str: &str,
+    ) -> Result<DeclarativeWorkflow, WeaveError> {
         serde_json::from_str(json_str).map_err(|e| WeaveError::WorkflowError(e.to_string()))
     }
 
@@ -62,7 +65,10 @@ impl WorkflowEngine {
         let wf = {
             let guard = self.workflows.read();
             guard.get(workflow_id).cloned().ok_or_else(|| {
-                WeaveError::WorkflowError(format!("Declarative workflow not found: {}", workflow_id))
+                WeaveError::WorkflowError(format!(
+                    "Declarative workflow not found: {}",
+                    workflow_id
+                ))
             })?
         };
 

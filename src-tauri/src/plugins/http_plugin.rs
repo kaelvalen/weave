@@ -8,13 +8,22 @@ use crate::utils::errors::WeaveError;
 pub struct HttpPlugin;
 
 impl PluginExecutor for HttpPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         HttpPlugin::execute(capability, params, ctx)
     }
 }
 
 impl HttpPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "http.request" => Self::request(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
@@ -27,19 +36,19 @@ impl HttpPlugin {
         // Use a dedicated thread with a single-threaded tokio runtime
         // instead of creating a full multi-threaded Runtime each time
         let result: Result<Value, WeaveError> = std::thread::spawn(move || {
-            let url = params.get("url")
+            let url = params
+                .get("url")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| WeaveError::PluginError("Missing 'url' parameter".to_string()))?
                 .to_string();
 
-            let method = params.get("method")
+            let method = params
+                .get("method")
                 .and_then(|v| v.as_str())
                 .unwrap_or("GET")
                 .to_uppercase();
 
-            let timeout_secs = params.get("timeout")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(30);
+            let timeout_secs = params.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30);
 
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -59,7 +68,12 @@ impl HttpPlugin {
                     "DELETE" => client.delete(&url),
                     "PATCH" => client.patch(&url),
                     "HEAD" => client.head(&url),
-                    _ => return Err(WeaveError::PluginError(format!("Unsupported HTTP method: {}", method))),
+                    _ => {
+                        return Err(WeaveError::PluginError(format!(
+                            "Unsupported HTTP method: {}",
+                            method
+                        )))
+                    }
                 };
 
                 if let Some(headers) = params.get("headers").and_then(|v| v.as_object()) {
@@ -78,19 +92,29 @@ impl HttpPlugin {
                     }
                 }
 
-                let response = req_builder.send().await.map_err(|e| WeaveError::PluginError(e.to_string()))?;
+                let response = req_builder
+                    .send()
+                    .await
+                    .map_err(|e| WeaveError::PluginError(e.to_string()))?;
                 let status = response.status().as_u16();
 
                 let mut resp_headers = HashMap::new();
                 for (k, v) in response.headers() {
-                    resp_headers.insert(k.to_string(), String::from_utf8_lossy(v.as_bytes()).to_string());
+                    resp_headers.insert(
+                        k.to_string(),
+                        String::from_utf8_lossy(v.as_bytes()).to_string(),
+                    );
                 }
 
                 let text = response.text().await.unwrap_or_default();
 
                 // Truncate very large response bodies
                 let body = if text.len() > 100_000 {
-                    format!("{}... [truncated, total {} bytes]", &text[..100_000], text.len())
+                    format!(
+                        "{}... [truncated, total {} bytes]",
+                        &text[..100_000],
+                        text.len()
+                    )
                 } else {
                     text
                 };
@@ -104,7 +128,9 @@ impl HttpPlugin {
                     "success": status >= 200 && status < 300
                 }))
             })
-        }).join().map_err(|_| WeaveError::PluginError("HTTP request thread panicked".to_string()))?;
+        })
+        .join()
+        .map_err(|_| WeaveError::PluginError("HTTP request thread panicked".to_string()))?;
 
         result
     }

@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-use serde_json::json;
-use runtime_kernel::task_graph::{TaskGraph, TaskNode, TaskStatus};
 use crate::logical_plan::LogicalPlan;
+use runtime_kernel::task_graph::{TaskGraph, TaskNode, TaskStatus};
+use serde_json::json;
+use std::collections::HashMap;
 
-pub struct PhysicalPlanner {
-}
+pub struct PhysicalPlanner {}
 
 impl PhysicalPlanner {
     pub fn new() -> Self {

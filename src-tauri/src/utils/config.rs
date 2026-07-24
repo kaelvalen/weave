@@ -153,15 +153,18 @@ impl AppConfig {
                 Ok(config) => Ok(config),
                 Err(_) => {
                     // Migrate older config: parse as generic JSON and merge missing fields with defaults
-                    let mut value: serde_json::Value = serde_json::from_str(&content)
-                        .map_err(|e| WeaveError::ConfigError(format!("Failed to parse config: {}", e)))?;
+                    let mut value: serde_json::Value =
+                        serde_json::from_str(&content).map_err(|e| {
+                            WeaveError::ConfigError(format!("Failed to parse config: {}", e))
+                        })?;
                     let default = serde_json::to_value(AppConfig::default())
                         .map_err(|e| WeaveError::Serialization(e.to_string()))?;
 
                     Self::merge_missing(&mut value, &default);
 
-                    let config: AppConfig = serde_json::from_value(value)
-                        .map_err(|e| WeaveError::ConfigError(format!("Failed to migrate config: {}", e)))?;
+                    let config: AppConfig = serde_json::from_value(value).map_err(|e| {
+                        WeaveError::ConfigError(format!("Failed to migrate config: {}", e))
+                    })?;
                     config.save()?;
                     Ok(config)
                 }
@@ -243,12 +246,12 @@ impl AppConfig {
             && !self.ai.local.enabled
         {
             return Err(WeaveError::ConfigError(
-                "At least one AI provider must be configured".to_string()
+                "At least one AI provider must be configured".to_string(),
             ));
         }
         if self.ui.font_size < 8 || self.ui.font_size > 32 {
             return Err(WeaveError::ConfigError(
-                "Font size must be between 8 and 32".to_string()
+                "Font size must be between 8 and 32".to_string(),
             ));
         }
         Ok(())

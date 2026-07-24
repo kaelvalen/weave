@@ -85,28 +85,36 @@ impl Manifest {
 
     pub fn validate(&self) -> Result<(), WeaveError> {
         if self.plugin.id.is_empty() {
-            return Err(WeaveError::InvalidManifest("Plugin ID is required".to_string()));
+            return Err(WeaveError::InvalidManifest(
+                "Plugin ID is required".to_string(),
+            ));
         }
         if self.plugin.name.is_empty() {
-            return Err(WeaveError::InvalidManifest("Plugin name is required".to_string()));
+            return Err(WeaveError::InvalidManifest(
+                "Plugin name is required".to_string(),
+            ));
         }
         if self.plugin.version.is_empty() {
-            return Err(WeaveError::InvalidManifest("Plugin version is required".to_string()));
+            return Err(WeaveError::InvalidManifest(
+                "Plugin version is required".to_string(),
+            ));
         }
-        
+
         let valid_id = regex::Regex::new(r"^[a-zA-Z0-9._-]+$")
             .map_err(|e| WeaveError::InvalidManifest(e.to_string()))?;
         if !valid_id.is_match(&self.plugin.id) {
-            return Err(WeaveError::InvalidManifest(
-                format!("Plugin ID '{}' contains invalid characters", self.plugin.id)
-            ));
+            return Err(WeaveError::InvalidManifest(format!(
+                "Plugin ID '{}' contains invalid characters",
+                self.plugin.id
+            )));
         }
 
         let valid_types = ["builtin", "wasm", "python", "nodejs"];
         if !valid_types.contains(&self.runtime.runtime_type.as_str()) {
-            return Err(WeaveError::InvalidManifest(
-                format!("Invalid runtime type: {}", self.runtime.runtime_type)
-            ));
+            return Err(WeaveError::InvalidManifest(format!(
+                "Invalid runtime type: {}",
+                self.runtime.runtime_type
+            )));
         }
 
         Ok(())

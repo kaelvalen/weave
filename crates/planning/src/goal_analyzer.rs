@@ -35,8 +35,16 @@ impl HeuristicGoalAnalyzer {
             });
         }
 
-        if lower.contains("read") || lower.contains("open") || lower.contains("show") || lower.contains("summarize") {
-            let pre = if sub_goals.is_empty() { vec![] } else { vec!["sub-1".to_string()] };
+        if lower.contains("read")
+            || lower.contains("open")
+            || lower.contains("show")
+            || lower.contains("summarize")
+        {
+            let pre = if sub_goals.is_empty() {
+                vec![]
+            } else {
+                vec!["sub-1".to_string()]
+            };
             sub_goals.push(SubGoal {
                 id: "sub-2".into(),
                 description: "Read document content or code files".into(),
@@ -46,7 +54,11 @@ impl HeuristicGoalAnalyzer {
         }
 
         if lower.contains("write") || lower.contains("save") || lower.contains("create") {
-            let pre = if sub_goals.is_empty() { vec![] } else { vec!["sub-2".to_string()] };
+            let pre = if sub_goals.is_empty() {
+                vec![]
+            } else {
+                vec!["sub-2".to_string()]
+            };
             sub_goals.push(SubGoal {
                 id: "sub-3".into(),
                 description: "Write content to disk or create notes".into(),
@@ -73,7 +85,10 @@ impl HeuristicGoalAnalyzer {
             });
         }
 
-        let primary_intent = sub_goals.first().map(|s| s.intent.clone()).unwrap_or_else(|| "read".into());
+        let primary_intent = sub_goals
+            .first()
+            .map(|s| s.intent.clone())
+            .unwrap_or_else(|| "read".into());
 
         GoalAnalysis {
             raw_goal: goal.to_string(),

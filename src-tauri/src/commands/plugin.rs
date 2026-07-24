@@ -1,10 +1,10 @@
 use tauri::State;
 use tracing::{debug, info};
 
-use crate::AppState;
 use crate::github_plugin::{GithubPluginClient, GithubRepo};
 use crate::models::plugin::Plugin;
 use crate::utils::errors::WeaveError;
+use crate::AppState;
 use runtime_kernel::runtime_event::{RuntimeEvent, RuntimeEventKind};
 
 /// Longest string value kept verbatim inside event params/output payloads.
@@ -227,6 +227,11 @@ pub async fn plugin_execute(
     start_event.params = Some(truncate_event_strings(&params));
     app_state.event_bus.publish_runtime(start_event);
 
+    let params_content_size = params
+        .get("content")
+        .and_then(|v| v.as_str())
+        .map(|s| s.len() as u64);
+
     let start = std::time::Instant::now();
     let result = app_state
         .plugin_manager
@@ -283,6 +288,24 @@ pub async fn plugin_execute(
                 event.plugin_id = Some(plugin_id.clone());
                 event.capability = Some(capability.clone());
                 event.artifact_ref = Some(artifact_ref.clone());
+
+                if let Ok(ref output) = result {
+                    let size = output
+                        .get("size_bytes")
+                        .and_then(|v| v.as_u64())
+                        .or_else(|| {
+                            output
+                                .get("content")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.len() as u64)
+                        })
+                        .or_else(|| params_content_size);
+
+                    if let Some(size) = size {
+                        event.params = Some(serde_json::json!({ "size_bytes": size }));
+                    }
+                }
+
                 app_state.event_bus.publish_runtime(event);
             }
         }

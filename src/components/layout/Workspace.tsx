@@ -5,9 +5,9 @@ import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { NotesManager } from '@/components/notes/NotesManager';
 import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
-import { LocalModels } from '@/components/models/LocalModels';
+import { RuntimeView } from '@/components/models/RuntimeView';
 import { ProfilePanel } from '@/components/profile/ProfilePanel';
-import { ExecutionView } from '@/components/execution/ExecutionView';
+
 import { CapabilitiesView } from '@/components/capabilities/CapabilitiesView';
 import { ArtifactsView } from '@/components/artifacts/ArtifactsView';
 import { MemoryView } from '@/components/memory/MemoryView';
@@ -20,8 +20,6 @@ export function Workspace() {
     switch (activeView) {
       case 'chat':
         return <ChatCommandCenter />;
-      case 'execution':
-        return <ExecutionView />;
       case 'artifacts':
         return <ArtifactsView />;
       case 'memory':
@@ -39,7 +37,7 @@ export function Workspace() {
       case 'notes':
         return <NotesManager />;
       case 'models':
-        return <LocalModels />;
+        return <RuntimeView />;
       default:
         return <FileManager />;
     }

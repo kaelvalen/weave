@@ -12,6 +12,7 @@ import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
 import { ArtifactPanel } from './ArtifactPanel';
 import { ArtifactsListPanel } from './ArtifactsListPanel';
+import { ExecutionPanel } from '@/components/execution/ExecutionPanel';
 import {
   PlusCircle,
   FolderOpen,
@@ -30,6 +31,7 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  Activity,
 } from 'lucide-react';
 import {
   Dialog,
@@ -87,7 +89,7 @@ function RuntimeStatusStrip() {
   }, []);
 
   const runningCount = useMemo(
-    () => executions.filter((e) => e.status === 'running').length,
+    () => (executions || []).filter((e) => e.status === 'running').length,
     [executions]
   );
 
@@ -141,6 +143,9 @@ export function ChatCommandCenter() {
     newName: string;
   } | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  
+  // Execution Panel State
+  const [isExecutionPanelOpen, setIsExecutionPanelOpen] = useState(false);
 
   // Main Stream Column State
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -153,6 +158,17 @@ export function ChatCommandCenter() {
     listSessions();
     useChatStore.getState().loadHistory();
   }, [listSessions]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        setIsExecutionPanelOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
 
 
@@ -435,6 +451,17 @@ export function ChatCommandCenter() {
               </button>
             </div>
 
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-2 text-[11px] font-mono border ${isExecutionPanelOpen ? 'bg-primary/10 text-primary border-primary/30' : 'text-muted-foreground border-transparent hover:border-border'}`}
+              onClick={() => setIsExecutionPanelOpen(!isExecutionPanelOpen)}
+              title="Toggle Execution Panel (Ctrl+E)"
+            >
+              <Activity className="w-3.5 h-3.5 mr-1.5" />
+              Executions
+            </Button>
+
             {isStreaming && (
               <div className="flex items-center gap-1.5 text-xs text-foreground font-mono">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -509,6 +536,29 @@ export function ChatCommandCenter() {
         <div className="flex-shrink-0">
           <ChatInput />
         </div>
+
+        {/* Bottom Drawer for ExecutionPanel */}
+        {isExecutionPanelOpen && (
+          <div className="h-[40vh] min-h-[300px] border-t border-border flex flex-col bg-card animate-in slide-in-from-bottom-2">
+            <div className="h-8 flex items-center justify-between px-3 border-b border-border/50 bg-muted/30">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Activity className="w-3 h-3" />
+                Execution Workspace
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5 h-5 text-muted-foreground hover:text-foreground"
+                onClick={() => setIsExecutionPanelOpen(false)}
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ExecutionPanel />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Column 3: Split View Artifact Panel OR Artifacts List ── */}

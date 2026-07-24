@@ -7,13 +7,22 @@ use crate::utils::errors::WeaveError;
 pub struct CalcPlugin;
 
 impl PluginExecutor for CalcPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         Self::execute(capability, params, ctx)
     }
 }
 
 impl CalcPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "calc.eval" => Self::eval(params),
             "calc.convert" => Self::convert(params),
@@ -23,14 +32,15 @@ impl CalcPlugin {
     }
 
     fn eval(params: Value) -> Result<Value, WeaveError> {
-        let expression = params.get("expression")
+        let expression = params
+            .get("expression")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'expression' parameter".to_string()))?;
-        
+
         let result = Self::evaluate_expression(expression)?;
-        
+
         info!("Calculated: {} = {}", expression, result);
-        
+
         Ok(json!({
             "expression": expression,
             "result": result,
@@ -40,18 +50,23 @@ impl CalcPlugin {
     }
 
     fn convert(params: Value) -> Result<Value, WeaveError> {
-        let value = params.get("value")
+        let value = params
+            .get("value")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| WeaveError::PluginError("Missing or invalid 'value' parameter".to_string()))?;
-        
-        let from_unit = params.get("from")
+            .ok_or_else(|| {
+                WeaveError::PluginError("Missing or invalid 'value' parameter".to_string())
+            })?;
+
+        let from_unit = params
+            .get("from")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'from' parameter".to_string()))?;
-        
-        let to_unit = params.get("to")
+
+        let to_unit = params
+            .get("to")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'to' parameter".to_string()))?;
-        
+
         let from_lower = from_unit.to_lowercase();
         let to_lower = to_unit.to_lowercase();
 
@@ -65,8 +80,11 @@ impl CalcPlugin {
             Self::convert_units(value, from_unit, to_unit)?
         };
 
-        info!("Converted: {} {} = {} {}", value, from_unit, result, to_unit);
-        
+        info!(
+            "Converted: {} {} = {} {}",
+            value, from_unit, result, to_unit
+        );
+
         Ok(json!({
             "value": value,
             "from": from_unit,
@@ -79,39 +97,45 @@ impl CalcPlugin {
 
     fn stats(params: Value) -> Result<Value, WeaveError> {
         // Accept both "values" and "numbers" as parameter names for compatibility
-        let values = params.get("values")
+        let values = params
+            .get("values")
             .or_else(|| params.get("numbers"))
             .and_then(|v| v.as_array())
-            .ok_or_else(|| WeaveError::PluginError("Missing 'numbers' (or 'values') parameter — expected an array of numbers".to_string()))?;
-        
-        let mut nums: Vec<f64> = values.iter()
-            .filter_map(|v| v.as_f64())
-            .collect();
-            
+            .ok_or_else(|| {
+                WeaveError::PluginError(
+                    "Missing 'numbers' (or 'values') parameter — expected an array of numbers"
+                        .to_string(),
+                )
+            })?;
+
+        let mut nums: Vec<f64> = values.iter().filter_map(|v| v.as_f64()).collect();
+
         if nums.is_empty() {
-            return Err(WeaveError::PluginError("Array must contain at least one valid number".to_string()));
+            return Err(WeaveError::PluginError(
+                "Array must contain at least one valid number".to_string(),
+            ));
         }
-        
+
         let sum: f64 = nums.iter().sum();
         let count = nums.len() as f64;
         let mean = sum / count;
-        
+
         nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let median = if nums.len() % 2 == 0 {
             (nums[nums.len() / 2 - 1] + nums[nums.len() / 2]) / 2.0
         } else {
             nums[nums.len() / 2]
         };
-        
+
         let min = nums.first().cloned().unwrap_or(0.0);
         let max = nums.last().cloned().unwrap_or(0.0);
 
         // Standard deviation
         let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / count;
         let std_dev = variance.sqrt();
-        
+
         info!("Calculated stats for {} numbers", count);
-        
+
         Ok(json!({
             "count": count,
             "sum": sum,
@@ -129,22 +153,25 @@ impl CalcPlugin {
         let mut ctx = fend_core::Context::new();
         let result_obj = fend_core::evaluate(expr, &mut ctx)
             .map_err(|e| WeaveError::ParseError(format!("Expression evaluation error: {}", e)))?;
-        
+
         let res_str = result_obj.get_main_result();
-        let cleaned: String = res_str.chars()
+        let cleaned: String = res_str
+            .chars()
             .filter(|c| !c.is_whitespace() && *c != ',' && *c != '~' && *c != '≈')
             .collect();
-        
+
         match cleaned.parse::<f64>() {
             Ok(val) => {
                 if val.is_nan() {
                     return Err(WeaveError::ParseError("Result is NaN".to_string()));
                 }
                 if val.is_infinite() {
-                    return Err(WeaveError::ParseError("Result is infinite (possible division by zero)".to_string()));
+                    return Err(WeaveError::ParseError(
+                        "Result is infinite (possible division by zero)".to_string(),
+                    ));
                 }
                 Ok(val)
-            },
+            }
             Err(_) => {
                 if let Some((num, den)) = cleaned.split_once('/') {
                     if let (Ok(n), Ok(d)) = (num.parse::<f64>(), den.parse::<f64>()) {
@@ -154,39 +181,49 @@ impl CalcPlugin {
                         return Ok(n / d);
                     }
                 }
-                Err(WeaveError::ParseError(format!("Could not parse numerical result from: {}", res_str)))
+                Err(WeaveError::ParseError(format!(
+                    "Could not parse numerical result from: {}",
+                    res_str
+                )))
             }
         }
     }
 
     fn is_temperature_unit(unit: &str) -> bool {
-        matches!(unit,
-            "c" | "°c" | "celsius" | "centigrade" |
-            "f" | "°f" | "fahrenheit" | "farenheit" |
-            "k" | "kelvin"
+        matches!(
+            unit,
+            "c" | "°c"
+                | "celsius"
+                | "centigrade"
+                | "f"
+                | "°f"
+                | "fahrenheit"
+                | "farenheit"
+                | "k"
+                | "kelvin"
         )
     }
 
     fn convert_units(value: f64, from: &str, to: &str) -> Result<f64, WeaveError> {
         let from_lower = from.to_lowercase();
         let to_lower = to.to_lowercase();
-        
+
         if from_lower == to_lower {
             return Ok(value);
         }
-        
+
         let conversion = Self::get_conversion_factor(&from_lower, &to_lower)
             .ok_or_else(|| WeaveError::PluginError(
                 format!("Conversion from '{}' to '{}' is not supported. Supported: length (km, miles, m, ft, in, cm), weight (kg, g, lb, oz), temperature (celsius, fahrenheit, kelvin), volume (l, ml, gal, qt, pt, cup)", from, to)
             ))?;
-        
+
         Ok(value * conversion)
     }
 
     fn get_conversion_factor(from: &str, to: &str) -> Option<f64> {
         match (from, to) {
             (f, t) if f == t => Some(1.0),
-            
+
             // Length
             ("km", "m") | ("kg", "g") => Some(1000.0),
             ("m", "km") | ("g", "kg") => Some(0.001),
@@ -206,7 +243,7 @@ impl CalcPlugin {
             ("cm", "mm") => Some(10.0),
             ("ft", "in") | ("feet", "in") | ("feet", "inches") => Some(12.0),
             ("in", "ft") | ("in", "feet") => Some(0.0833333),
-            
+
             // Weight
             ("lb", "kg") | ("lbs", "kg") | ("pound", "kg") | ("pounds", "kg") => Some(0.453592),
             ("kg", "lb") | ("kg", "lbs") | ("kg", "pound") | ("kg", "pounds") => Some(2.20462),
@@ -233,7 +270,7 @@ impl CalcPlugin {
             ("pt", "qt") | ("pint", "quart") => Some(0.5),
             ("pt", "cup") | ("pint", "cup") => Some(2.0),
             ("cup", "pt") | ("cup", "pint") => Some(0.5),
-            
+
             _ => None,
         }
     }
@@ -242,21 +279,55 @@ impl CalcPlugin {
         if from == to {
             return Ok(value);
         }
-        
+
         let celsius = match from {
-            f if f.starts_with('c') || f.starts_with("°c") || f == "celsius" || f == "centigrade" => value,
-            f if f.starts_with('f') || f.starts_with("°f") || f == "fahrenheit" || f == "farenheit" => (value - 32.0) * 5.0 / 9.0,
+            f if f.starts_with('c')
+                || f.starts_with("°c")
+                || f == "celsius"
+                || f == "centigrade" =>
+            {
+                value
+            }
+            f if f.starts_with('f')
+                || f.starts_with("°f")
+                || f == "fahrenheit"
+                || f == "farenheit" =>
+            {
+                (value - 32.0) * 5.0 / 9.0
+            }
             f if f.starts_with('k') || f == "kelvin" => value - 273.15,
-            _ => return Err(WeaveError::PluginError(format!("Unknown temperature unit: {}", from))),
+            _ => {
+                return Err(WeaveError::PluginError(format!(
+                    "Unknown temperature unit: {}",
+                    from
+                )))
+            }
         };
-        
+
         let result = match to {
-            t if t.starts_with('c') || t.starts_with("°c") || t == "celsius" || t == "centigrade" => celsius,
-            t if t.starts_with('f') || t.starts_with("°f") || t == "fahrenheit" || t == "farenheit" => (celsius * 9.0 / 5.0) + 32.0,
+            t if t.starts_with('c')
+                || t.starts_with("°c")
+                || t == "celsius"
+                || t == "centigrade" =>
+            {
+                celsius
+            }
+            t if t.starts_with('f')
+                || t.starts_with("°f")
+                || t == "fahrenheit"
+                || t == "farenheit" =>
+            {
+                (celsius * 9.0 / 5.0) + 32.0
+            }
             t if t.starts_with('k') || t == "kelvin" => celsius + 273.15,
-            _ => return Err(WeaveError::PluginError(format!("Unknown temperature unit: {}", to))),
+            _ => {
+                return Err(WeaveError::PluginError(format!(
+                    "Unknown temperature unit: {}",
+                    to
+                )))
+            }
         };
-        
+
         Ok(result)
     }
 

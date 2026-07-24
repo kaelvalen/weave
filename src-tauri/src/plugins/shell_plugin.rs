@@ -7,9 +7,17 @@ use crate::utils::errors::WeaveError;
 
 /// Commands that are too dangerous to execute.
 const BLOCKED_COMMANDS: &[&str] = &[
-    "rm -rf /", "rm -rf /*", "mkfs", "dd if=", ":(){ :|:& };:",
-    "chmod -R 777 /", "chown -R", "> /dev/sda",
-    "mv / ", "wget -O- | sh", "curl | sh",
+    "rm -rf /",
+    "rm -rf /*",
+    "mkfs",
+    "dd if=",
+    ":(){ :|:& };:",
+    "chmod -R 777 /",
+    "chown -R",
+    "> /dev/sda",
+    "mv / ",
+    "wget -O- | sh",
+    "curl | sh",
 ];
 
 /// Default timeout in seconds for shell commands.
@@ -18,13 +26,22 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 pub struct ShellPlugin;
 
 impl PluginExecutor for ShellPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         ShellPlugin::execute(capability, params, ctx)
     }
 }
 
 impl ShellPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "shell.exec" | "shell.execute" => Self::exec(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
@@ -32,7 +49,8 @@ impl ShellPlugin {
     }
 
     fn exec(params: Value) -> Result<Value, WeaveError> {
-        let command_str = params.get("command")
+        let command_str = params
+            .get("command")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'command' parameter".to_string()))?;
 
@@ -40,19 +58,24 @@ impl ShellPlugin {
         let cmd_lower = command_str.to_lowercase();
         for blocked in BLOCKED_COMMANDS {
             if cmd_lower.contains(blocked) {
-                return Err(WeaveError::PermissionDenied(
-                    format!("Command blocked for safety: contains '{}'", blocked)
-                ));
+                return Err(WeaveError::PermissionDenied(format!(
+                    "Command blocked for safety: contains '{}'",
+                    blocked
+                )));
             }
         }
 
-        let timeout_secs = params.get("timeout")
+        let timeout_secs = params
+            .get("timeout")
             .and_then(|v| v.as_u64())
             .unwrap_or(DEFAULT_TIMEOUT_SECS);
 
         let cwd = params.get("cwd").and_then(|v| v.as_str());
 
-        info!("Executing shell command: {} (timeout: {}s, cwd: {:?})", command_str, timeout_secs, cwd);
+        info!(
+            "Executing shell command: {} (timeout: {}s, cwd: {:?})",
+            command_str, timeout_secs, cwd
+        );
 
         let mut cmd = Command::new("sh");
         cmd.arg("-c").arg(command_str);
@@ -62,7 +85,10 @@ impl ShellPlugin {
             if path.exists() && path.is_dir() {
                 cmd.current_dir(dir);
             } else {
-                return Err(WeaveError::PluginError(format!("Working directory not found: {}", dir)));
+                return Err(WeaveError::PluginError(format!(
+                    "Working directory not found: {}",
+                    dir
+                )));
             }
         }
 
@@ -87,11 +113,11 @@ impl ShellPlugin {
                     "timeout_secs": timeout_secs
                 }))
             }
-            Err(_) => {
-                Err(WeaveError::TimeoutError(
-                    format!("Command timed out after {} seconds: {}", timeout_duration.as_secs(), command_str)
-                ))
-            }
+            Err(_) => Err(WeaveError::TimeoutError(format!(
+                "Command timed out after {} seconds: {}",
+                timeout_duration.as_secs(),
+                command_str
+            ))),
         }
     }
 }

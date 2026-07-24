@@ -7,13 +7,22 @@ use crate::utils::errors::WeaveError;
 pub struct WebPlugin;
 
 impl PluginExecutor for WebPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         WebPlugin::execute(capability, params, ctx)
     }
 }
 
 impl WebPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "web.fetch" => Self::fetch(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),
@@ -21,7 +30,8 @@ impl WebPlugin {
     }
 
     fn fetch(params: Value) -> Result<Value, WeaveError> {
-        let url = params.get("url")
+        let url = params
+            .get("url")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'url' parameter".to_string()))?
             .to_string();
@@ -42,11 +52,14 @@ impl WebPlugin {
                     .build()
                     .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
-                let response = client.get(&url).send().await
-                    .map_err(|e| WeaveError::PluginError(format!("Failed to fetch URL: {}", e)))?;
+                let response =
+                    client.get(&url).send().await.map_err(|e| {
+                        WeaveError::PluginError(format!("Failed to fetch URL: {}", e))
+                    })?;
 
                 let status = response.status().as_u16();
-                let content_type = response.headers()
+                let content_type = response
+                    .headers()
                     .get("content-type")
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("unknown")
@@ -71,7 +84,9 @@ impl WebPlugin {
                     "success": status >= 200 && status < 400,
                 }))
             })
-        }).join().map_err(|_| WeaveError::PluginError("Web fetch thread panicked".to_string()))?;
+        })
+        .join()
+        .map_err(|_| WeaveError::PluginError("Web fetch thread panicked".to_string()))?;
 
         result
     }
@@ -89,24 +104,52 @@ impl WebPlugin {
         let mut i = 0;
         while i < chars.len() {
             if !in_tag && i + 7 < lower_chars.len() {
-                let slice: String = lower_chars[i..i+7].iter().collect();
-                if slice == "<script" { in_script = true; }
-                if slice == "<style " || (i + 6 < lower_chars.len() && lower_chars[i..i+6].iter().collect::<String>() == "<style") { in_style = true; }
+                let slice: String = lower_chars[i..i + 7].iter().collect();
+                if slice == "<script" {
+                    in_script = true;
+                }
+                if slice == "<style "
+                    || (i + 6 < lower_chars.len()
+                        && lower_chars[i..i + 6].iter().collect::<String>() == "<style")
+                {
+                    in_style = true;
+                }
             }
             if i + 9 < lower_chars.len() {
-                let slice: String = lower_chars[i..i+9].iter().collect();
-                if slice == "</script>" { in_script = false; i += 9; continue; }
+                let slice: String = lower_chars[i..i + 9].iter().collect();
+                if slice == "</script>" {
+                    in_script = false;
+                    i += 9;
+                    continue;
+                }
             }
             if i + 8 < lower_chars.len() {
-                let slice: String = lower_chars[i..i+8].iter().collect();
-                if slice == "</style>" { in_style = false; i += 8; continue; }
+                let slice: String = lower_chars[i..i + 8].iter().collect();
+                if slice == "</style>" {
+                    in_style = false;
+                    i += 8;
+                    continue;
+                }
             }
 
-            if in_script || in_style { i += 1; continue; }
+            if in_script || in_style {
+                i += 1;
+                continue;
+            }
 
-            if chars[i] == '<' { in_tag = true; i += 1; continue; }
-            if chars[i] == '>' { in_tag = false; i += 1; continue; }
-            if !in_tag { result.push(chars[i]); }
+            if chars[i] == '<' {
+                in_tag = true;
+                i += 1;
+                continue;
+            }
+            if chars[i] == '>' {
+                in_tag = false;
+                i += 1;
+                continue;
+            }
+            if !in_tag {
+                result.push(chars[i]);
+            }
             i += 1;
         }
 
@@ -115,7 +158,9 @@ impl WebPlugin {
         let mut prev_was_space = false;
         for ch in result.chars() {
             if ch.is_whitespace() {
-                if !prev_was_space { collapsed.push(' '); }
+                if !prev_was_space {
+                    collapsed.push(' ');
+                }
                 prev_was_space = true;
             } else {
                 collapsed.push(ch);

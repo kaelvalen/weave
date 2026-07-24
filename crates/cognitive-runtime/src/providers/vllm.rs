@@ -1,8 +1,8 @@
+use crate::models::chat::ChatMessage;
+use crate::traits::ChatModel;
+use crate::utils::errors::WeaveError;
 use reqwest::Client;
 use serde_json::json;
-use crate::traits::ChatModel;
-use crate::models::chat::ChatMessage;
-use crate::utils::errors::WeaveError;
 
 pub struct VLLMProvider {
     client: Client,

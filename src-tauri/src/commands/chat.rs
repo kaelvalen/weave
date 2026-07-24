@@ -1,11 +1,11 @@
-use tauri::{Emitter, State};
-use tracing::{error, info};
 use serde::Serialize;
 use std::sync::atomic::Ordering;
+use tauri::{Emitter, State};
+use tracing::{error, info};
 
 use crate::models::chat::ChatMessage;
-use crate::AppState;
 use crate::utils::errors::WeaveError;
+use crate::AppState;
 
 #[derive(Debug, Clone, Serialize)]
 struct StreamChunk {
@@ -29,7 +29,7 @@ pub async fn chat_send_message(
     let mut user_msg = ChatMessage::new_user(message.clone());
     user_msg.images = images.clone();
     let _msg_id = user_msg.id.clone();
-    
+
     {
         let mut history = app_state.chat_history.write();
         history.push(user_msg);
@@ -50,7 +50,6 @@ pub async fn chat_send_message(
         history.push(assistant_msg);
     }
 
-
     let model_config = {
         let ai_config = app_state.ai_bridge.config.read().clone();
         model.map(|m| {
@@ -69,7 +68,8 @@ pub async fn chat_send_message(
                     crate::models::chat::Provider::Kimi
                 } else if m.starts_with("opencode") {
                     crate::models::chat::Provider::Opencode
-                } else if m.starts_with("llama") || m.starts_with("mistral") || m.ends_with(".gguf") {
+                } else if m.starts_with("llama") || m.starts_with("mistral") || m.ends_with(".gguf")
+                {
                     crate::models::chat::Provider::Local
                 } else {
                     crate::models::chat::Provider::Openai
@@ -122,17 +122,22 @@ pub async fn chat_send_message(
 
     let history = {
         let h = app_state.chat_history.read().clone();
-        h.into_iter().filter(|m| !m.content.trim().is_empty()).collect()
+        h.into_iter()
+            .filter(|m| !m.content.trim().is_empty())
+            .collect()
     };
-    
+
     let mut system_prompt = app_state.plugin_manager.get_system_prompt();
-    
+
     if let Some(ctx) = ui_context {
         system_prompt.push_str(&format!("\n\n[SYSTEM CONTEXT: The user is currently viewing the '{}' screen in the application. Tailor your context-aware suggestions accordingly.]", ctx));
     }
 
-    let stream_result = app_state.ai_bridge.chat_stream(history, model_config, system_prompt).await;
-    
+    let stream_result = app_state
+        .ai_bridge
+        .chat_stream(history, model_config, system_prompt)
+        .await;
+
     match stream_result {
         Ok(mut rx) => {
             while let Some(chunk) = rx.recv().await {
@@ -146,18 +151,24 @@ pub async fn chat_send_message(
                         last.content.push_str(&chunk);
                     }
                 }
-                let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
-                    chunk: chunk.clone(),
-                    message_id: assistant_id.clone(),
-                    done: false,
-                });
+                let _ = app_handle.emit(
+                    "chat-stream-chunk",
+                    StreamChunk {
+                        chunk: chunk.clone(),
+                        message_id: assistant_id.clone(),
+                        done: false,
+                    },
+                );
             }
             // Signal stream end
-            let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
-                chunk: String::new(),
-                message_id: assistant_id.clone(),
-                done: true,
-            });
+            let _ = app_handle.emit(
+                "chat-stream-chunk",
+                StreamChunk {
+                    chunk: String::new(),
+                    message_id: assistant_id.clone(),
+                    done: true,
+                },
+            );
         }
         Err(e) => {
             error!("Streaming error: {}", e);
@@ -167,11 +178,14 @@ pub async fn chat_send_message(
                     last.content = format!("Error: {}", e);
                 }
             }
-            let _ = app_handle.emit("chat-stream-chunk", StreamChunk {
-                chunk: format!("Error: {}", e),
-                message_id: assistant_id.clone(),
-                done: true,
-            });
+            let _ = app_handle.emit(
+                "chat-stream-chunk",
+                StreamChunk {
+                    chunk: format!("Error: {}", e),
+                    message_id: assistant_id.clone(),
+                    done: true,
+                },
+            );
             return Err(e);
         }
     }
@@ -180,9 +194,7 @@ pub async fn chat_send_message(
 }
 
 #[tauri::command]
-pub fn chat_get_history(
-    app_state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, WeaveError> {
+pub fn chat_get_history(app_state: State<'_, AppState>) -> Result<Vec<ChatMessage>, WeaveError> {
     let history = app_state.chat_history.read().clone();
     Ok(history)
 }
@@ -198,9 +210,7 @@ pub fn chat_set_history(
 }
 
 #[tauri::command]
-pub fn chat_clear_history(
-    app_state: State<'_, AppState>,
-) -> Result<(), WeaveError> {
+pub fn chat_clear_history(app_state: State<'_, AppState>) -> Result<(), WeaveError> {
     let mut history = app_state.chat_history.write();
     history.clear();
     info!("Chat history cleared");
@@ -218,9 +228,7 @@ pub fn chat_get_message(
 }
 
 #[tauri::command]
-pub fn chat_abort_generation(
-    app_state: State<'_, AppState>,
-) -> Result<(), WeaveError> {
+pub fn chat_abort_generation(app_state: State<'_, AppState>) -> Result<(), WeaveError> {
     app_state.abort_generation.store(true, Ordering::SeqCst);
     info!("Generation aborted by user");
     Ok(())

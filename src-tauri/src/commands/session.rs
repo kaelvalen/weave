@@ -37,7 +37,7 @@ fn get_sessions_dir() -> Result<PathBuf, WeaveError> {
 pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
     let dir = get_sessions_dir()?;
     let mut sessions = Vec::new();
-    
+
     if dir.exists() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -57,7 +57,7 @@ pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
             }
         }
     }
-    
+
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(sessions)
 }
@@ -66,31 +66,35 @@ pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
 pub fn chat_load_session(id: String) -> Result<ChatSession, WeaveError> {
     let dir = get_sessions_dir()?;
     let path = dir.join(format!("{}.json", id));
-    
+
     if !path.exists() {
         return Err(WeaveError::PluginError(format!("Session {} not found", id)));
     }
-    
+
     let content = std::fs::read_to_string(path)?;
     let session: ChatSession = serde_json::from_str(&content)
         .map_err(|e| WeaveError::Serialization(format!("Failed to parse session: {}", e)))?;
-        
+
     Ok(session)
 }
 
 #[tauri::command]
-pub fn chat_save_session(id: String, title: String, messages: Vec<ChatMessage>) -> Result<(), WeaveError> {
+pub fn chat_save_session(
+    id: String,
+    title: String,
+    messages: Vec<ChatMessage>,
+) -> Result<(), WeaveError> {
     let dir = get_sessions_dir()?;
     let path = dir.join(format!("{}.json", id));
-    
+
     let updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-        
+
     let mut pinned = false;
     let mut folder = None;
-    
+
     // Preserve existing metadata if session exists
     if path.exists() {
         if let Ok(content) = std::fs::read_to_string(&path) {
@@ -100,7 +104,7 @@ pub fn chat_save_session(id: String, title: String, messages: Vec<ChatMessage>) 
             }
         }
     }
-        
+
     let session = ChatSession {
         id,
         title,
@@ -109,10 +113,10 @@ pub fn chat_save_session(id: String, title: String, messages: Vec<ChatMessage>) 
         folder,
         messages,
     };
-    
+
     let content = serde_json::to_string_pretty(&session)
         .map_err(|e| WeaveError::Serialization(e.to_string()))?;
-        
+
     std::fs::write(path, content)?;
     Ok(())
 }
@@ -126,19 +130,23 @@ pub fn chat_update_session_meta(
 ) -> Result<(), WeaveError> {
     let dir = get_sessions_dir()?;
     let path = dir.join(format!("{}.json", id));
-    
+
     if !path.exists() {
         return Err(WeaveError::PluginError(format!("Session {} not found", id)));
     }
-    
+
     let content = std::fs::read_to_string(&path)?;
     let mut session: ChatSession = serde_json::from_str(&content)
         .map_err(|e| WeaveError::Serialization(format!("Failed to parse session: {}", e)))?;
-        
-    if let Some(t) = title { session.title = t; }
-    if let Some(p) = pinned { session.pinned = p; }
-    // If we want to clear the folder, we should maybe pass an empty string? 
-    // To distinguish between "do not update folder" and "clear folder", 
+
+    if let Some(t) = title {
+        session.title = t;
+    }
+    if let Some(p) = pinned {
+        session.pinned = p;
+    }
+    // If we want to clear the folder, we should maybe pass an empty string?
+    // To distinguish between "do not update folder" and "clear folder",
     // we assume folder = Some("") means clear it.
     if let Some(f) = folder {
         if f.is_empty() {
@@ -147,15 +155,15 @@ pub fn chat_update_session_meta(
             session.folder = Some(f);
         }
     }
-    
+
     session.updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-        
+
     let new_content = serde_json::to_string_pretty(&session)
         .map_err(|e| WeaveError::Serialization(e.to_string()))?;
-        
+
     std::fs::write(path, new_content)?;
     Ok(())
 }
@@ -164,11 +172,11 @@ pub fn chat_update_session_meta(
 pub fn chat_delete_session(id: String) -> Result<(), WeaveError> {
     let dir = get_sessions_dir()?;
     let path = dir.join(format!("{}.json", id));
-    
+
     if path.exists() {
         std::fs::remove_file(path)?;
     }
-    
+
     info!("Deleted session: {}", id);
     Ok(())
 }

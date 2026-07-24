@@ -1,8 +1,8 @@
+use capabilities::tool_registry::{SideEffectLevel, ToolDefinition};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use capabilities::tool_registry::{SideEffectLevel, ToolDefinition};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolScore {
@@ -76,7 +76,8 @@ impl PlannerIndex {
         }
 
         score.failure_rate = (score.failure_count as f64) / (score.usage_count as f64);
-        score.average_latency_ms = (score.average_latency_ms * (score.usage_count - 1) + duration_ms) / score.usage_count;
+        score.average_latency_ms =
+            (score.average_latency_ms * (score.usage_count - 1) + duration_ms) / score.usage_count;
         score.last_used_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -122,7 +123,11 @@ impl PlannerIndex {
     }
 
     pub fn find_by_tag(&self, tag: &str) -> Vec<ToolDefinition> {
-        self.tools_by_tag.read().get(tag).cloned().unwrap_or_default()
+        self.tools_by_tag
+            .read()
+            .get(tag)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn find_parallel_safe(&self) -> Vec<ToolDefinition> {
@@ -138,7 +143,10 @@ impl PlannerIndex {
         self.all_tools
             .read()
             .values()
-            .filter(|t| t.side_effect_level != SideEffectLevel::Destructive && t.side_effect_level != SideEffectLevel::High)
+            .filter(|t| {
+                t.side_effect_level != SideEffectLevel::Destructive
+                    && t.side_effect_level != SideEffectLevel::High
+            })
             .cloned()
             .collect()
     }

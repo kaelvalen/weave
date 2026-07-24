@@ -23,13 +23,22 @@ pub struct WorkflowDefinition {
 pub struct WorkflowPlugin;
 
 impl PluginExecutor for WorkflowPlugin {
-    fn execute(&self, capability: &str, params: Value, ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         WorkflowPlugin::execute(capability, params, ctx)
     }
 }
 
 impl WorkflowPlugin {
-    pub fn execute(capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    pub fn execute(
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "workflow.create" => Self::create(params),
             "workflow.list" => Self::list(),
@@ -52,14 +61,28 @@ impl WorkflowPlugin {
     }
 
     fn create(params: Value) -> Result<Value, WeaveError> {
-        let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("Automated AI Workflow");
-        let description = params.get("description").and_then(|v| v.as_str()).unwrap_or("");
-        let nodes = params.get("nodes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-        let edges = params.get("edges").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        let name = params
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Automated AI Workflow");
+        let description = params
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let nodes = params
+            .get("nodes")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let edges = params
+            .get("edges")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
 
         let workflows_dir = AppConfig::workflows_dir()?;
         std::fs::create_dir_all(&workflows_dir)?;
-        
+
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
         let wf = WorkflowDefinition {
@@ -73,40 +96,58 @@ impl WorkflowPlugin {
         };
 
         let file_path = workflows_dir.join(format!("{}.json", id));
-        let wf_json = serde_json::to_string_pretty(&wf).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let wf_json = serde_json::to_string_pretty(&wf)
+            .map_err(|e| WeaveError::Serialization(e.to_string()))?;
         std::fs::write(&file_path, wf_json)?;
-        
-        info!("Created workflow template: {} ({}) in {:?}", name, id, file_path);
+
+        info!(
+            "Created workflow template: {} ({}) in {:?}",
+            name, id, file_path
+        );
         Ok(json!({"workflow": Self::workflow_to_json(&wf), "success": true}))
     }
 
     fn list() -> Result<Value, WeaveError> {
         let workflows = Self::load_all_workflows()?;
-        let wf_jsons: Vec<Value> = workflows.iter().map(|w| Self::workflow_to_json(w)).collect();
+        let wf_jsons: Vec<Value> = workflows
+            .iter()
+            .map(|w| Self::workflow_to_json(w))
+            .collect();
         info!("Listed {} workflow templates", wf_jsons.len());
         Ok(json!({"workflows": wf_jsons, "count": wf_jsons.len(), "success": true}))
     }
 
     fn get(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let workflows_dir = AppConfig::workflows_dir()?;
         let file_path = workflows_dir.join(format!("{}.json", id));
         if !file_path.exists() {
-            return Err(WeaveError::PluginError(format!("Workflow not found: {}", id)));
+            return Err(WeaveError::PluginError(format!(
+                "Workflow not found: {}",
+                id
+            )));
         }
         let content = std::fs::read_to_string(&file_path)?;
-        let wf: WorkflowDefinition = serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        let wf: WorkflowDefinition =
+            serde_json::from_str(&content).map_err(|e| WeaveError::Serialization(e.to_string()))?;
         Ok(json!({"workflow": Self::workflow_to_json(&wf), "success": true}))
     }
 
     fn delete(params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id").and_then(|v| v.as_str())
+        let id = params
+            .get("id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
         let workflows_dir = AppConfig::workflows_dir()?;
         let file_path = workflows_dir.join(format!("{}.json", id));
         if !file_path.exists() {
-            return Err(WeaveError::PluginError(format!("Workflow not found: {}", id)));
+            return Err(WeaveError::PluginError(format!(
+                "Workflow not found: {}",
+                id
+            )));
         }
         std::fs::remove_file(&file_path)?;
         info!("Deleted workflow template: {}", id);
@@ -126,9 +167,13 @@ impl WorkflowPlugin {
                 match std::fs::read_to_string(&path) {
                     Ok(content) => match serde_json::from_str::<WorkflowDefinition>(&content) {
                         Ok(wf) => workflows.push(wf),
-                        Err(e) => { warn!("Failed to parse workflow at {:?}: {}", path, e); }
+                        Err(e) => {
+                            warn!("Failed to parse workflow at {:?}: {}", path, e);
+                        }
                     },
-                    Err(e) => { warn!("Failed to read workflow at {:?}: {}", path, e); }
+                    Err(e) => {
+                        warn!("Failed to read workflow at {:?}: {}", path, e);
+                    }
                 }
             }
         }

@@ -1,9 +1,9 @@
+use super::security::{resolve_path, validate_read_access, validate_write_access};
+use crate::utils::errors::WeaveError;
+use chrono::Local;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde_json::{json, Value};
-use chrono::Local;
-use crate::utils::errors::WeaveError;
-use super::security::{resolve_path, validate_write_access, validate_read_access};
 
 fn get_history_dir() -> Result<PathBuf, WeaveError> {
     let current = std::env::current_dir().map_err(|e| WeaveError::Io(e.to_string()))?;
@@ -16,7 +16,10 @@ fn get_history_dir() -> Result<PathBuf, WeaveError> {
 
 fn get_flat_prefix(path: &Path) -> String {
     let abs_str = path.to_string_lossy().to_string();
-    let cleaned: String = abs_str.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    let cleaned: String = abs_str
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
     cleaned
 }
 
@@ -32,7 +35,9 @@ pub fn create_backup(path: &Path) -> Result<PathBuf, WeaveError> {
 }
 
 pub fn history(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
     let raw_path = resolve_path(path_str)?;
     let path = validate_read_access(&raw_path)?;
@@ -50,7 +55,9 @@ pub fn history(params: Value) -> Result<Value, WeaveError> {
                     let timestamp = parts[parts.len() - 2].to_string();
                     let metadata = entry.metadata().ok();
                     let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
-                    let mod_time = metadata.as_ref().and_then(|m| m.modified().ok())
+                    let mod_time = metadata
+                        .as_ref()
+                        .and_then(|m| m.modified().ok())
                         .map(|t| chrono::DateTime::<Local>::from(t).to_rfc3339())
                         .unwrap_or_default();
 
@@ -76,7 +83,9 @@ pub fn history(params: Value) -> Result<Value, WeaveError> {
 }
 
 pub fn undo(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
@@ -95,7 +104,9 @@ pub fn undo(params: Value) -> Result<Value, WeaveError> {
     }
 
     if backups.is_empty() {
-        return Err(WeaveError::PluginError("No backup found for this file".to_string()));
+        return Err(WeaveError::PluginError(
+            "No backup found for this file".to_string(),
+        ));
     }
 
     // Sort backups by modification time, newest first
@@ -141,7 +152,9 @@ pub fn redo(params: Value) -> Result<Value, WeaveError> {
     // In our timestamped model, all states are saved in chronological order. Redo is functionally
     // restoring the next version in the backup history list.
     // Let's implement it by finding the backup that was modified *after* the current state's modification time.
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
@@ -160,7 +173,9 @@ pub fn redo(params: Value) -> Result<Value, WeaveError> {
     }
 
     if backups.len() < 2 {
-        return Err(WeaveError::PluginError("No redo state available (requires at least 2 history versions)".to_string()));
+        return Err(WeaveError::PluginError(
+            "No redo state available (requires at least 2 history versions)".to_string(),
+        ));
     }
 
     // Sort backups by modification time, oldest first

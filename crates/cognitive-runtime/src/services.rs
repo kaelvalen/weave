@@ -1,8 +1,8 @@
+use crate::models::chat::{ChatMessage, ChatRole};
+use crate::traits::{ChatModel, EmbeddingModel};
+use crate::utils::errors::WeaveError;
 use std::sync::Arc;
 use std::time::SystemTime;
-use crate::traits::{ChatModel, EmbeddingModel};
-use crate::models::chat::{ChatMessage, ChatRole};
-use crate::utils::errors::WeaveError;
 
 fn now_ts() -> u64 {
     SystemTime::now()
@@ -40,7 +40,9 @@ impl ReasonerService {
             },
         ];
 
-        self.chat_model.chat_complete(&messages, "gpt-4o", 0.2).await
+        self.chat_model
+            .chat_complete(&messages, "gpt-4o", 0.2)
+            .await
     }
 }
 
@@ -54,18 +56,18 @@ impl SummarizerService {
     }
 
     pub async fn summarize(&self, text: &str) -> Result<String, WeaveError> {
-        let messages = vec![
-            ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                role: ChatRole::User,
-                content: format!("Summarize the following text concisely:\n{}", text),
-                timestamp: now_ts(),
-                metadata: None,
-                images: None,
-            },
-        ];
+        let messages = vec![ChatMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            role: ChatRole::User,
+            content: format!("Summarize the following text concisely:\n{}", text),
+            timestamp: now_ts(),
+            metadata: None,
+            images: None,
+        }];
 
-        self.chat_model.chat_complete(&messages, "gpt-4o-mini", 0.3).await
+        self.chat_model
+            .chat_complete(&messages, "gpt-4o-mini", 0.3)
+            .await
     }
 }
 
@@ -79,6 +81,8 @@ impl EmbedderService {
     }
 
     pub async fn embed(&self, text: &str) -> Result<Vec<f32>, WeaveError> {
-        self.embedding_model.generate_embedding(text, "text-embedding-3-small").await
+        self.embedding_model
+            .generate_embedding(text, "text-embedding-3-small")
+            .await
     }
 }

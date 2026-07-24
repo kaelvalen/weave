@@ -1,20 +1,27 @@
-use std::fs;
-use serde_json::{json, Value};
-use crate::utils::errors::WeaveError;
-use super::security::{resolve_path, validate_write_access};
 use super::history::create_backup;
+use super::security::{resolve_path, validate_write_access};
+use crate::utils::errors::WeaveError;
+use serde_json::{json, Value};
+use std::fs;
 
 pub fn apply_patch(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    let patch_text = params.get("patch").and_then(|v| v.as_str())
+    let patch_text = params
+        .get("patch")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'patch' parameter".to_string()))?;
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
 
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
     let content = fs::read_to_string(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
@@ -35,18 +42,27 @@ pub fn apply_patch(params: Value) -> Result<Value, WeaveError> {
 }
 
 pub fn apply_diff(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    let old_str = params.get("old_str").and_then(|v| v.as_str())
+    let old_str = params
+        .get("old_str")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'old_str' parameter".to_string()))?;
-    let new_str = params.get("new_str").and_then(|v| v.as_str())
+    let new_str = params
+        .get("new_str")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'new_str' parameter".to_string()))?;
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
 
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
     let content = fs::read_to_string(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
@@ -140,8 +156,12 @@ pub fn apply_diff(params: Value) -> Result<Value, WeaveError> {
     let old_last_line = old_str.lines().last().unwrap_or("").trim();
 
     // Try to find the first and last lines of old_str in the file to report how close we got.
-    let first_match = content_lines.iter().position(|l| l.trim() == old_first_line);
-    let last_match = content_lines.iter().rposition(|l| l.trim() == old_last_line);
+    let first_match = content_lines
+        .iter()
+        .position(|l| l.trim() == old_first_line);
+    let last_match = content_lines
+        .iter()
+        .rposition(|l| l.trim() == old_last_line);
 
     let hint = match (first_match, last_match) {
         (Some(f), Some(l)) if f <= l => {
@@ -149,7 +169,10 @@ pub fn apply_diff(params: Value) -> Result<Value, WeaveError> {
             let norm_extracted = normalize(&extracted);
             let norm_old = normalize(old_str);
             // Find first differing line for a concise hint.
-            let diff_line = norm_extracted.lines().zip(norm_old.lines()).position(|(a, b)| a != b);
+            let diff_line = norm_extracted
+                .lines()
+                .zip(norm_old.lines())
+                .position(|(a, b)| a != b);
             match diff_line {
                 Some(d) => format!(
                     " First/last lines matched at lines {}-{}, but line {} of old_str differs from the file. Re-read the file and use the exact text.",
@@ -177,16 +200,23 @@ pub fn apply_diff(params: Value) -> Result<Value, WeaveError> {
 }
 
 pub fn patch_preview(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    let patch_text = params.get("patch").and_then(|v| v.as_str())
+    let patch_text = params
+        .get("patch")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'patch' parameter".to_string()))?;
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;
 
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
     let content = fs::read_to_string(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
@@ -198,7 +228,7 @@ pub fn patch_preview(params: Value) -> Result<Value, WeaveError> {
         .map_err(|e| WeaveError::PluginError(format!("Failed to apply patch: {}", e)))?;
 
     let diff = diffy::create_patch(&content, &updated);
-    
+
     Ok(json!({
         "path": path.to_string_lossy().to_string(),
         "preview": diff.to_string(),

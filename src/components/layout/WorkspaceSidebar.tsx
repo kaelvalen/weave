@@ -44,7 +44,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { view: 'capabilities', label: 'Capabilities', icon: Boxes },
       { view: 'plugins', label: 'Plugins', icon: Plug },
-      { view: 'models', label: 'Models', icon: Cpu },
+      { view: 'models', label: 'Runtime', icon: Cpu },
     ],
   },
   {

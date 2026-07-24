@@ -10,7 +10,12 @@ pub struct CanvasPlugin {
 }
 
 impl PluginExecutor for CanvasPlugin {
-    fn execute(&self, capability: &str, params: Value, _ctx: &runtime_kernel::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+    fn execute(
+        &self,
+        capability: &str,
+        params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
         match capability {
             "canvas.add_node" => self.add_node(params),
             "canvas.update_node" => self.update_node(params),
@@ -26,12 +31,21 @@ impl PluginExecutor for CanvasPlugin {
 
 impl CanvasPlugin {
     fn add_node(&self, params: Value) -> Result<Value, WeaveError> {
-        let node_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("shapeNode");
+        let node_type = params
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("shapeNode");
         let data = params.get("data").cloned().unwrap_or(json!({}));
         let position = params.get("position").cloned();
-        
-        let id = format!("ai_node_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
-        
+
+        let id = format!(
+            "ai_node_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
+
         let payload = json!({
             "action": "add_node",
             "payload": {
@@ -47,7 +61,7 @@ impl CanvasPlugin {
         } else {
             info!("Emitted canvas add_node event");
         }
-        
+
         Ok(json!({
             "success": true,
             "message": "Node added to canvas",
@@ -56,10 +70,11 @@ impl CanvasPlugin {
     }
 
     fn update_node(&self, params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id")
+        let id = params
+            .get("id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
-        
+
         let data = params.get("data").cloned().unwrap_or(json!({}));
 
         let payload = json!({
@@ -83,10 +98,11 @@ impl CanvasPlugin {
     }
 
     fn delete_node(&self, params: Value) -> Result<Value, WeaveError> {
-        let id = params.get("id")
+        let id = params
+            .get("id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'id' parameter".to_string()))?;
-        
+
         let payload = json!({
             "action": "delete_node",
             "payload": {
@@ -107,14 +123,16 @@ impl CanvasPlugin {
     }
 
     fn connect_nodes(&self, params: Value) -> Result<Value, WeaveError> {
-        let source = params.get("source")
+        let source = params
+            .get("source")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'source' parameter".to_string()))?;
-        let target = params.get("target")
+        let target = params
+            .get("target")
             .and_then(|v| v.as_str())
             .ok_or_else(|| WeaveError::PluginError("Missing 'target' parameter".to_string()))?;
         let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
-        
+
         let id = format!("ai_edge_{}_{}", source, target);
         let payload = json!({
             "action": "connect_nodes",
@@ -129,7 +147,10 @@ impl CanvasPlugin {
         if let Err(e) = self.canvas_tx.send(payload.clone()) {
             tracing::warn!("Failed to send canvas action: {}", e);
         } else {
-            info!("Emitted canvas connect_nodes event from {} to {}", source, target);
+            info!(
+                "Emitted canvas connect_nodes event from {} to {}",
+                source, target
+            );
         }
 
         Ok(json!({

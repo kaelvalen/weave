@@ -137,7 +137,7 @@ export function CommandPalette() {
         icon: Package,
         onSelect: () => setActiveView('plugins'),
       },
-      { id: 'models', label: 'Go to Models', icon: Brain, onSelect: () => setActiveView('models') },
+      { id: 'models', label: 'Go to Runtime', icon: Brain, onSelect: () => setActiveView('models') },
       {
         id: 'settings',
         label: 'Go to Settings',

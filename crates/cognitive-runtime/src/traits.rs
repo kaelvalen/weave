@@ -1,6 +1,6 @@
-use serde_json::Value;
 use crate::models::chat::ChatMessage;
 use crate::utils::errors::WeaveError;
+use serde_json::Value;
 
 #[async_trait::async_trait]
 pub trait ChatModel: Send + Sync {
@@ -27,7 +27,11 @@ pub trait EmbeddingModel: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait VisionModel: Send + Sync {
-    async fn analyze_image(&self, image_data_base64: &str, prompt: &str) -> Result<String, WeaveError>;
+    async fn analyze_image(
+        &self,
+        image_data_base64: &str,
+        prompt: &str,
+    ) -> Result<String, WeaveError>;
 }
 
 #[async_trait::async_trait]
@@ -38,9 +42,5 @@ pub trait SpeechModel: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait ReasoningModel: Send + Sync {
-    async fn reason(
-        &self,
-        context: &str,
-        goal: &str,
-    ) -> Result<Value, WeaveError>;
+    async fn reason(&self, context: &str, goal: &str) -> Result<Value, WeaveError>;
 }

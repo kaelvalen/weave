@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use parking_lot::RwLock;
-use crate::node_state::NodeState;
 use crate::dependency_resolver::DependencyResolver;
+use crate::node_state::NodeState;
 use crate::ready_queue::ReadyQueue;
+use parking_lot::RwLock;
+use std::collections::HashMap;
 
 pub struct ExecutionGraph {
     pub nodes: RwLock<HashMap<String, NodeState>>,
@@ -20,7 +20,9 @@ impl ExecutionGraph {
     }
 
     pub fn add_node(&self, node_id: String) {
-        self.nodes.write().insert(node_id.clone(), NodeState::Pending);
+        self.nodes
+            .write()
+            .insert(node_id.clone(), NodeState::Pending);
         // Initially, if no dependencies, we could put it in the ready queue.
         // But the planner should explicitly set up edges before starting.
     }

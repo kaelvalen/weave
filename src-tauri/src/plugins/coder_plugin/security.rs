@@ -1,26 +1,23 @@
-use std::path::{Path, PathBuf};
 use crate::utils::errors::WeaveError;
+use std::path::{Path, PathBuf};
 
 const BLOCKED_PREFIXES: &[&str] = &[
-    "/etc",
-    "/proc",
-    "/sys",
-    "/dev",
-    "/boot",
-    "/root",
-    "/var/log",
-    "/var/run",
+    "/etc", "/proc", "/sys", "/dev", "/boot", "/root", "/var/log", "/var/run",
 ];
 
 pub fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
     let path = path.trim();
     if path.starts_with("~/") {
-        let home = dirs::home_dir().ok_or_else(|| WeaveError::PluginError("Cannot determine home directory".to_string()))?;
+        let home = dirs::home_dir().ok_or_else(|| {
+            WeaveError::PluginError("Cannot determine home directory".to_string())
+        })?;
         Ok(home.join(&path[2..]))
     } else if Path::new(path).is_absolute() {
         Ok(PathBuf::from(path))
     } else {
-        Ok(std::env::current_dir().map_err(|e| WeaveError::Io(e.to_string()))?.join(path))
+        Ok(std::env::current_dir()
+            .map_err(|e| WeaveError::Io(e.to_string()))?
+            .join(path))
     }
 }
 
@@ -29,12 +26,16 @@ pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
     let abs_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir().map_err(|e| WeaveError::Io(e.to_string()))?.join(path)
+        std::env::current_dir()
+            .map_err(|e| WeaveError::Io(e.to_string()))?
+            .join(path)
     };
 
     // 2. Canonicalize path (or parent if file doesn't exist yet)
     let resolved = if abs_path.exists() {
-        abs_path.canonicalize().map_err(|e| WeaveError::Io(e.to_string()))?
+        abs_path
+            .canonicalize()
+            .map_err(|e| WeaveError::Io(e.to_string()))?
     } else {
         let mut parent = abs_path.as_path();
         let mut components = Vec::new();
@@ -48,7 +49,9 @@ pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
                 break;
             }
         }
-        let mut parent_canonical = parent.canonicalize().map_err(|e| WeaveError::Io(e.to_string()))?;
+        let mut parent_canonical = parent
+            .canonicalize()
+            .map_err(|e| WeaveError::Io(e.to_string()))?;
         for comp in components.iter().rev() {
             parent_canonical.push(comp);
         }
@@ -83,7 +86,10 @@ pub fn validate_read_access(path: &Path) -> Result<PathBuf, WeaveError> {
     let path_str = secure_path.to_string_lossy();
 
     if path_str.contains("/etc/shadow") || path_str.contains("/etc/passwd") {
-        return Err(WeaveError::PermissionDenied(format!("Read access denied: {}", secure_path.display())));
+        return Err(WeaveError::PermissionDenied(format!(
+            "Read access denied: {}",
+            secure_path.display()
+        )));
     }
 
     Ok(secure_path)
@@ -95,7 +101,10 @@ pub fn validate_write_access(path: &Path) -> Result<PathBuf, WeaveError> {
 
     // Block write to internal git objects
     if path_str.contains("/.git/objects/") || path_str.contains("/.git/refs/") {
-        return Err(WeaveError::PermissionDenied(format!("Write access to Git internal objects denied: {}", secure_path.display())));
+        return Err(WeaveError::PermissionDenied(format!(
+            "Write access to Git internal objects denied: {}",
+            secure_path.display()
+        )));
     }
 
     Ok(secure_path)

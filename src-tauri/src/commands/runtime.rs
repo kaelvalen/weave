@@ -104,10 +104,7 @@ fn summarize_traces(events: &[RuntimeEvent], limit: usize) -> Vec<TraceSummary> 
                 })
                 .unwrap_or_default();
 
-            let started_at = trace_events
-                .first()
-                .map(|e| e.ts)
-                .unwrap_or_else(Utc::now);
+            let started_at = trace_events.first().map(|e| e.ts).unwrap_or_else(Utc::now);
             let last_ts = trace_events.last().map(|e| e.ts);
 
             let mut started_step_ids: HashSet<&str> = HashSet::new();
@@ -168,10 +165,7 @@ fn summarize_traces(events: &[RuntimeEvent], limit: usize) -> Vec<TraceSummary> 
 
 /// List recent execution traces, newest first.
 #[tauri::command]
-pub fn trace_list(
-    app: AppHandle,
-    limit: Option<usize>,
-) -> Result<Vec<TraceSummary>, WeaveError> {
+pub fn trace_list(app: AppHandle, limit: Option<usize>) -> Result<Vec<TraceSummary>, WeaveError> {
     let events = read_persisted_events(&app);
     Ok(summarize_traces(&events, limit.unwrap_or(50)))
 }
@@ -252,11 +246,7 @@ pub async fn runtime_get_model_stats(
         .timeout(std::time::Duration::from_millis(800))
         .build()
     {
-        if let Ok(response) = client
-            .get(format!("{}/api/ps", base_url))
-            .send()
-            .await
-        {
+        if let Ok(response) = client.get(format!("{}/api/ps", base_url)).send().await {
             if response.status().is_success() {
                 ollama_running = true;
                 if let Ok(json) = response.json::<serde_json::Value>().await {
@@ -305,13 +295,7 @@ mod tests {
     #[test]
     fn summarize_groups_by_goal_and_skips_null_goals() {
         let events = vec![
-            make_event(
-                RuntimeEventKind::PlanStarted,
-                Some("g1"),
-                "p1",
-                "Plan A",
-                0,
-            ),
+            make_event(RuntimeEventKind::PlanStarted, Some("g1"), "p1", "Plan A", 0),
             make_event(
                 RuntimeEventKind::StepStarted,
                 Some("g1"),

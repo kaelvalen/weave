@@ -1,6 +1,6 @@
-use std::path::Path;
-use crate::utils::errors::WeaveError;
 use super::process::ExecSpec;
+use crate::utils::errors::WeaveError;
+use std::path::Path;
 
 pub fn detect_check_command(path: &Path) -> Result<ExecSpec, WeaveError> {
     if path.join("Cargo.toml").exists() {
@@ -42,7 +42,10 @@ pub fn detect_check_command(path: &Path) -> Result<ExecSpec, WeaveError> {
     }
 }
 
-pub fn detect_test_command(path: &Path, filter: Option<&str>) -> Result<(ExecSpec, &'static str), WeaveError> {
+pub fn detect_test_command(
+    path: &Path,
+    filter: Option<&str>,
+) -> Result<(ExecSpec, &'static str), WeaveError> {
     if path.join("Cargo.toml").exists() {
         let mut args = vec!["test".to_string()];
         if let Some(f) = filter {
@@ -50,10 +53,13 @@ pub fn detect_test_command(path: &Path, filter: Option<&str>) -> Result<(ExecSpe
                 args.push(f.to_string());
             }
         }
-        Ok((ExecSpec {
-            binary: "cargo".to_string(),
-            args,
-        }, "cargo"))
+        Ok((
+            ExecSpec {
+                binary: "cargo".to_string(),
+                args,
+            },
+            "cargo",
+        ))
     } else if path.join("package.json").exists() {
         let pkg = std::fs::read_to_string(path.join("package.json")).unwrap_or_default();
         let mut args = vec!["test".to_string()];
@@ -70,10 +76,13 @@ pub fn detect_test_command(path: &Path, filter: Option<&str>) -> Result<(ExecSpe
         } else {
             "npm"
         };
-        Ok((ExecSpec {
-            binary: "npm".to_string(),
-            args,
-        }, framework))
+        Ok((
+            ExecSpec {
+                binary: "npm".to_string(),
+                args,
+            },
+            framework,
+        ))
     } else if path.join("pyproject.toml").exists() || path.join("requirements.txt").exists() {
         let mut args = vec!["-m".to_string(), "pytest".to_string()];
         if let Some(f) = filter {
@@ -83,10 +92,13 @@ pub fn detect_test_command(path: &Path, filter: Option<&str>) -> Result<(ExecSpe
             }
         }
         args.push("-v".to_string());
-        Ok((ExecSpec {
-            binary: "python".to_string(),
-            args,
-        }, "pytest"))
+        Ok((
+            ExecSpec {
+                binary: "python".to_string(),
+                args,
+            },
+            "pytest",
+        ))
     } else if path.join("go.mod").exists() {
         let mut args = vec!["test".to_string(), "./...".to_string()];
         if let Some(f) = filter {
@@ -95,11 +107,16 @@ pub fn detect_test_command(path: &Path, filter: Option<&str>) -> Result<(ExecSpe
                 args.push(f.to_string());
             }
         }
-        Ok((ExecSpec {
-            binary: "go".to_string(),
-            args,
-        }, "gotest"))
+        Ok((
+            ExecSpec {
+                binary: "go".to_string(),
+                args,
+            },
+            "gotest",
+        ))
     } else {
-        Err(WeaveError::PluginError("Cannot detect project type for tests.".to_string()))
+        Err(WeaveError::PluginError(
+            "Cannot detect project type for tests.".to_string(),
+        ))
     }
 }

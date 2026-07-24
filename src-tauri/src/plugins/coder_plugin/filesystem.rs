@@ -1,10 +1,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use serde_json::{json, Value};
-use crate::utils::errors::WeaveError;
-use super::security::{resolve_path, validate_read_access, validate_write_access};
 use super::history::create_backup;
+use super::security::{resolve_path, validate_read_access, validate_write_access};
+use crate::utils::errors::WeaveError;
+use serde_json::{json, Value};
 
 pub fn infer_language(ext: &str) -> &'static str {
     match ext.to_lowercase().as_str() {
@@ -24,18 +24,29 @@ pub fn infer_language(ext: &str) -> &'static str {
 }
 
 pub fn read_file(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    
+
     let raw_path = resolve_path(path_str)?;
     let path = validate_read_access(&raw_path)?;
-    
+
     if !path.exists() || !path.is_file() {
-        return Err(WeaveError::PluginError(format!("File not found: {}", path.display())));
+        return Err(WeaveError::PluginError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
-    let start_line = params.get("start").and_then(|v| v.as_u64()).map(|v| v as usize);
-    let end_line = params.get("end").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let start_line = params
+        .get("start")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
+    let end_line = params
+        .get("end")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
 
     let file = File::open(&path).map_err(|e| WeaveError::Io(e.to_string()))?;
     let size_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
@@ -63,7 +74,8 @@ pub fn read_file(params: Value) -> Result<Value, WeaveError> {
         current_idx += 1;
     }
 
-    let formatted_content = lines.iter()
+    let formatted_content = lines
+        .iter()
         .map(|(num, content)| format!("{:>4}\t{}", num, content))
         .collect::<Vec<String>>()
         .join("\n");
@@ -90,11 +102,18 @@ pub fn read_file(params: Value) -> Result<Value, WeaveError> {
 }
 
 pub fn write_file(params: Value) -> Result<Value, WeaveError> {
-    let path_str = params.get("path").and_then(|v| v.as_str())
+    let path_str = params
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'path' parameter".to_string()))?;
-    let content = params.get("content").and_then(|v| v.as_str())
+    let content = params
+        .get("content")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| WeaveError::PluginError("Missing 'content' parameter".to_string()))?;
-    let create_dirs = params.get("create_dirs").and_then(|v| v.as_bool()).unwrap_or(true);
+    let create_dirs = params
+        .get("create_dirs")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
 
     let raw_path = resolve_path(path_str)?;
     let path = validate_write_access(&raw_path)?;

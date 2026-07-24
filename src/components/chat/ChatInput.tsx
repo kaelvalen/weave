@@ -147,10 +147,10 @@ export function ChatInput() {
 
   useEffect(() => {
     let cancelled = false;
-    setModelsLoading(true);
 
     invoke<AppConfig>('system_get_config')
       .then(async () => {
+        if (!cancelled) setModelsLoading(true);
         const providers: Provider[] = ['openai', 'anthropic', 'opencode', 'local'];
 
         const results = await Promise.allSettled(
