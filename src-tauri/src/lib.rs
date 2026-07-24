@@ -15,6 +15,7 @@ use core::ai_bridge::AiBridge;
 use core::event_bus::EventBus;
 use core::event_sourcing::EventSourcingStore;
 use core::execution_context::ExecutionContext;
+use core::kernel::RuntimeKernel;
 use core::memory::memory_engine::MemoryEngine;
 use core::observability::Observability;
 use core::planner::planner_engine::PlannerEngine;
@@ -49,6 +50,7 @@ pub struct AppState {
     pub observability: Arc<Observability>,
     pub resource_manager: Arc<ResourceManager>,
     pub scheduler: Arc<Scheduler>,
+    pub runtime_kernel: Arc<RuntimeKernel>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
@@ -58,7 +60,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Result<Self, WeaveError> {
-        info!("Initializing Weave AI Runtime Platform state...");
+        info!("Initializing Weave AI Execution Kernel Platform state...");
 
         let config = match AppConfig::load() {
             Ok(cfg) => cfg,
@@ -93,7 +95,7 @@ impl AppState {
         let permission_registry = Arc::new(PermissionRegistry::new(SecurityPolicy::default()));
         let planner_index = Arc::new(PlannerIndex::new());
 
-        let planner_engine = Arc::new(PlannerEngine::new(planner_index.clone(), execution_registry.clone()));
+        let planner_engine = Arc::new(PlannerEngine::new(planner_index.clone()));
         let workflow_engine = Arc::new(WorkflowEngine::new(execution_registry.clone()));
         let memory_engine = Arc::new(MemoryEngine::default_engine());
 
@@ -101,9 +103,22 @@ impl AppState {
         let resource_manager = Arc::new(ResourceManager::default_manager());
         let scheduler = Arc::new(Scheduler::new(event_bus.clone()));
 
+        let runtime_kernel = Arc::new(RuntimeKernel::new(
+            planner_engine.clone(),
+            execution_registry.clone(),
+            capability_registry.clone(),
+            permission_registry.clone(),
+            planner_index.clone(),
+            memory_engine.clone(),
+            event_store.clone(),
+            observability.clone(),
+            resource_manager.clone(),
+            scheduler.clone(),
+        ));
+
         let _ = plugin_manager.discover();
 
-        info!("Weave AI Runtime Platform state initialized successfully");
+        info!("Weave AI Execution Kernel Platform state initialized successfully");
 
         Ok(Self {
             plugin_manager,
@@ -122,6 +137,7 @@ impl AppState {
             observability,
             resource_manager,
             scheduler,
+            runtime_kernel,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),

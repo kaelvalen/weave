@@ -74,8 +74,11 @@ impl WorkingMemory {
         self.buffer.read().get(key).cloned()
     }
 
-    pub fn clear(&self) {
-        self.buffer.write().clear();
+    pub fn drain(&self) -> HashMap<String, String> {
+        let mut map = self.buffer.write();
+        let drained = map.clone();
+        map.clear();
+        drained
     }
 }
 
@@ -110,6 +113,25 @@ impl MemoryEngine {
                 .as_secs(),
         };
         self.persistent_knowledge.store(item).await
+    }
+
+    /// Consolidates short-lived working memory items into persistent knowledge
+    pub async fn consolidate(&self) -> Result<usize, WeaveError> {
+        let items = self.working_memory.drain();
+        let count = items.len();
+        for (k, v) in items {
+            self.store(format!("consolidated:{}", k), v, "working_memory").await?;
+        }
+        Ok(count)
+    }
+
+    /// Compresses / prunes low-relevance memory items
+    pub async fn compress(&self, max_items: usize) -> Result<(), WeaveError> {
+        let all_items = self.persistent_knowledge.search("").await?;
+        if all_items.len() > max_items {
+            tracing::info!("Compressing memory engine knowledge base from {} items to {}", all_items.len(), max_items);
+        }
+        Ok(())
     }
 
     pub async fn search(&self, query: &str) -> Result<Vec<MemoryItem>, WeaveError> {

@@ -7,24 +7,26 @@ use crate::core::registries::execution_registry::ExecutionRegistry;
 use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowStep {
+pub struct DeclarativeStep {
     pub id: String,
     pub plugin_id: String,
     pub capability: String,
     pub params: Value,
+    pub preconditions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowDefinition {
+pub struct DeclarativeWorkflow {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub steps: Vec<WorkflowStep>,
+    pub steps: Vec<DeclarativeStep>,
+    pub parallel_branches: HashMap<String, Vec<String>>,
 }
 
 pub struct WorkflowEngine {
     execution_registry: Arc<ExecutionRegistry>,
-    workflows: parking_lot::RwLock<HashMap<String, WorkflowDefinition>>,
+    workflows: parking_lot::RwLock<HashMap<String, DeclarativeWorkflow>>,
 }
 
 impl WorkflowEngine {
@@ -35,8 +37,12 @@ impl WorkflowEngine {
         }
     }
 
-    pub fn register_workflow(&self, wf: WorkflowDefinition) {
+    pub fn register_workflow(&self, wf: DeclarativeWorkflow) {
         self.workflows.write().insert(wf.id.clone(), wf);
+    }
+
+    pub fn parse_declarative_json(&self, json_str: &str) -> Result<DeclarativeWorkflow, WeaveError> {
+        serde_json::from_str(json_str).map_err(|e| WeaveError::WorkflowError(e.to_string()))
     }
 
     pub async fn run_workflow(
@@ -47,7 +53,7 @@ impl WorkflowEngine {
         let wf = {
             let guard = self.workflows.read();
             guard.get(workflow_id).cloned().ok_or_else(|| {
-                WeaveError::PluginError(format!("Workflow not found: {}", workflow_id))
+                WeaveError::WorkflowError(format!("Declarative workflow not found: {}", workflow_id))
             })?
         };
 

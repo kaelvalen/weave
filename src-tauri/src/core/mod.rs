@@ -5,6 +5,7 @@ pub mod event_bus;
 pub mod event_sourcing;
 pub mod execution_context;
 pub mod github_plugin;
+pub mod kernel;
 pub mod memory;
 pub mod observability;
 pub mod planner;

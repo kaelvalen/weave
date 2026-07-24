@@ -1,6 +1,7 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -24,14 +25,25 @@ pub struct AuditRecord {
     pub metadata: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CQRSReadModel {
+    pub total_tasks: u64,
+    pub total_successes: u64,
+    pub total_failures: u64,
+    pub active_plans: HashMap<String, usize>,
+    pub capability_usage_counts: HashMap<String, u64>,
+}
+
 pub struct EventSourcingStore {
     records: Arc<RwLock<Vec<AuditRecord>>>,
+    read_model: Arc<RwLock<CQRSReadModel>>,
 }
 
 impl EventSourcingStore {
     pub fn new() -> Self {
         Self {
             records: Arc::new(RwLock::new(Vec::new())),
+            read_model: Arc::new(RwLock::new(CQRSReadModel::default())),
         }
     }
 
@@ -42,14 +54,43 @@ impl EventSourcingStore {
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            event,
+            event: event.clone(),
             metadata,
         };
+
         self.records.write().push(record);
+        self.project_event(&event);
+    }
+
+    fn project_event(&self, event: &AuditEventType) {
+        let mut model = self.read_model.write();
+        match event {
+            AuditEventType::TaskCreated { .. } => {
+                model.total_tasks += 1;
+            }
+            AuditEventType::ExecutionFinished { success, .. } => {
+                if *success {
+                    model.total_successes += 1;
+                } else {
+                    model.total_failures += 1;
+                }
+            }
+            AuditEventType::CapabilitySelected { capability_id, .. } => {
+                *model.capability_usage_counts.entry(capability_id.clone()).or_default() += 1;
+            }
+            AuditEventType::TaskPlanned { plan_id, node_count } => {
+                model.active_plans.insert(plan_id.clone(), *node_count);
+            }
+            _ => {}
+        }
     }
 
     pub fn list_records(&self) -> Vec<AuditRecord> {
         self.records.read().clone()
+    }
+
+    pub fn get_read_model(&self) -> CQRSReadModel {
+        self.read_model.read().clone()
     }
 
     pub fn replay_events(&self) -> Vec<AuditRecord> {
