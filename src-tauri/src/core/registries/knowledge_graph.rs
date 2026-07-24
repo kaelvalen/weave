@@ -22,7 +22,7 @@ pub struct CapabilityNode {
 pub struct KnowledgeEdge {
     pub from_capability: String,
     pub to_capability: String,
-    pub relation: String, // "produces_artifact_for", "requires_permission", "implemented_by_plugin"
+    pub relation: String, // "produces_artifact_for", "requires_permission", "implemented_by_plugin", "depends_on"
 }
 
 pub struct CapabilityKnowledgeGraph {
@@ -44,6 +44,35 @@ impl CapabilityKnowledgeGraph {
 
     pub fn add_edge(&self, edge: KnowledgeEdge) {
         self.edges.write().push(edge);
+    }
+
+    pub fn traverse_implements(&self, capability_id: &str) -> Option<String> {
+        self.nodes.read().get(capability_id).map(|n| n.plugin_id.clone())
+    }
+
+    pub fn traverse_produces_artifacts(&self, capability_id: &str) -> Vec<String> {
+        self.nodes
+            .read()
+            .get(capability_id)
+            .map(|n| n.output_types.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn traverse_requires_permissions(&self, capability_id: &str) -> Vec<String> {
+        self.nodes
+            .read()
+            .get(capability_id)
+            .map(|n| n.required_permissions.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn traverse_dependencies(&self, capability_id: &str) -> Vec<String> {
+        self.edges
+            .read()
+            .iter()
+            .filter(|e| e.to_capability == capability_id && e.relation == "depends_on")
+            .map(|e| e.from_capability.clone())
+            .collect()
     }
 
     pub fn cosine_similarity(v1: &[f32], v2: &[f32]) -> f32 {

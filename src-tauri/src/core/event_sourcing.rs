@@ -44,6 +44,36 @@ pub struct Snapshot {
     pub read_model: CQRSReadModel,
 }
 
+pub struct StateReducer;
+
+impl StateReducer {
+    pub fn reduce_events(records: &[AuditRecord]) -> CQRSReadModel {
+        let mut model = CQRSReadModel::default();
+        for record in records {
+            match &record.event {
+                AuditEventType::TaskCreated { .. } => {
+                    model.total_tasks += 1;
+                }
+                AuditEventType::ExecutionFinished { success, .. } => {
+                    if *success {
+                        model.total_successes += 1;
+                    } else {
+                        model.total_failures += 1;
+                    }
+                }
+                AuditEventType::CapabilitySelected { capability_id, .. } => {
+                    *model.capability_usage_counts.entry(capability_id.clone()).or_default() += 1;
+                }
+                AuditEventType::TaskPlanned { plan_id, node_count } => {
+                    model.active_plans.insert(plan_id.clone(), *node_count);
+                }
+                _ => {}
+            }
+        }
+        model
+    }
+}
+
 pub struct EventSourcingStore {
     records: Arc<RwLock<Vec<AuditRecord>>>,
     read_model: Arc<RwLock<CQRSReadModel>>,
@@ -103,6 +133,11 @@ impl EventSourcingStore {
             }
             _ => {}
         }
+    }
+
+    pub fn reduce_state(&self) -> CQRSReadModel {
+        let records = self.records.read();
+        StateReducer::reduce_events(&records)
     }
 
     pub fn create_snapshot(&self) -> Snapshot {

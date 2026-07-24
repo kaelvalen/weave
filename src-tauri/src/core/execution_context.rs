@@ -26,6 +26,7 @@ pub struct ExecutionContext {
     pub session_id: String,
     pub trace_id: String,
     pub span_id: String,
+    pub scoped_task_id: Option<String>,
     pub workspace_root: PathBuf,
     pub config: Arc<RwLock<AppConfig>>,
     pub event_bus: Arc<EventBus>,
@@ -50,6 +51,7 @@ impl ExecutionContext {
             session_id,
             trace_id: uuid::Uuid::new_v4().to_string(),
             span_id: uuid::Uuid::new_v4().to_string(),
+            scoped_task_id: None,
             workspace_root,
             config,
             event_bus,
@@ -85,6 +87,12 @@ impl ExecutionContext {
     pub fn child_span(&self) -> Self {
         let mut child = self.clone();
         child.span_id = uuid::Uuid::new_v4().to_string();
+        child
+    }
+
+    pub fn child_scope(&self, task_id: &str) -> Self {
+        let mut child = self.child_span();
+        child.scoped_task_id = Some(task_id.to_string());
         child
     }
 
