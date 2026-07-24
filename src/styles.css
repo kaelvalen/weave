@@ -70,11 +70,11 @@
   }
 
   * {
-    @apply border-border;
     --tw-shadow: 0 0 #0000 !important;
     --tw-shadow-colored: 0 0 #0000 !important;
     box-shadow: none !important;
     text-shadow: none !important;
+    border-color: hsl(var(--border));
   }
 
   html,

@@ -16,6 +16,14 @@ export default {
       fontFamily: {
         sans: ['var(--font-family, Inter)', 'system-ui', 'sans-serif'],
       },
+      fontWeight: {
+        normal: '400',
+        medium: '500',
+        semibold: '600',
+        bold: '600', // Cap at 600
+        extrabold: '600',
+        black: '600',
+      },
       borderWidth: {
         DEFAULT: 'var(--border-width, 1px)',
       },
@@ -52,6 +60,10 @@ export default {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
+        },
+        surface: {
+          1: 'hsl(var(--surface-1))',
+          2: 'hsl(var(--surface-2))',
         },
       },
       boxShadow: {

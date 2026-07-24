@@ -234,8 +234,8 @@ export function ArtifactsView() {
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 font-mono text-xs">
           <span className="font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Package className="w-3.5 h-3.5" />
-            Artifacts
+            <FolderOpen className="w-3.5 h-3.5" />
+            Artifact Explorer
           </span>
           <span className="text-[11px] text-muted-foreground">{items.length} items</span>
         </div>

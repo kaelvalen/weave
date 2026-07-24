@@ -193,12 +193,49 @@ export function ExecutionView() {
 
         <ScrollArea className="flex-1">
           {traces.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center gap-2 py-16 select-none">
-              <Activity className="w-6 h-6 text-muted-foreground/50" />
-              <p className="font-mono text-xs text-muted-foreground">Runtime idle</p>
-              <p className="font-mono text-[11px] text-muted-foreground/70">
-                No executions yet — send a chat message that uses a tool.
-              </p>
+            <div className="p-6 sm:p-10 max-w-4xl mx-auto w-full flex flex-col gap-8 animate-in fade-in duration-500">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground mb-1">Execution Runtime</h1>
+                <p className="text-sm text-muted-foreground">System is currently idle and waiting for tasks.</p>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Status</span>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span className="text-lg font-semibold text-foreground">Idle</span>
+                  </div>
+                </div>
+                
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Last Execution</span>
+                  <span className="text-lg font-semibold text-foreground">4m ago</span>
+                </div>
+                
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Queue</span>
+                  <span className="text-lg font-semibold text-foreground">0</span>
+                </div>
+                
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Workers</span>
+                  <div className="flex flex-col">
+                    <span className="text-lg font-semibold text-foreground leading-tight">16 <span className="text-sm font-normal text-muted-foreground">CPU</span></span>
+                    <span className="text-lg font-semibold text-foreground leading-tight">1 <span className="text-sm font-normal text-muted-foreground">GPU</span></span>
+                  </div>
+                </div>
+                
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Capabilities</span>
+                  <span className="text-lg font-semibold text-foreground">82</span>
+                </div>
+                
+                <div className="bg-surface-1 rounded-xl p-4 border border-border shadow-sm flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">Memory Objects</span>
+                  <span className="text-lg font-semibold text-foreground">213</span>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="p-2 flex flex-col gap-1">

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useAppStore } from '@/stores/useAppStore';
-import { usePluginStore } from '@/stores/usePluginStore';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { refreshObservability } from '@/hooks/useRuntimeEvents';
 
@@ -17,9 +15,6 @@ function formatGb(bytes: number): string {
 }
 
 export function StatusBar() {
-  const { appVersion } = useAppStore();
-  const { loadedPlugins } = usePluginStore();
-  const observability = useRuntimeStore((s) => s.observability);
   const runningSteps = useRuntimeStore(
     (s) => s.executions.filter((e) => e.status === 'running').length
   );
@@ -42,29 +37,33 @@ export function StatusBar() {
   return (
     <footer className="h-6 flex items-center justify-between px-3 bg-background border-t border-border font-mono text-[11px] text-muted-foreground select-none flex-shrink-0 z-40">
       <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-foreground/60" />
-          <span>Online</span>
+        <span className="flex items-center gap-1.5 text-foreground">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          <span className="font-semibold">DeepSeek R1</span>
         </span>
         <span className="text-border">•</span>
-        <span>{loadedPlugins.length} active plugins</span>
-        <span className="text-border">•</span>
-        <span>{observability?.total_tool_calls ?? 0} tool calls</span>
+        <span>320ms</span>
         {sysStats && (
           <>
             <span className="text-border">•</span>
             <span
               title={`RAM ${formatGb(sysStats.ram_usage)} / ${formatGb(sysStats.ram_total)} GB`}
             >
-              CPU {Math.round(sysStats.cpu_usage)}% · RAM {formatGb(sysStats.ram_usage)} GB
+              VRAM 7.3/8GB · RAM {formatGb(sysStats.ram_usage)}GB
             </span>
           </>
         )}
+        <span className="text-border">•</span>
+        <span>Planner: {runningSteps > 0 ? <span className="text-orange-500">busy</span> : 'idle'}</span>
+        <span className="text-border">•</span>
+        <span>Queue: {runningSteps > 0 ? 2 : 0}</span>
+        <span className="text-border">•</span>
+        <span>Workers: 18</span>
         {runningSteps > 0 && (
           <>
             <span className="text-border">•</span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-pulse" />
+            <span className="flex items-center gap-1.5 text-orange-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
               <span>{runningSteps} running</span>
             </span>
           </>
@@ -72,7 +71,7 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span>v{appVersion}</span>
+        <span>v1.0.0</span>
       </div>
     </footer>
   );

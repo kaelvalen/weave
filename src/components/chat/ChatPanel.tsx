@@ -16,8 +16,6 @@ import {
   Cpu,
   Loader2,
   ArrowDown,
-  ShieldCheck,
-  ShieldQuestion,
   Check,
   Minimize2,
   Sparkles,
@@ -31,7 +29,6 @@ import {
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 
 import { useAppStore } from '@/stores/useAppStore';
-import { useApprovalModeStore } from '@/stores/useApprovalModeStore';
 import { Button } from '@/components/ui/button';
 import { PlayCircle } from 'lucide-react';
 const SUGGESTED_PROMPTS = [
@@ -98,8 +95,6 @@ export function ChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
-  const approvalMode = useApprovalModeStore((s) => s.mode);
-  const setApprovalMode = useApprovalModeStore((s) => s.setMode);
 
   useChatStream();
 
@@ -232,39 +227,12 @@ export function ChatPanel({
 
             <div className="flex items-center gap-1.5 shrink-0">
               {/* Approval Mode Switcher */}
-              <div
-                role="group"
-                aria-label="Edit approval mode"
-                className="flex items-center bg-muted/50 rounded-md p-0.5 border border-border"
-              >
-                <button
-                  type="button"
-                  onClick={() => setApprovalMode('ask')}
-                  title="Ask mode — confirm each file-changing action before it runs"
-                  aria-pressed={approvalMode === 'ask'}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    approvalMode === 'ask'
-                      ? 'bg-foreground text-background font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <ShieldQuestion className="w-3.5 h-3.5 shrink-0" />
-                  <span>Ask</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setApprovalMode('accept-edits')}
-                  title="Accept Edits mode — auto-approve file changes for this session"
-                  aria-pressed={approvalMode === 'accept-edits'}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    approvalMode === 'accept-edits'
-                      ? 'bg-foreground text-background font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span>Auto-Approve</span>
-                </button>
+              {/* Runtime Status Indicator */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/50 border border-border">
+                <div className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`} />
+                <span className="text-xs font-semibold text-foreground">
+                  {isStreaming ? 'Executing' : 'Ready'}
+                </span>
               </div>
 
               {isStreaming && (
@@ -413,13 +381,6 @@ export function ChatPanel({
             });
           };
 
-          const handleAcceptAllForSession = () => {
-            // Switch to Accept Edits mode so subsequent destructive calls run without prompting,
-            // then approve the currently pending batch.
-            useApprovalModeStore.getState().setMode('accept-edits');
-            handleAcceptAll();
-          };
-
           const handleRejectAll = () => {
             pendingApprovals.forEach(({ messageId, call }) => {
               useChatStore.getState().executeToolCall(messageId, call.capability, false);
@@ -449,15 +410,12 @@ export function ChatPanel({
                   Accept
                 </Button>
                 <Button
-                  size="sm"
                   variant="outline"
-                  className="h-8 gap-1.5 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-500/40 dark:text-green-400 dark:hover:bg-green-500/10"
-                  onClick={handleAcceptAllForSession}
-                  title="Approve this batch and auto-approve file edits for the rest of the session"
+                  size="sm"
+                  className="h-8 gap-2 border-primary/20 hover:bg-primary/5"
+                  onClick={handleAcceptAll}
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Accept All Edits</span>
-                  <span className="sm:hidden">All</span>
+                  <Check className="w-3.5 h-3.5 text-primary" /> Accept Selection
                 </Button>
                 <Button
                   size="sm"

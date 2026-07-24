@@ -108,10 +108,10 @@ function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
   const isUser = role === 'user';
   return (
     <div
-      className={`w-7 h-7 rounded border flex items-center justify-center shrink-0 font-mono text-xs ${
+      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-mono text-[10px] ${
         isUser
-          ? 'bg-foreground text-background border-foreground'
-          : 'bg-muted text-foreground border-border'
+          ? 'bg-primary/20 text-primary'
+          : 'bg-muted/50 text-muted-foreground'
       }`}
     >
       {isUser ? (
@@ -251,11 +251,11 @@ export const ChatMessage = React.memo(function ChatMessage({
       <div className="flex-1 min-w-0">
         {/* Meta row */}
         {!isConsecutive && (
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs sm:text-sm font-bold text-foreground">
-              {message.role === 'user' ? 'You' : 'Weave AI'}
+          <div className="flex items-center gap-2 mb-1.5 text-muted-foreground">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+              {message.role === 'user' ? 'Goal' : 'Execution'}
             </span>
-            <span className="text-[11px] text-muted-foreground/70 font-mono">
+            <span className="text-[10px] font-mono opacity-60">
               {formatTime(message.timestamp)}
             </span>
             {message.metadata?.model && <InlineBadge>{message.metadata.model}</InlineBadge>}
@@ -336,8 +336,6 @@ export const ChatMessage = React.memo(function ChatMessage({
         {hasPluginCalls && (
           <AgentActivityAccordion
             calls={message.metadata!.plugin_calls}
-            messageId={message.id}
-            isStreaming={isStreaming && _isLast}
           />
         )}
 
@@ -409,10 +407,10 @@ export const ChatMessage = React.memo(function ChatMessage({
 
         {/* Message Body */}
         <div
-          className={`text-sm text-foreground leading-relaxed break-words ${
+          className={`text-sm text-foreground leading-relaxed break-words w-full ${
             message.role === 'user' && !isEditing
-              ? 'inline-block bg-primary/5 dark:bg-muted/40 border border-primary/10 dark:border-border/60 rounded-2xl px-4 py-3 shadow-sm font-sans'
-              : 'w-full'
+              ? 'border-l-2 border-primary/40 pl-3 py-1 bg-surface-1/50 font-sans'
+              : 'font-sans'
           }`}
         >
           {message.images && message.images.length > 0 && (

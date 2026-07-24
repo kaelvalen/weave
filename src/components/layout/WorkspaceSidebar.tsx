@@ -28,18 +28,17 @@ interface NavSection {
 
 const SECTIONS: NavSection[] = [
   {
-    label: 'Activity',
+    label: 'Work',
     items: [
-      { view: 'execution', label: 'Execution', icon: Activity },
       { view: 'chat', label: 'Conversations', icon: MessageSquare },
+      { view: 'execution', label: 'Executions', icon: Activity },
     ],
   },
   {
-    label: 'Workspace',
+    label: 'Knowledge',
     items: [
       { view: 'artifacts', label: 'Artifacts', icon: Package },
       { view: 'memory', label: 'Memory', icon: Brain },
-      { view: 'capabilities', label: 'Capabilities', icon: Boxes },
       { view: 'files', label: 'Files', icon: FolderOpen },
       { view: 'notes', label: 'Notes', icon: StickyNote },
     ],
@@ -47,8 +46,14 @@ const SECTIONS: NavSection[] = [
   {
     label: 'System',
     items: [
+      { view: 'capabilities', label: 'Capabilities', icon: Boxes },
       { view: 'plugins', label: 'Plugins', icon: Plug },
       { view: 'models', label: 'Models', icon: Cpu },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
       { view: 'profile', label: 'Profile', icon: User },
       { view: 'settings', label: 'Settings', icon: Settings },
     ],

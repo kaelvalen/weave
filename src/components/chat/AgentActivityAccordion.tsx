@@ -1,14 +1,10 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, Check, AlertCircle, Loader2 } from 'lucide-react';
-import { PluginCall } from '@/types/chat';
-import { ToolCallCard } from './ToolCallCard';
+import { Check, AlertCircle, Loader2 } from 'lucide-react';
+import type { PluginCall } from '@/types/chat';
 import { ArtifactCard } from './ArtifactCard';
 import { ActiveArtifact } from '@/stores/useAppStore';
 
 interface AgentActivityAccordionProps {
   calls: PluginCall[];
-  messageId: string;
-  isStreaming?: boolean;
 }
 
 function extractArtifactsFromCalls(calls: PluginCall[]): ActiveArtifact[] {
@@ -47,68 +43,46 @@ function extractArtifactsFromCalls(calls: PluginCall[]): ActiveArtifact[] {
 
 export function AgentActivityAccordion({
   calls,
-  messageId,
-  isStreaming,
 }: AgentActivityAccordionProps) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!calls || calls.length === 0) return null;
 
-  const totalCalls = calls.length;
-  const hasError = calls.some((c) => c.status === 'error');
-  const isPending = calls.some((c) => c.status === 'pending' || c.status === 'pending_approval');
-  const isActive = isStreaming || isPending;
   const artifacts = extractArtifactsFromCalls(calls);
 
   return (
-    <div className="my-2 space-y-2 font-mono text-xs">
-      <div className="border border-border/80 rounded-md overflow-hidden bg-muted/20">
-        {/* ── Accordion Header ── */}
-        <button
-          type="button"
-          className="w-full flex items-center justify-between px-3 py-1.5 cursor-pointer select-none hover:bg-muted/40 transition-colors text-left"
-          onClick={() => setExpanded(!expanded)}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            {isActive ? (
-              <Loader2 className="w-3.5 h-3.5 text-foreground animate-spin shrink-0" />
-            ) : hasError ? (
-              <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
-            ) : (
-              <Check className="w-3.5 h-3.5 text-foreground shrink-0" />
-            )}
-
-            <span className="text-muted-foreground truncate">
-              {isActive ? (
-                <span className="text-foreground">Executing {totalCalls} action{totalCalls > 1 ? 's' : ''}...</span>
+    <div className="my-2 space-y-1.5 font-mono text-xs pl-2">
+      <div className="flex flex-col gap-1.5 mt-2 mb-3">
+        {calls.map((call, i) => {
+          const isCallPending = call.status === 'pending' || call.status === 'pending_approval';
+          const isCallError = call.status === 'error';
+          
+          return (
+            <div key={i} className="flex items-center gap-2">
+              {isCallPending ? (
+                <Loader2 className="w-3.5 h-3.5 text-orange-500 animate-spin shrink-0" />
+              ) : isCallError ? (
+                <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
               ) : (
-                <span>
-                  Tool: <code className="text-foreground font-medium">{calls.map((c) => c.capability).join(', ')}</code>
-                </span>
+                <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
               )}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground">
-            <span>{totalCalls} step{totalCalls > 1 ? 's' : ''}</span>
-            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </div>
-        </button>
-
-        {/* ── Accordion Body ── */}
-        {expanded && (
-          <div className="p-2 border-t border-border/60 bg-background/60 space-y-1.5">
-            {calls.map((call, i) => (
-              <ToolCallCard key={i} call={call} messageId={messageId} />
-            ))}
-          </div>
-        )}
+              <span className={isCallError ? "text-destructive font-medium" : (isCallPending ? "text-orange-500 font-medium" : "text-foreground font-medium")}>
+                {call.capability.split('.').pop()?.replace(/_/g, ' ')}
+              </span>
+              <span className="text-muted-foreground opacity-60 ml-1">
+                {isCallPending ? 'running...' : isCallError ? 'failed' : 'completed'}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Artifact Cards for Created Notes/Files ── */}
-      {artifacts.map((art, idx) => (
-        <ArtifactCard key={idx} artifact={art} />
-      ))}
+      {artifacts.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {artifacts.map((art, idx) => (
+            <ArtifactCard key={idx} artifact={art} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

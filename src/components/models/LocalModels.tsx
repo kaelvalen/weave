@@ -289,14 +289,30 @@ export function LocalModels() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-sm">{m.name}</h4>
+                              <h4 className="font-semibold text-sm">{m.name}</h4>
                               {isFav && (
                                 <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-0.5">
                                   <Star className="w-3 h-3 fill-amber-500" /> Favorite
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">{formatBytes(m.size_bytes)}</p>
+                            <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                <span className="text-foreground">Size</span> {formatBytes(m.size_bytes)}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                <span className="text-foreground">Quant</span> Q4_K_M
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                <span className="text-foreground">Ctx</span> 131k
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                <span className="text-green-500">flash-attn ON</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                <span className="text-blue-500">Prompt Cache ACTIVE</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
