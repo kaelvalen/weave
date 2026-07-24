@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::core::event_bus::{EventBus, SystemEvent};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditEventType {
     TaskCreated { task_id: String, goal: String },
@@ -70,6 +72,14 @@ impl EventSourcingStore {
 
         self.records.write().push(record);
         self.project_event(&event);
+    }
+
+    pub fn append_and_publish(&self, event: AuditEventType, metadata: Value, event_bus: &Arc<EventBus>) {
+        self.append(event.clone(), metadata.clone());
+        let _ = event_bus.publish(SystemEvent::TaskStatusChanged {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            status: format!("{:?}", event),
+        });
     }
 
     fn project_event(&self, event: &AuditEventType) {

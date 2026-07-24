@@ -12,6 +12,10 @@ pub enum SystemEvent {
     PluginUnloaded {
         plugin_id: String,
     },
+    TaskStatusChanged {
+        task_id: String,
+        status: String,
+    },
     PluginExecuted {
         plugin_id: String,
         capability: String,

@@ -5,6 +5,7 @@ use tracing::info;
 use crate::core::agent::agent_subsystem::AgentSubsystem;
 use crate::core::event_sourcing::{AuditEventType, EventSourcingStore};
 use crate::core::execution_context::ExecutionContext;
+use crate::core::memory::blackboard::Blackboard;
 use crate::core::memory::memory_engine::MemoryEngine;
 use crate::core::observability::Observability;
 use crate::core::planner::planner_engine::PlannerEngine;
@@ -31,6 +32,7 @@ pub struct RuntimeKernel {
     pub knowledge_graph: Arc<CapabilityKnowledgeGraph>,
     pub agent_subsystem: Arc<AgentSubsystem>,
     pub memory_engine: Arc<MemoryEngine>,
+    pub blackboard: Arc<Blackboard>,
     pub event_store: Arc<EventSourcingStore>,
     pub observability: Arc<Observability>,
     pub resource_manager: Arc<ResourceManager>,
@@ -68,6 +70,7 @@ impl RuntimeKernel {
             knowledge_graph: Arc::new(CapabilityKnowledgeGraph::new()),
             agent_subsystem: Arc::new(AgentSubsystem::new()),
             memory_engine,
+            blackboard: Arc::new(Blackboard::new()),
             event_store,
             observability,
             resource_manager,
@@ -94,13 +97,14 @@ impl RuntimeKernel {
         let span_ctx = ctx.child_span();
         info!("RuntimeKernel orchestrating goal (trace_id: {}, span_id: {}): '{}'", span_ctx.trace_id, span_ctx.span_id, goal);
 
-        // 1. Audit Task Created
-        self.event_store.append(
+        // 1. Audit Task Created & Unified Pipeline Publish
+        self.event_store.append_and_publish(
             AuditEventType::TaskCreated {
                 task_id: span_ctx.session_id.clone(),
                 goal: goal.to_string(),
             },
             json!({"goal": goal, "trace_id": span_ctx.trace_id}),
+            &ctx.event_bus,
         );
 
         // 2. Pure Planner creates candidate TaskGraph

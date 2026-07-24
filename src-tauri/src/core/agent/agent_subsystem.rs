@@ -2,6 +2,10 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use tracing::info;
+
+use crate::core::execution_context::ExecutionContext;
+use crate::core::kernel::RuntimeKernel;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AgentStatus {
@@ -27,6 +31,31 @@ pub struct Agent {
     pub role: String,
     pub status: AgentStatus,
     pub goal_queue: VecDeque<AgentGoal>,
+}
+
+impl Agent {
+    pub async fn run_loop(&mut self, kernel: Arc<RuntimeKernel>, plugin_id: &str, ctx: ExecutionContext) {
+        info!("Starting autonomous event loop for Agent '{}' ({})", self.name, self.id);
+
+        while let Some(goal) = self.goal_queue.pop_front() {
+            self.status = AgentStatus::Planning;
+            info!("Agent '{}' processing goal: '{}'", self.name, goal.goal_text);
+
+            self.status = AgentStatus::Executing;
+            match kernel.execute_goal(&goal.goal_text, plugin_id, &ctx).await {
+                Ok(output) => {
+                    info!("Agent '{}' successfully completed goal: {:?}", self.name, output);
+                }
+                Err(e) => {
+                    self.status = AgentStatus::Failed { error: e.to_string() };
+                    info!("Agent '{}' failed goal execution: {}", self.name, e);
+                    break;
+                }
+            }
+        }
+
+        self.status = AgentStatus::Idle;
+    }
 }
 
 pub struct AgentSubsystem {

@@ -7,11 +7,20 @@ use crate::core::registries::execution_registry::ExecutionRegistry;
 use crate::utils::errors::WeaveError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactBinding {
+    pub name: String,
+    pub source_step: Option<String>,
+    pub source_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeclarativeStep {
     pub id: String,
     pub plugin_id: String,
     pub capability: String,
     pub params: Value,
+    pub inputs: Vec<ArtifactBinding>,
+    pub outputs: Vec<ArtifactBinding>,
     pub preconditions: Vec<String>,
 }
 
@@ -57,14 +66,33 @@ impl WorkflowEngine {
             })?
         };
 
+        let mut step_outputs: HashMap<String, Value> = HashMap::new();
         let mut results = Vec::new();
+
         for step in wf.steps {
+            let mut resolved_params = step.params.clone();
+
+            // Resolve Dataflow Artifact Inputs
+            if let Some(obj) = resolved_params.as_object_mut() {
+                for input_binding in &step.inputs {
+                    if let Some(ref src_step) = input_binding.source_step {
+                        if let Some(prev_out) = step_outputs.get(src_step) {
+                            if let Some(val) = prev_out.get(&input_binding.source_key) {
+                                obj.insert(input_binding.name.clone(), val.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
             let res = self.execution_registry.execute(
                 &step.plugin_id,
                 &step.capability,
-                step.params,
+                resolved_params,
                 ctx,
             )?;
+
+            step_outputs.insert(step.id.clone(), res.clone());
             results.push(res);
         }
 
