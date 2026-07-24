@@ -66,6 +66,10 @@ impl PluginManager {
         }
     }
 
+    pub fn plugin_dir(&self) -> PathBuf {
+        self.plugin_dir.clone()
+    }
+
     fn create_builtin_plugins() -> Vec<Plugin> {
         vec![
             PluginBuilder::builtin("com.weave.builtin.file", "File Manager")

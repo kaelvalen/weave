@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::core::registries::planner_index::PlannerIndex;
+use crate::core::registries::vector_index::CapabilityVectorIndex;
 use crate::core::tool_registry::ToolDefinition;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +59,22 @@ impl CapabilityKnowledgeGraph {
 
     pub fn add_edge(&self, edge: KnowledgeEdge) {
         self.edges.write().push(edge);
+    }
+
+    pub fn project_planner_index(&self) -> PlannerIndex {
+        let index = PlannerIndex::new();
+        for node in self.nodes.read().values() {
+            index.index_tool(node.to_tool_definition());
+        }
+        index
+    }
+
+    pub fn project_vector_index(&self) -> CapabilityVectorIndex {
+        let v_index = CapabilityVectorIndex::new();
+        for node in self.nodes.read().values() {
+            v_index.index_capability(&node.id, &node.description, node.vector_embedding.clone());
+        }
+        v_index
     }
 
     pub fn traverse_implements(&self, capability_id: &str) -> Option<String> {
