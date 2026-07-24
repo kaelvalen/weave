@@ -719,6 +719,29 @@ export const useChatStore = create<ChatState>()(
 
       saveSession();
 
+      // Record the execution plan so the runtime emits a `plan_started` event.
+      // goal_id = this assistant message id — the same traceId passed to
+      // plugin_execute below, so plan/step runtime events join under one goal.
+      // Fire-and-forget: must never break or delay tool execution.
+      try {
+        const history = get().messages;
+        const msgIndex = history.findIndex((m) => m.id === messageId);
+        let goalText = '';
+        for (let i = msgIndex - 1; i >= 0; i--) {
+          if (history[i].role === 'user' && !history[i].metadata?.isHidden) {
+            goalText = history[i].content;
+            break;
+          }
+        }
+        invoke('runtime_note_plan', {
+          traceId: messageId,
+          title: (goalText || 'Untitled goal').slice(0, 80),
+          steps: validCalls.map((c) => ({ plugin_id: c.pluginId, capability: c.capName })),
+        }).catch((err) => console.warn('runtime_note_plan failed:', err));
+      } catch (err) {
+        console.warn('runtime_note_plan failed:', err);
+      }
+
       if (requiresApproval) {
         set((state) => {
           state.isStreaming = false;

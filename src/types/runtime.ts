@@ -25,6 +25,63 @@ export interface RuntimeEvent {
   latency_ms: number | null;
   summary: string;
   artifact_ref: string | null;
+  /** Tool input as passed to `plugin_execute` (long strings truncated backend-side). */
+  params?: Record<string, unknown> | null;
+  /** Tool result payload (truncated backend-side). */
+  output?: unknown | null;
+  /** Structured error message for failed steps. */
+  error?: string | null;
+}
+
+/** One step of an execution, derived client-side from step_started/step_succeeded/step_failed events. */
+export interface ExecutionStep {
+  step_id: string;
+  plugin_id: string | null;
+  capability: string | null;
+  status: 'running' | 'succeeded' | 'failed';
+  latency_ms: number | null;
+  summary: string;
+  params?: Record<string, unknown> | null;
+  output?: unknown | null;
+  error?: string | null;
+  artifact_ref: string | null;
+  /** ts of the step_started event (RFC 3339). */
+  started_ts: string;
+}
+
+/** A single planned capability call, as reported by `runtime_note_plan`. */
+export interface PlannedStep {
+  plugin_id: string | null;
+  capability: string;
+}
+
+/** serde output of the `trace_list` command. */
+export interface TraceSummary {
+  goal_id: string;
+  title: string;
+  started_at: string;
+  ended_at: string | null;
+  step_count: number;
+  failure_count: number;
+  total_latency_ms: number;
+  status: 'running' | 'succeeded' | 'failed';
+}
+
+/** serde output of the `runtime_get_model_stats` command. */
+export interface ModelStats {
+  active_model: string | null;
+  ollama_running: boolean;
+  total_tokens: number;
+  last_tps: number | null;
+  avg_tps: number | null;
+  loaded_models: { name: string; vram_bytes: number | null }[];
+}
+
+/** serde output of the `local_model_info` command (best-effort GGUF header parse). */
+export interface LocalModelDetails {
+  quant: string | null;
+  context_length: number | null;
+  parameter_count: string | null;
 }
 
 export interface ToolMetrics {

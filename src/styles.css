@@ -338,3 +338,50 @@
     white-space: inherit !important;
   }
 }
+
+@layer utilities {
+  /* ─── Execution Workspace animations ─── */
+  /* Timeline node entrance — gentle fade + 2px rise */
+  .step-node-enter {
+    animation: stepNodeEnter 200ms ease-out forwards;
+  }
+  @keyframes stepNodeEnter {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Running step — subtle opacity pulse */
+  .step-node-running {
+    animation: stepNodeRunning 1.5s ease-in-out infinite;
+  }
+  @keyframes stepNodeRunning {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  /* Artifact list entrance — gentle fade + 2px rise */
+  .artifact-enter {
+    animation: artifactEnter 200ms ease-out forwards;
+  }
+  @keyframes artifactEnter {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

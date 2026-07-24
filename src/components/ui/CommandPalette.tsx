@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
+import { usePluginStore } from '@/stores/usePluginStore';
+import { extractError } from '@/lib/errors';
+import { toast } from 'sonner';
 import {
   Search,
   FolderOpen,
@@ -10,15 +13,93 @@ import {
   Brain,
   Activity,
   Boxes,
+  Zap,
+  type LucideIcon,
 } from 'lucide-react';
+
+const MEMORY_PLUGIN = 'com.weave.builtin.memory';
+const MEMORY_RESULT_LIMIT = 5;
+const MEMORY_SEARCH_DEBOUNCE_MS = 250;
+
+interface PaletteItem {
+  id: string;
+  label: string;
+  hint?: string;
+  icon: LucideIcon;
+  onSelect: () => void;
+}
+
+interface IndexedItem {
+  item: PaletteItem;
+  index: number;
+}
+
+interface PaletteGroup {
+  label: string;
+  items: IndexedItem[];
+}
+
+interface MemoryHit {
+  key: string;
+  content: string;
+}
+
+/** Extract the content string from a stored memory value (same shape as MemoryView). */
+function memoryContentOf(value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    return String(obj.content ?? JSON.stringify(value));
+  }
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/**
+ * Capability schemas are example param skeletons (e.g. `{"key":"..."}`), not
+ * full JSON Schemas — required vs optional can't be told apart. Treat any
+ * non-empty skeleton as needing user input; only `{}`/missing schemas are
+ * safe to run with empty params.
+ */
+function schemaNeedsParams(schema: string | undefined): boolean {
+  const trimmed = schema?.trim();
+  if (!trimmed || trimmed === '{}') return false;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length > 0;
+  } catch {
+    // Unparseable skeleton — don't execute blindly, hand the user a template.
+    return true;
+  }
+}
+
+function runCapability(
+  execute: (pluginId: string, capability: string, params: Record<string, unknown>) => Promise<unknown>,
+  pluginId: string,
+  capability: string,
+  schema: string | undefined
+): void {
+  if (schemaNeedsParams(schema)) {
+    const template = `/${capability} ${schema?.trim() || '{}'}`;
+    navigator.clipboard.writeText(template).then(
+      () => toast.success('Parametreleri doldurup sohbete yapıştırın'),
+      () => toast.error('Failed to copy to clipboard')
+    );
+    return;
+  }
+  execute(pluginId, capability, {})
+    .then(() => toast.success(`Ran ${capability}`))
+    .catch((err) => toast.error(`${capability} failed: ${extractError(err)}`));
+}
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const { setActiveView } = useAppStore();
+  const [memoryHits, setMemoryHits] = useState<MemoryHit[]>([]);
+  const setActiveView = useAppStore((s) => s.setActiveView);
+  const plugins = usePluginStore((s) => s.plugins);
+  const executeCapability = usePluginStore((s) => s.executeCapability);
 
-  const actions = useMemo(
+  const navActions = useMemo<PaletteItem[]>(
     () => [
       {
         id: 'chat',
@@ -74,10 +155,61 @@ export function CommandPalette() {
     [setActiveView]
   );
 
-  const filtered = useMemo(
-    () => actions.filter((a) => a.label.toLowerCase().includes(query.toLowerCase())),
-    [actions, query]
+  const capabilities = useMemo<PaletteItem[]>(
+    () =>
+      plugins.flatMap((plugin) =>
+        (plugin.capabilities?.provide ?? []).map((cap) => {
+          const description = plugin.capabilities.descriptions?.[cap] ?? '';
+          return {
+            id: `cap:${plugin.id}:${cap}`,
+            label: cap,
+            hint: description ? `${plugin.name} · ${description}` : plugin.name,
+            icon: Zap,
+            onSelect: () =>
+              runCapability(executeCapability, plugin.id, cap, plugin.capabilities.schemas?.[cap]),
+          };
+        })
+      ),
+    [plugins, executeCapability]
   );
+
+  // Memory search (debounced). memory.recall has no server-side query param —
+  // it returns all entries, so filtering happens client-side, like MemoryView.
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (q.length < 2) {
+      setMemoryHits([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = (await executeCapability(MEMORY_PLUGIN, 'memory.recall', {})) as {
+          memory?: Record<string, unknown>;
+        };
+        if (cancelled) return;
+        const needle = q.toLowerCase();
+        const hits: MemoryHit[] = [];
+        for (const [key, value] of Object.entries(res?.memory ?? {})) {
+          if (key.startsWith('_')) continue;
+          const content = memoryContentOf(value);
+          if (key.toLowerCase().includes(needle) || content.toLowerCase().includes(needle)) {
+            hits.push({ key, content });
+          }
+          if (hits.length >= MEMORY_RESULT_LIMIT) break;
+        }
+        setMemoryHits(hits);
+      } catch {
+        // Memory plugin unavailable — show no memory section.
+        if (!cancelled) setMemoryHits([]);
+      }
+    }, MEMORY_SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, query, executeCapability]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -108,32 +240,86 @@ export function CommandPalette() {
     };
   }, []);
 
+  const q = query.trim().toLowerCase();
+
+  const filteredNav = useMemo(
+    () => navActions.filter((a) => !q || a.label.toLowerCase().includes(q)),
+    [navActions, q]
+  );
+
+  const filteredCapabilities = useMemo(
+    () =>
+      capabilities.filter(
+        (c) => !q || c.label.toLowerCase().includes(q) || (c.hint ?? '').toLowerCase().includes(q)
+      ),
+    [capabilities, q]
+  );
+
+  const memoryItems = useMemo<PaletteItem[]>(
+    () =>
+      memoryHits.map((hit) => ({
+        id: `mem:${hit.key}`,
+        label: hit.key,
+        hint: hit.content.length > 80 ? `${hit.content.slice(0, 80)}…` : hit.content,
+        icon: Brain,
+        onSelect: () => {
+          navigator.clipboard.writeText(hit.content).then(
+            () => toast.success(`Copied "${hit.key}" to clipboard`),
+            () => toast.error('Failed to copy to clipboard')
+          );
+        },
+      })),
+    [memoryHits]
+  );
+
+  const groups = useMemo<PaletteGroup[]>(() => {
+    let index = 0;
+    const out: PaletteGroup[] = [];
+    const push = (label: string, items: PaletteItem[]) => {
+      if (items.length === 0) return;
+      out.push({ label, items: items.map((item) => ({ item, index: index++ })) });
+    };
+    push('Navigate', filteredNav);
+    push('Capabilities', filteredCapabilities);
+    push('Memory', memoryItems);
+    return out;
+  }, [filteredNav, filteredCapabilities, memoryItems]);
+
+  const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const safeIndex = flatItems.length === 0 ? 0 : Math.min(activeIndex, flatItems.length - 1);
+
   if (!open) return null;
 
+  const handleSelect = (item: PaletteItem) => {
+    item.onSelect();
+    setOpen(false);
+    setQuery('');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (filtered.length === 0) return;
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (flatItems.length === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % filtered.length);
+      setActiveIndex((safeIndex + 1) % flatItems.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIndex((i) => (i - 1 + filtered.length) % filtered.length);
+      setActiveIndex((safeIndex - 1 + flatItems.length) % flatItems.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const action = filtered[activeIndex];
-      if (action) {
-        action.onSelect();
-        setOpen(false);
-        setQuery('');
-      }
-    } else if (e.key === 'Escape') {
-      setOpen(false);
+      const entry = flatItems[safeIndex];
+      if (entry) handleSelect(entry.item);
     }
   };
 
   const activeId =
-    activeIndex >= 0 && filtered[activeIndex] ? `cmd-item-${filtered[activeIndex].id}` : undefined;
+    flatItems.length > 0 && flatItems[safeIndex]
+      ? `cmd-item-${flatItems[safeIndex].item.id}`
+      : undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] sm:pt-[20vh]">
@@ -166,35 +352,43 @@ export function CommandPalette() {
           aria-activedescendant={activeId}
           className="max-h-[300px] overflow-y-auto p-2"
         >
-          {filtered.length === 0 ? (
+          {flatItems.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">No results found.</div>
           ) : (
-            filtered.map((action, index) => {
-              const isActive = index === activeIndex;
-              return (
-                <button
-                  key={action.id}
-                  id={`cmd-item-${action.id}`}
-                  role="option"
-                  aria-selected={isActive}
-                  onClick={() => {
-                    action.onSelect();
-                    setOpen(false);
-                    setQuery('');
-                  }}
-                  className={`relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${
-                    isActive ? 'bg-accent text-accent-foreground' : ''
-                  }`}
-                >
-                  <action.icon className="mr-2 h-4 w-4" />
-                  {action.label}
-                </button>
-              );
-            })
+            groups.map((group) => (
+              <div key={group.label}>
+                <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground select-none">
+                  {group.label}
+                </div>
+                {group.items.map(({ item, index }) => {
+                  const isActive = index === safeIndex;
+                  return (
+                    <button
+                      key={item.id}
+                      id={`cmd-item-${item.id}`}
+                      role="option"
+                      aria-selected={isActive}
+                      onClick={() => handleSelect(item)}
+                      className={`relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${
+                        isActive ? 'bg-accent text-accent-foreground' : ''
+                      }`}
+                    >
+                      <item.icon className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                      {item.hint && (
+                        <span className="ml-auto pl-3 truncate text-xs text-muted-foreground">
+                          {item.hint}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
           )}
         </div>
         <div className="border-t px-4 py-2 flex items-center justify-between bg-muted/50 text-[10px] text-muted-foreground">
-          <span>Search capabilities</span>
+          <span>Navigate · Run capability · Search memory</span>
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded border bg-background font-mono">↑</kbd>
             <kbd className="px-1.5 py-0.5 rounded border bg-background font-mono">↓</kbd>

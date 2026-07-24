@@ -28,7 +28,7 @@ interface NavSection {
 
 const SECTIONS: NavSection[] = [
   {
-    label: 'Work',
+    label: 'Workspace',
     items: [
       { view: 'chat', label: 'Conversations', icon: MessageSquare },
       { view: 'execution', label: 'Executions', icon: Activity },

@@ -7,6 +7,46 @@ use crate::models::plugin::Plugin;
 use crate::utils::errors::WeaveError;
 use runtime_kernel::runtime_event::{RuntimeEvent, RuntimeEventKind};
 
+/// Longest string value kept verbatim inside event params/output payloads.
+const MAX_EVENT_STRING_LEN: usize = 2000;
+/// Largest serialized output payload attached to a `step_succeeded` event.
+const MAX_EVENT_OUTPUT_BYTES: usize = 8 * 1024;
+
+/// Recursively clamp string values in an event payload so a single tool call
+/// cannot flood the frontend with megabytes of text.
+fn truncate_event_strings(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            if s.chars().count() > MAX_EVENT_STRING_LEN {
+                let truncated: String = s.chars().take(MAX_EVENT_STRING_LEN).collect();
+                serde_json::Value::String(format!("{}…[truncated]", truncated))
+            } else {
+                serde_json::Value::String(s.clone())
+            }
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(truncate_event_strings).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), truncate_event_strings(v)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Cap the total serialized size of a step output payload; oversized results
+/// are replaced with a small summary object.
+fn cap_event_output(value: serde_json::Value) -> serde_json::Value {
+    match serde_json::to_vec(&value) {
+        Ok(bytes) if bytes.len() > MAX_EVENT_OUTPUT_BYTES => {
+            serde_json::json!({"_truncated": true, "bytes": bytes.len()})
+        }
+        _ => value,
+    }
+}
+
 #[tauri::command]
 pub async fn plugin_discover(app_state: State<'_, AppState>) -> Result<Vec<Plugin>, WeaveError> {
     info!("Plugin discovery requested");
@@ -184,6 +224,7 @@ pub async fn plugin_execute(
     start_event.goal_id = trace_id.clone();
     start_event.plugin_id = Some(plugin_id.clone());
     start_event.capability = Some(capability.clone());
+    start_event.params = Some(truncate_event_strings(&params));
     app_state.event_bus.publish_runtime(start_event);
 
     let start = std::time::Instant::now();
@@ -212,6 +253,14 @@ pub async fn plugin_execute(
     end_event.plugin_id = Some(plugin_id.clone());
     end_event.capability = Some(capability.clone());
     end_event.latency_ms = Some(latency_ms);
+    match &result {
+        Ok(output) => {
+            end_event.output = Some(cap_event_output(truncate_event_strings(output)));
+        }
+        Err(e) => {
+            end_event.error = Some(e.to_string());
+        }
+    }
     app_state.event_bus.publish_runtime(end_event);
 
     // Secondary signals, only where trivially detectable at this layer.

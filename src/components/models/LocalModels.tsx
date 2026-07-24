@@ -7,6 +7,15 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { extractError } from '@/lib/errors';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import type { LocalModelDetails, ModelStats } from '@/types/runtime';
+import {
+  effectiveTps,
+  findLoadedModel,
+  formatContextLength,
+  formatTps,
+  formatVram,
+  isActiveModel,
+} from '@/lib/modelStats';
 
 interface LocalModelInfo {
   name: string;
@@ -36,6 +45,8 @@ interface LocalServerStatus {
 export function LocalModels() {
   const [models, setModels] = useState<LocalModelInfo[]>([]);
   const [stats, setStats] = useState<SystemStats>({ ram_usage: 0, ram_total: 16_000_000_000 });
+  const [modelDetails, setModelDetails] = useState<Record<string, LocalModelDetails>>({});
+  const [modelStats, setModelStats] = useState<ModelStats | null>(null);
   const [downloadUrl, setDownloadUrl] = useState('');
   const [activeDownload, setActiveDownload] = useState<DownloadProgress | null>(null);
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
@@ -59,10 +70,27 @@ export function LocalModels() {
     });
   };
 
+  // Best-effort GGUF header parse per model file; fields that come back null
+  // (or files that fail) simply render no badges — nothing is fabricated.
+  const fetchModelDetails = async (list: LocalModelInfo[]) => {
+    const next: Record<string, LocalModelDetails> = {};
+    await Promise.all(
+      list.map(async (m) => {
+        try {
+          next[m.name] = await invoke<LocalModelDetails>('local_model_info', { filename: m.name });
+        } catch {
+          // No readable header for this file — its detail badges stay hidden.
+        }
+      })
+    );
+    setModelDetails(next);
+  };
+
   const fetchModels = async () => {
     try {
       const data = await invoke<LocalModelInfo[]>('list_local_models');
       setModels(data);
+      fetchModelDetails(data);
     } catch (e) {
       toast.error(`Failed to load local models: ${extractError(e)}`);
     }
@@ -75,6 +103,16 @@ export function LocalModels() {
     } catch (e) {
       // Stats are polled every 2s; toast on every failure would be noisy.
       console.warn('Failed to fetch system stats', e);
+    }
+  };
+
+  const fetchModelStats = async () => {
+    try {
+      const data = await invoke<ModelStats>('runtime_get_model_stats');
+      setModelStats(data);
+    } catch (e) {
+      // Polled every 10s; keep previous values on failure.
+      console.warn('Failed to fetch model stats', e);
     }
   };
 
@@ -124,6 +162,10 @@ export function LocalModels() {
     fetchStats();
     const interval = setInterval(fetchStats, 2000);
 
+    // Poll loaded/VRAM/TPS model stats while this view is mounted
+    fetchModelStats();
+    const modelStatsInterval = setInterval(fetchModelStats, 10000);
+
     // Listen to download progress
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {
       setActiveDownload(event.payload);
@@ -140,6 +182,7 @@ export function LocalModels() {
 
     return () => {
       clearInterval(interval);
+      clearInterval(modelStatsInterval);
       unlisten.then((f) => f());
     };
   }, []);
@@ -278,6 +321,11 @@ export function LocalModels() {
                   })
                   .map((m) => {
                     const isFav = favorites.includes(m.name);
+                    const details = modelDetails[m.name];
+                    const loaded = findLoadedModel(modelStats, m.name);
+                    const tps = isActiveModel(modelStats, m.name)
+                      ? effectiveTps(modelStats)
+                      : null;
                     return (
                       <div
                         key={m.name}
@@ -300,18 +348,39 @@ export function LocalModels() {
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
                                 <span className="text-foreground">Size</span> {formatBytes(m.size_bytes)}
                               </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span className="text-foreground">Quant</span> Q4_K_M
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span className="text-foreground">Ctx</span> 131k
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span className="text-green-500">flash-attn ON</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span className="text-blue-500">Prompt Cache ACTIVE</span>
-                              </div>
+                              {details?.quant && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                  <span className="text-foreground">Quant</span> {details.quant}
+                                </div>
+                              )}
+                              {details?.context_length != null && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                  <span className="text-foreground">Ctx</span>{' '}
+                                  {formatContextLength(details.context_length)}
+                                </div>
+                              )}
+                              {details?.parameter_count && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                  <span className="text-foreground">Params</span>{' '}
+                                  {details.parameter_count}
+                                </div>
+                              )}
+                              {loaded && (
+                                <div className="flex items-center gap-1.5 text-xs font-mono">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                  <span className="text-green-500">Loaded</span>
+                                  {loaded.vram_bytes != null && (
+                                    <span className="text-muted-foreground">
+                                      · VRAM {formatVram(loaded.vram_bytes)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {tps != null && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                                  <span className="text-green-500">{formatTps(tps)} tps</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

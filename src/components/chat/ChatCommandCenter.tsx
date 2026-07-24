@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useApprovalModeStore } from '@/stores/useApprovalModeStore';
 import { useAppStore } from '@/stores/useAppStore';
+import { useRuntimeStore } from '@/stores/useRuntimeStore';
+import { refreshObservability } from '@/hooks/useRuntimeEvents';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +72,43 @@ const SUGGESTED_PROMPTS = [
 ];
 
 
+
+/**
+ * Compact live runtime status line for the chat empty state.
+ * Shows only values that are actually available; renders nothing when none are.
+ */
+function RuntimeStatusStrip() {
+  const executions = useRuntimeStore((s) => s.executions);
+  const observability = useRuntimeStore((s) => s.observability);
+  const selectedModel = useChatStore((s) => s.selectedModel);
+
+  useEffect(() => {
+    refreshObservability();
+  }, []);
+
+  const runningCount = useMemo(
+    () => executions.filter((e) => e.status === 'running').length,
+    [executions]
+  );
+
+  const items: string[] = [];
+  if (runningCount > 0) items.push(`${runningCount} step${runningCount === 1 ? '' : 's'} running`);
+  if (observability) items.push(`${observability.total_tool_calls} tool calls today`);
+  if (selectedModel) items.push(selectedModel);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-6 flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
+      {items.map((item, i) => (
+        <span key={i} className="flex items-center gap-2">
+          {i > 0 && <span aria-hidden>·</span>}
+          <span>{item}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function ChatCommandCenter() {
   const {
@@ -418,7 +457,7 @@ export function ChatCommandCenter() {
                   Weave AI
                 </h2>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-6 font-mono">
-                  Autonomous agent workspace. Type a prompt or use slash commands to execute tasks.
+                  Execution-first AI workspace. State a goal — Weave plans and executes it.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full text-left">
@@ -434,6 +473,8 @@ export function ChatCommandCenter() {
                     </button>
                   ))}
                 </div>
+
+                <RuntimeStatusStrip />
               </div>
             ) : (
               <div className="py-2 space-y-4">

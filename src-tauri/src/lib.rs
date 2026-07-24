@@ -14,13 +14,14 @@ pub mod plugins;
 pub mod runtime;
 pub mod utils;
 
-use ai_bridge::AiBridge;
+use ai_bridge::{AiBridge, ModelTelemetry};
 use models::chat::ChatMessage;
 use plugin_manager::PluginManager;
 use runtime_kernel::event_bus::EventBus;
 use runtime_kernel::event_store::EventSourcingStore;
 use runtime_kernel::execution_context::ExecutionContext;
 use runtime_kernel::observability::Observability;
+use runtime_kernel::runtime_event::RuntimeEvent;
 use utils::config::AppConfig;
 use utils::errors::WeaveError;
 
@@ -35,6 +36,7 @@ pub struct AppState {
     pub abort_generation: Arc<AtomicBool>,
     pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub local_server: Arc<tokio::sync::Mutex<Option<Child>>>,
+    pub model_telemetry: Arc<parking_lot::Mutex<ModelTelemetry>>,
 }
 
 impl AppState {
@@ -62,11 +64,17 @@ impl AppState {
 
         let (canvas_tx, _) = tokio::sync::broadcast::channel(100);
 
-        let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone(), canvas_tx.clone()));
-        let ai_bridge = Arc::new(AiBridge::new(ai_config_arc));
         let event_bus = Arc::new(EventBus::new(1000));
         let event_store = Arc::new(EventSourcingStore::new());
         let observability = Arc::new(Observability::new());
+        let model_telemetry = Arc::new(parking_lot::Mutex::new(ModelTelemetry::default()));
+
+        let plugin_manager = Arc::new(PluginManager::new(plugin_dir.clone(), canvas_tx.clone()));
+        let ai_bridge = Arc::new(AiBridge::new(
+            ai_config_arc,
+            observability.clone(),
+            model_telemetry.clone(),
+        ));
 
         let _ = plugin_manager.discover();
 
@@ -83,6 +91,7 @@ impl AppState {
             abort_generation: Arc::new(AtomicBool::new(false)),
             canvas_tx,
             local_server: Arc::new(tokio::sync::Mutex::new(None)),
+            model_telemetry,
         })
     }
 
@@ -102,16 +111,27 @@ impl AppState {
     }
 
     /// Bridge structured runtime events from the kernel event bus to the
-    /// frontend as Tauri `runtime-event` emissions. Spawns a background task;
-    /// call once during app setup.
+    /// frontend as Tauri `runtime-event` emissions. Also persists each event
+    /// as a JSON line under `<app_data_dir>/traces/events.jsonl` so traces can
+    /// be queried later. Spawns a background task; call once during app setup.
     pub fn spawn_runtime_event_bridge(&self, app_handle: tauri::AppHandle) {
         use tauri::Emitter;
+        use tauri::Manager;
+
+        let traces_dir = app_handle
+            .path()
+            .app_data_dir()
+            .ok()
+            .map(|dir| dir.join("traces"));
 
         let mut rx = self.event_bus.subscribe_runtime();
         tauri::async_runtime::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(event) => {
+                        if let Some(ref dir) = traces_dir {
+                            persist_runtime_event(dir, &event);
+                        }
                         if let Err(e) = app_handle.emit("runtime-event", &event) {
                             tracing::warn!("Failed to emit runtime-event to frontend: {}", e);
                         }
@@ -125,4 +145,49 @@ impl AppState {
             }
         });
     }
+}
+
+/// Rotate the trace log once it grows past this size.
+const MAX_TRACE_FILE_BYTES: u64 = 8 * 1024 * 1024;
+/// Number of lines kept when the trace log is rotated.
+const TRACE_ROTATION_KEEP_LINES: usize = 10_000;
+
+/// Best-effort trace persistence — never panics, never propagates errors.
+fn persist_runtime_event(traces_dir: &std::path::Path, event: &RuntimeEvent) {
+    if let Err(e) = persist_runtime_event_inner(traces_dir, event) {
+        tracing::warn!("Failed to persist runtime event trace: {}", e);
+    }
+}
+
+fn persist_runtime_event_inner(
+    traces_dir: &std::path::Path,
+    event: &RuntimeEvent,
+) -> std::io::Result<()> {
+    use std::io::Write;
+
+    std::fs::create_dir_all(traces_dir)?;
+    let path = traces_dir.join("events.jsonl");
+
+    let line = serde_json::to_string(event)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        writeln!(file, "{}", line)?;
+    }
+
+    // Rotate when the file grows too large: keep only the most recent lines.
+    if std::fs::metadata(&path)?.len() > MAX_TRACE_FILE_BYTES {
+        let content = std::fs::read_to_string(&path)?;
+        let lines: Vec<&str> = content.lines().collect();
+        let start = lines.len().saturating_sub(TRACE_ROTATION_KEEP_LINES);
+        let mut kept = lines[start..].join("\n");
+        kept.push('\n');
+        std::fs::write(&path, kept)?;
+    }
+
+    Ok(())
 }

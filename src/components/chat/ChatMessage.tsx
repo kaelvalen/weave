@@ -3,12 +3,16 @@ import { useChatStore } from '@/stores/useChatStore';
 import type { ChatMessage as ChatMessageType, PluginCall } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { User, Bot, Copy, Check, Brain, Edit2, RefreshCw } from 'lucide-react';
+import { Copy, Check, Brain, Edit2, RefreshCw, Loader2 } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
 import { AgentActivityAccordion } from './AgentActivityAccordion';
 import { ArtifactCard } from './ArtifactCard';
 import { ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
+import { GoalCard } from '@/components/workspace/GoalCard';
+import { ExecutionSection } from '@/components/workspace/ExecutionSection';
+import { SectionLabel } from '@/components/workspace/SectionLabel';
+import { usePlanForGoal, useStepsForGoal } from '@/components/workspace/runtimeSelectors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -104,25 +108,6 @@ const CodeBlock = React.memo(function CodeBlock({ inline, className, children, .
   );
 });
 
-function MsgAvatar({ role }: { role: 'user' | 'assistant' }) {
-  const isUser = role === 'user';
-  return (
-    <div
-      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-mono text-[10px] ${
-        isUser
-          ? 'bg-primary/20 text-primary'
-          : 'bg-muted/50 text-muted-foreground'
-      }`}
-    >
-      {isUser ? (
-        <User className="w-3.5 h-3.5" />
-      ) : (
-        <Bot className="w-3.5 h-3.5" />
-      )}
-    </div>
-  );
-}
-
 function InlineBadge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/50 text-muted-foreground border border-border">
@@ -131,10 +116,87 @@ function InlineBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
+interface HoverActionsProps {
+  isAssistant: boolean;
+  isStreaming: boolean;
+  isEditing?: boolean;
+  copied: boolean;
+  onCopy: () => void;
+  onEdit?: () => void;
+  onRegenerate: () => void;
+}
+
+function HoverActions({
+  isAssistant,
+  isStreaming,
+  isEditing,
+  copied,
+  onCopy,
+  onEdit,
+  onRegenerate,
+}: HoverActionsProps) {
+  return (
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+      {isAssistant && !isStreaming && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-md hover:bg-muted"
+              onClick={onRegenerate}
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Regenerate response</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {!isAssistant && !isEditing && onEdit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-md hover:bg-muted"
+              onClick={onEdit}
+            >
+              <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Edit message</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 rounded-md hover:bg-muted"
+            onClick={onCopy}
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-green-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{copied ? 'Copied!' : 'Copy'}</p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 export const ChatMessage = React.memo(function ChatMessage({
   message,
   isLast: _isLast,
-  isConsecutive,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -146,13 +208,19 @@ export const ChatMessage = React.memo(function ChatMessage({
   const isAssistant = message.role === 'assistant';
   const showCursor = _isLast && isStreaming && isAssistant;
 
+  // Runtime events for this goal. goalId === this assistant message's id: it is
+  // the traceId passed to plugin_execute, so runtime events carry it as goal_id.
+  const executionSteps = useStepsForGoal(message.id);
+  const executionPlan = usePlanForGoal(message.id);
+  const hasRuntimeExecution = isAssistant && (executionSteps.length > 0 || executionPlan != null);
+
   const cleanedMarkdown = React.useMemo(() => {
     return message.content
       .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
       .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
       .replace(/<\/?(?:call|think|thought)[^>]*$/gi, '')
       .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-      .replace(/\\\((.*?)\\\)/g, '$$$1$$');
+      .replace(/\\\((.*?)\)/g, '$$$1$$');
   }, [message.content]);
 
   const handleCopy = useCallback(() => {
@@ -170,7 +238,7 @@ export const ChatMessage = React.memo(function ChatMessage({
   };
 
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
-  const hasIntent = message.metadata?.intent;
+  const intent = message.metadata?.intent;
 
   // Detect raw OpenRouter tool return messages injected by backend
   const isFakeToolUser =
@@ -238,203 +306,51 @@ export const ChatMessage = React.memo(function ChatMessage({
     );
   }
 
-  return (
-    <div
-      className={`group flex items-start gap-3.5 px-4 sm:px-6 transition-colors ${isConsecutive ? 'py-1' : 'py-3 hover:bg-muted/20 rounded-2xl'}`}
-    >
-      {/* Avatar */}
-      <div className="flex-shrink-0 mt-0.5 w-8">
-        {!isConsecutive && <MsgAvatar role={message.role as 'user' | 'assistant'} />}
-      </div>
-
-      {/* Content Area */}
-      <div className="flex-1 min-w-0">
-        {/* Meta row */}
-        {!isConsecutive && (
-          <div className="flex items-center gap-2 mb-1.5 text-muted-foreground">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-              {message.role === 'user' ? 'Goal' : 'Execution'}
-            </span>
-            <span className="text-[10px] font-mono opacity-60">
-              {formatTime(message.timestamp)}
-            </span>
-            {message.metadata?.model && <InlineBadge>{message.metadata.model}</InlineBadge>}
-
-            {/* Actions */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1 bg-card/80 backdrop-blur-sm border border-border/60 rounded-lg px-1 py-0.5 shadow-sm">
-              {isAssistant && !isStreaming && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 rounded-md hover:bg-muted"
-                      onClick={() => regenerateResponse(message.id)}
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Regenerate response</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {!isAssistant && !isEditing && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 rounded-md hover:bg-muted"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Edit message</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 rounded-md hover:bg-muted"
-                    onClick={handleCopy}
-                  >
-                    {copied ? (
-                      <Check className="w-3.5 h-3.5 text-green-500" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{copied ? 'Copied!' : 'Copy'}</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        )}
-
-        {/* Intent & Plugin chips */}
-        {(hasIntent || hasPluginCalls) && (
-          <div className="flex flex-wrap gap-1.5 mb-2.5">
-            {hasIntent && message.metadata!.intent!.confidence > 0.4 && (
-              <InlineBadge>
-                <Brain className="w-3 h-3 text-purple-500 animate-pulse" />
-                {message.metadata!.intent!.intent} (
-                {Math.round(message.metadata!.intent!.confidence * 100)}%)
-              </InlineBadge>
-            )}
-          </div>
-        )}
-
-        {/* Tool Call Cards -> Agent Activity Accordion */}
-        {hasPluginCalls && (
-          <AgentActivityAccordion
-            calls={message.metadata!.plugin_calls}
-          />
-        )}
-
-        {/* Incomplete Tool Call Warning — only after streaming finishes, since while
-            streaming the closing </call> tag may simply not have arrived yet. */}
-        {!isStreaming &&
-          /<\s*call\s+plugin=/i.test(message.content) &&
-          !/<\/\s*call\s*>/i.test(message.content) && (
-            <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5 shadow-sm">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="flex-shrink-0 mt-0.5"
-              >
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
-              <span className="leading-relaxed">
-                The model's response was truncated (likely due to max_tokens), so the operation did
-                not complete. Increase <strong>max_tokens</strong> in Settings, or ask the model to
-                write the file in smaller chunks.
-              </span>
-            </div>
-          )}
-
-        {/* Thinking Accordion Component */}
-        {(() => {
-          if (!isAssistant) return null;
-          let thinkingText = '';
-
-          const thinkMatch = message.content.match(/<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i);
-          if (thinkMatch) {
-            thinkingText = thinkMatch[1].trim();
-          }
-
-          return (
-            <>
-              {thinkingText && (
-                <details
-                  open
-                  className="mb-3 group/think border border-border/80 bg-muted/20 rounded-lg overflow-hidden text-xs"
-                >
-                  <summary className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none font-mono text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
-                    <Brain className="w-3.5 h-3.5 text-foreground shrink-0" />
-                    <span>Thought Process</span>
-                    <span className="text-[10px] text-muted-foreground/70 font-mono ml-auto group-open/think:hidden">
-                      [+] Show
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/70 font-mono ml-auto hidden group-open/think:inline">
-                      [-] Hide
-                    </span>
-                  </summary>
-                  <div className="p-3 bg-background/80 border-t border-border/60 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
-                    {thinkingText}
-                  </div>
-                </details>
-              )}
-            </>
-          );
-        })()}
-
-        {/* Message Body */}
+  const imagesBlock = message.images && message.images.length > 0 && (
+    <div className="flex flex-wrap gap-2.5 mb-3">
+      {message.images.map((img, idx) => (
         <div
-          className={`text-sm text-foreground leading-relaxed break-words w-full ${
-            message.role === 'user' && !isEditing
-              ? 'border-l-2 border-primary/40 pl-3 py-1 bg-surface-1/50 font-sans'
-              : 'font-sans'
-          }`}
+          key={idx}
+          className="overflow-hidden rounded-xl border border-border max-w-[300px] max-h-[300px] bg-background"
         >
-          {message.images && message.images.length > 0 && (
-            <div className="flex flex-wrap gap-2.5 mb-3">
-              {message.images.map((img, idx) => (
-                <div
-                  key={idx}
-                  className="overflow-hidden rounded-xl border border-border shadow-md max-w-[300px] max-h-[300px] bg-background"
-                >
-                  <img
-                    src={img}
-                    alt="attachment"
-                    className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          <img
+            src={img}
+            alt="attachment"
+            className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── User message → GOAL card ──
+  if (!isAssistant) {
+    return (
+      <div className="group px-4 sm:px-6 py-1.5">
+        <GoalCard
+          headerRight={
+            <>
+              <span className="text-[10px] font-mono text-muted-foreground/60">
+                {formatTime(message.timestamp)}
+              </span>
+              <HoverActions
+                isAssistant={false}
+                isStreaming={isStreaming}
+                isEditing={isEditing}
+                copied={copied}
+                onCopy={handleCopy}
+                onEdit={() => setIsEditing(true)}
+                onRegenerate={() => regenerateResponse(message.id)}
+              />
+            </>
+          }
+        >
           {isEditing ? (
-            <div className="mt-2 flex flex-col gap-2.5 w-full">
+            <div className="mt-1 flex flex-col gap-2.5 w-full">
               <Textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="min-h-[100px] font-sans rounded-xl border-primary/40 focus-visible:ring-primary shadow-inner p-3"
+                className="min-h-[100px] font-sans rounded-xl border-primary/40 focus-visible:ring-primary p-3"
                 autoFocus
               />
               <div className="flex items-center justify-end gap-2">
@@ -451,7 +367,7 @@ export const ChatMessage = React.memo(function ChatMessage({
                 </Button>
                 <Button
                   size="sm"
-                  className="rounded-xl h-8 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  className="rounded-xl h-8 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleEditSave}
                   disabled={!editContent.trim() || isStreaming}
                 >
@@ -460,15 +376,9 @@ export const ChatMessage = React.memo(function ChatMessage({
               </div>
             </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
-              {message.content
-                .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
-                .trim() === '' && hasPluginCalls && !isStreaming ? (
-                <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in shadow-2xs">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span>Autonomous task execution completed successfully.</span>
-                </div>
-              ) : (
+            <div className="text-sm font-medium text-foreground leading-relaxed break-words w-full font-sans">
+              {imagesBlock}
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans font-medium">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
                   rehypePlugins={[rehypeKatex]}
@@ -476,11 +386,152 @@ export const ChatMessage = React.memo(function ChatMessage({
                 >
                   {cleanedMarkdown}
                 </ReactMarkdown>
-              )}
+              </div>
             </div>
           )}
-          {showCursor && !isEditing && <span className="streaming-cursor" />}
+        </GoalCard>
+      </div>
+    );
+  }
+
+  // ── Assistant message → EXECUTION + OUTPUT ──
+  const hasOutputContent = cleanedMarkdown.trim() !== '';
+  const showsCompletedNotice = !hasOutputContent && hasPluginCalls && !isStreaming;
+  const showsExecutingPlaceholder = !hasOutputContent && !showsCompletedNotice && showCursor;
+
+  return (
+    <div className="group px-4 sm:px-6 py-3 transition-colors hover:bg-muted/20 rounded-2xl">
+      {/* Meta row */}
+      <div className="flex items-center gap-2 mb-1.5 text-muted-foreground">
+        <span className="text-[10px] font-mono opacity-60">{formatTime(message.timestamp)}</span>
+        {message.metadata?.model && <InlineBadge>{message.metadata.model}</InlineBadge>}
+        <HoverActions
+          isAssistant
+          isStreaming={isStreaming}
+          copied={copied}
+          onCopy={handleCopy}
+          onRegenerate={() => regenerateResponse(message.id)}
+        />
+      </div>
+
+      {/* Intent chip — hidden when the backend reports no intent */}
+      {intent && intent.confidence > 0.4 && (
+        <div className="flex flex-wrap gap-1.5 mb-2.5">
+          <InlineBadge>
+            <Brain className="w-3 h-3 text-purple-500 animate-pulse" />
+            {intent.intent} ({Math.round(intent.confidence * 100)}%)
+          </InlineBadge>
         </div>
+      )}
+
+      {/* Execution section — live plan + step timeline sourced from runtime events */}
+      <ExecutionSection
+        plan={executionPlan}
+        steps={executionSteps}
+        live={_isLast && isStreaming}
+      />
+
+      {/* Fallback: metadata-driven activity for history without runtime events */}
+      {hasPluginCalls && !hasRuntimeExecution && (
+        <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
+      )}
+
+      {/* Incomplete Tool Call Warning — only after streaming finishes, since while
+          streaming the closing </call> tag may simply not have arrived yet. */}
+      {!isStreaming &&
+        /<\s*call\s+plugin=/i.test(message.content) &&
+        !/<\/\s*call\s*>/i.test(message.content) && (
+          <div className="mt-2 mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs rounded-xl flex items-start gap-2.5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="flex-shrink-0 mt-0.5"
+            >
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+            <span className="leading-relaxed">
+              The model's response was truncated (likely due to max_tokens), so the operation did
+              not complete. Increase <strong>max_tokens</strong> in Settings, or ask the model to
+              write the file in smaller chunks.
+            </span>
+          </div>
+        )}
+
+      {/* Thinking Accordion Component */}
+      {(() => {
+        let thinkingText = '';
+
+        const thinkMatch = message.content.match(/<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i);
+        if (thinkMatch) {
+          thinkingText = thinkMatch[1].trim();
+        }
+
+        return (
+          <>
+            {thinkingText && (
+              <details
+                open
+                className="mb-3 group/think border border-border/80 bg-muted/20 rounded-lg overflow-hidden text-xs"
+              >
+                <summary className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none font-mono text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                  <Brain className="w-3.5 h-3.5 text-foreground shrink-0" />
+                  <span>Thought Process</span>
+                  <span className="text-[10px] text-muted-foreground/70 font-mono ml-auto group-open/think:hidden">
+                    [+] Show
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 font-mono ml-auto hidden group-open/think:inline">
+                    [-] Hide
+                  </span>
+                </summary>
+                <div className="p-3 bg-background/80 border-t border-border/60 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+                  {thinkingText}
+                </div>
+              </details>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Output section — the execution's de-emphasized text result */}
+      {(hasOutputContent || showsCompletedNotice) && (
+        <SectionLabel className="mb-1.5 mt-2">Output</SectionLabel>
+      )}
+      <div className="text-sm text-foreground leading-relaxed break-words w-full font-sans">
+        {imagesBlock}
+        {showsExecutingPlaceholder ? (
+          <div className="flex items-center gap-1.5 py-1 font-mono text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Executing...</span>
+            {showCursor && <span className="streaming-cursor" />}
+          </div>
+        ) : (
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
+            {showsCompletedNotice ? (
+              <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in">
+                <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                <span>Autonomous task execution completed successfully.</span>
+              </div>
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{ code: CodeBlock }}
+              >
+                {cleanedMarkdown}
+              </ReactMarkdown>
+            )}
+          </div>
+        )}
+        {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
       </div>
     </div>
   );

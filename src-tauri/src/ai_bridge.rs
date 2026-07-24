@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -6,11 +6,40 @@ use tracing::info;
 use crate::models::chat::{ChatMessage, ChatRole, ModelConfig, Provider};
 use crate::utils::config::AiConfig;
 use crate::utils::errors::WeaveError;
+use runtime_kernel::observability::Observability;
+
+/// Rolling model-usage telemetry collected from streaming responses.
+#[derive(Debug, Clone, Default)]
+pub struct ModelTelemetry {
+    /// Name of the model used by the most recent stream.
+    pub last_model: Option<String>,
+    /// Tokens/second of the most recent stream (local provider only).
+    pub last_tps: Option<f64>,
+    /// Running mean of tokens/second across all measured streams.
+    pub avg_tps: Option<f64>,
+    tps_samples: u64,
+}
+
+impl ModelTelemetry {
+    pub fn record_tps(&mut self, tps: f64) {
+        if !tps.is_finite() || tps <= 0.0 {
+            return;
+        }
+        self.tps_samples += 1;
+        self.last_tps = Some(tps);
+        self.avg_tps = Some(match self.avg_tps {
+            Some(avg) => avg + (tps - avg) / self.tps_samples as f64,
+            None => tps,
+        });
+    }
+}
 
 pub struct AiBridge {
     client: reqwest::Client,
     pub config: Arc<RwLock<AiConfig>>,
     pub llama_server: Arc<tokio::sync::Mutex<Option<(String, tokio::process::Child)>>>,
+    observability: Arc<Observability>,
+    telemetry: Arc<Mutex<ModelTelemetry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +65,23 @@ struct OpenAiMessage {
 #[derive(Debug, Clone, Deserialize)]
 struct OpenAiStreamResponse {
     choices: Vec<OpenAiStreamChoice>,
+    #[serde(default)]
+    usage: Option<OpenAiUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct OpenAiUsage {
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+    total_tokens: Option<u64>,
+}
+
+impl OpenAiUsage {
+    fn total(&self) -> u64 {
+        self.total_tokens.unwrap_or_else(|| {
+            self.prompt_tokens.unwrap_or(0) + self.completion_tokens.unwrap_or(0)
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +118,21 @@ struct AnthropicStreamResponse {
     delta: Option<AnthropicDelta>,
     #[allow(dead_code)]
     content_block: Option<AnthropicContentBlock>,
+    #[serde(default)]
+    usage: Option<AnthropicUsage>,
+    #[serde(default)]
+    message: Option<AnthropicMessageUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct AnthropicUsage {
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AnthropicMessageUsage {
+    usage: Option<AnthropicUsage>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -108,6 +169,12 @@ struct OllamaOptions {
 struct OllamaStreamResponse {
     message: OllamaResponseMessage,
     done: bool,
+    #[serde(default)]
+    prompt_eval_count: Option<u64>,
+    #[serde(default)]
+    eval_count: Option<u64>,
+    #[serde(default)]
+    eval_duration: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -116,7 +183,11 @@ struct OllamaResponseMessage {
 }
 
 impl AiBridge {
-    pub fn new(config: Arc<RwLock<AiConfig>>) -> Self {
+    pub fn new(
+        config: Arc<RwLock<AiConfig>>,
+        observability: Arc<Observability>,
+        telemetry: Arc<Mutex<ModelTelemetry>>,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(120))
             .build()
@@ -126,6 +197,8 @@ impl AiBridge {
             client,
             config,
             llama_server: Arc::new(tokio::sync::Mutex::new(None)),
+            observability,
+            telemetry,
         }
     }
 
@@ -370,6 +443,8 @@ impl AiBridge {
         enhanced_messages.extend(messages);
 
         let llama_server_clone = self.llama_server.clone();
+        let observability = self.observability.clone();
+        let telemetry = self.telemetry.clone();
 
         tokio::spawn(async move {
             let result = match provider {
@@ -383,6 +458,7 @@ impl AiBridge {
                         temperature,
                         max_tokens,
                         tx.clone(),
+                        observability.clone(),
                     )
                     .await
                 }
@@ -396,6 +472,7 @@ impl AiBridge {
                         temperature,
                         max_tokens,
                         tx.clone(),
+                        observability.clone(),
                     )
                     .await
                 }
@@ -409,6 +486,7 @@ impl AiBridge {
                         temperature,
                         max_tokens,
                         tx.clone(),
+                        observability.clone(),
                     )
                     .await
                 }
@@ -440,6 +518,7 @@ impl AiBridge {
                         temperature,
                         max_tokens,
                         tx.clone(),
+                        observability.clone(),
                     )
                     .await
                 }
@@ -453,10 +532,15 @@ impl AiBridge {
                         temperature,
                         max_tokens,
                         tx.clone(),
+                        observability.clone(),
+                        telemetry.clone(),
                     )
                     .await
                 }
             };
+
+            // Remember the last-used model regardless of stream outcome.
+            telemetry.lock().last_model = Some(model.clone());
 
             if let Err(e) = result {
                 let _ = tx.send(format!("\n[Stream Error: {}]", e)).await;
@@ -516,6 +600,7 @@ impl AiBridge {
         }
 
         let response_json: serde_json::Value = response.json().await?;
+        self.record_openai_style_usage(&response_json);
         let content = response_json["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("")
@@ -611,6 +696,12 @@ impl AiBridge {
         }
 
         let response_json: serde_json::Value = response.json().await?;
+        let usage = &response_json["usage"];
+        let total_tokens = usage["input_tokens"].as_u64().unwrap_or(0)
+            + usage["output_tokens"].as_u64().unwrap_or(0);
+        if total_tokens > 0 {
+            self.observability.record_tokens(total_tokens);
+        }
         let content = response_json["content"][0]["text"]
             .as_str()
             .unwrap_or("")
@@ -661,6 +752,11 @@ impl AiBridge {
         }
 
         let response_json: serde_json::Value = response.json().await?;
+        let total_tokens = response_json["prompt_eval_count"].as_u64().unwrap_or(0)
+            + response_json["eval_count"].as_u64().unwrap_or(0);
+        if total_tokens > 0 {
+            self.observability.record_tokens(total_tokens);
+        }
         let content = response_json["message"]["content"]
             .as_str()
             .unwrap_or("")
@@ -753,12 +849,25 @@ impl AiBridge {
         }
 
         let response_json: serde_json::Value = response.json().await?;
+        self.record_openai_style_usage(&response_json);
         let content = response_json["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("")
             .to_string();
 
         Ok(content)
+    }
+
+    /// Best-effort token accounting from an OpenAI-style response body.
+    fn record_openai_style_usage(&self, response_json: &serde_json::Value) {
+        let usage = &response_json["usage"];
+        let total = usage["total_tokens"].as_u64().unwrap_or_else(|| {
+            usage["prompt_tokens"].as_u64().unwrap_or(0)
+                + usage["completion_tokens"].as_u64().unwrap_or(0)
+        });
+        if total > 0 {
+            self.observability.record_tokens(total);
+        }
     }
 
     fn prune_chat_messages(messages: &[ChatMessage], max_tokens: usize) -> Vec<ChatMessage> {
@@ -933,6 +1042,7 @@ impl AiBridge {
         temperature: f64,
         max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
+        observability: Arc<Observability>,
     ) -> Result<(), WeaveError> {
         let api_key =
             api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("OpenAI".to_string()))?;
@@ -977,6 +1087,7 @@ impl AiBridge {
         let mut buffer = Vec::new();
         let mut generated_text = String::new();
         let mut stop_stream = false;
+        let mut last_usage: Option<OpenAiUsage> = None;
 
         while let Some(chunk_result) = stream.next().await {
             if stop_stream {
@@ -996,6 +1107,9 @@ impl AiBridge {
 
                 if let Some(data) = line.strip_prefix("data: ") {
                     if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
+                        if let Some(usage) = json.usage {
+                            last_usage = Some(usage);
+                        }
                         if let Some(content) =
                             json.choices.get(0).and_then(|c| c.delta.content.clone())
                         {
@@ -1021,6 +1135,14 @@ impl AiBridge {
             }
         }
 
+        // Record usage when the stream exposes it (best-effort).
+        if let Some(usage) = last_usage {
+            let total = usage.total();
+            if total > 0 {
+                observability.record_tokens(total);
+            }
+        }
+
         Ok(())
     }
 
@@ -1033,6 +1155,7 @@ impl AiBridge {
         temperature: f64,
         max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
+        observability: Arc<Observability>,
     ) -> Result<(), WeaveError> {
         let api_key =
             api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Anthropic".to_string()))?;
@@ -1111,6 +1234,8 @@ impl AiBridge {
         use futures::StreamExt;
 
         let mut buffer = Vec::new();
+        let mut input_tokens: u64 = 0;
+        let mut output_tokens: u64 = 0;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
@@ -1130,12 +1255,26 @@ impl AiBridge {
                     }
 
                     if let Ok(json) = serde_json::from_str::<AnthropicStreamResponse>(data) {
+                        // Usage arrives on message_start (input) and
+                        // message_delta (output); accumulate best-effort.
+                        if let Some(usage) = json.message.and_then(|m| m.usage) {
+                            input_tokens += usage.input_tokens.unwrap_or(0);
+                            output_tokens += usage.output_tokens.unwrap_or(0);
+                        }
+                        if let Some(usage) = json.usage {
+                            input_tokens += usage.input_tokens.unwrap_or(0);
+                            output_tokens += usage.output_tokens.unwrap_or(0);
+                        }
                         if let Some(text_delta) = json.delta.and_then(|d| d.text) {
                             let _ = tx.send(text_delta).await;
                         }
                     }
                 }
             }
+        }
+
+        if input_tokens + output_tokens > 0 {
+            observability.record_tokens(input_tokens + output_tokens);
         }
 
         Ok(())
@@ -1150,6 +1289,8 @@ impl AiBridge {
         temperature: f64,
         _max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
+        observability: Arc<Observability>,
+        telemetry: Arc<Mutex<ModelTelemetry>>,
     ) -> Result<(), WeaveError> {
         if model.contains(".gguf") {
             let mut server_guard = llama_server.lock().await;
@@ -1235,6 +1376,7 @@ impl AiBridge {
                 temperature,
                 0, // No token limit for local models
                 tx,
+                observability,
             )
             .await;
         }
@@ -1276,6 +1418,9 @@ impl AiBridge {
         use futures::StreamExt;
 
         let mut buffer = Vec::new();
+        let mut final_prompt_eval_count: Option<u64> = None;
+        let mut final_eval_count: Option<u64> = None;
+        let mut final_eval_duration: Option<u64> = None;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
@@ -1294,8 +1439,26 @@ impl AiBridge {
                         if let Some(content) = json.message.content {
                             let _ = tx.send(content).await;
                         }
+                    } else {
+                        // The final chunk carries the generation statistics.
+                        final_prompt_eval_count = json.prompt_eval_count;
+                        final_eval_count = json.eval_count;
+                        final_eval_duration = json.eval_duration;
                     }
                 }
+            }
+        }
+
+        // Record token consumption and throughput from the final chunk.
+        let prompt_tokens = final_prompt_eval_count.unwrap_or(0);
+        let eval_tokens = final_eval_count.unwrap_or(0);
+        if prompt_tokens + eval_tokens > 0 {
+            observability.record_tokens(prompt_tokens + eval_tokens);
+        }
+        if let (Some(eval_count), Some(eval_duration)) = (final_eval_count, final_eval_duration) {
+            if eval_duration > 0 {
+                let tps = eval_count as f64 / (eval_duration as f64 / 1e9);
+                telemetry.lock().record_tps(tps);
             }
         }
 
@@ -1311,6 +1474,7 @@ impl AiBridge {
         temperature: f64,
         max_tokens: u32,
         tx: tokio::sync::mpsc::Sender<String>,
+        observability: Arc<Observability>,
     ) -> Result<(), WeaveError> {
         let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Kimi".to_string()))?;
         let mut url = api_url
@@ -1386,6 +1550,7 @@ impl AiBridge {
         use futures::StreamExt;
 
         let mut buffer = Vec::new();
+        let mut last_usage: Option<OpenAiUsage> = None;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
@@ -1401,6 +1566,9 @@ impl AiBridge {
 
                 if let Some(data) = line.strip_prefix("data: ") {
                     if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
+                        if let Some(usage) = json.usage {
+                            last_usage = Some(usage);
+                        }
                         if let Some(content) =
                             json.choices.get(0).and_then(|c| c.delta.content.clone())
                         {
@@ -1408,6 +1576,14 @@ impl AiBridge {
                         }
                     }
                 }
+            }
+        }
+
+        // Record usage when the stream exposes it (best-effort).
+        if let Some(usage) = last_usage {
+            let total = usage.total();
+            if total > 0 {
+                observability.record_tokens(total);
             }
         }
 

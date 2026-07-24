@@ -525,3 +525,272 @@ async fn probe_url(url: &str) -> bool {
         .map(|r| r.status().is_success())
         .unwrap_or(false)
 }
+
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct LocalModelDetails {
+    pub quant: Option<String>,
+    pub context_length: Option<u32>,
+    pub parameter_count: Option<String>,
+}
+
+/// Best-effort GGUF header inspection of a downloaded model file.
+/// Any parse failure yields an all-None struct rather than an error.
+#[tauri::command]
+pub async fn local_model_info(
+    app: AppHandle,
+    filename: String,
+) -> Result<LocalModelDetails, String> {
+    let mut path = get_models_dir(&app);
+    path.push(&filename);
+    Ok(parse_gguf_details(&path).unwrap_or_default())
+}
+
+// --- GGUF header parsing (best-effort) ---
+
+const GGUF_MAX_METADATA_KV: u64 = 1_000_000;
+const GGUF_MAX_STRING_LEN: u64 = 16 * 1024 * 1024;
+const GGUF_MAX_ARRAY_LEN: u64 = 100_000_000;
+
+fn parse_gguf_details(path: &std::path::Path) -> Option<LocalModelDetails> {
+    let file = std::fs::File::open(path).ok()?;
+    parse_gguf_from(file)
+}
+
+/// Map a `general.file_type` value to the common GGML type name.
+fn ggml_type_name(file_type: u32) -> Option<&'static str> {
+    Some(match file_type {
+        0 => "F32",
+        1 => "F16",
+        2 => "Q4_0",
+        3 => "Q4_1",
+        6 => "Q5_0",
+        7 => "Q5_1",
+        8 => "Q8_0",
+        10 => "Q2_K",
+        11 => "Q3_K_S",
+        12 => "Q3_K_M",
+        13 => "Q3_K_L",
+        14 => "Q4_K_S",
+        15 => "Q4_K_M",
+        16 => "Q5_K_S",
+        17 => "Q5_K_M",
+        18 => "Q6_K",
+        _ => return None,
+    })
+}
+
+/// Fixed byte size of a GGUF metadata value type; strings (8) and arrays
+/// (9) are variable-length and return None.
+fn gguf_primitive_size(value_type: u32) -> Option<u64> {
+    match value_type {
+        0 | 1 | 7 => Some(1),     // u8, i8, bool
+        2 | 3 => Some(2),         // u16, i16
+        4 | 5 | 6 => Some(4),     // u32, i32, f32
+        10 | 11 | 12 => Some(8),  // u64, i64, f64
+        _ => None,
+    }
+}
+
+struct GgufReader<R> {
+    inner: R,
+}
+
+impl<R: std::io::Read + std::io::Seek> GgufReader<R> {
+    fn read_bytes<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let mut buf = [0u8; N];
+        std::io::Read::read_exact(&mut self.inner, &mut buf).ok()?;
+        Some(buf)
+    }
+
+    fn read_u32(&mut self) -> Option<u32> {
+        Some(u32::from_le_bytes(self.read_bytes::<4>()?))
+    }
+
+    fn read_u64(&mut self) -> Option<u64> {
+        Some(u64::from_le_bytes(self.read_bytes::<8>()?))
+    }
+
+    fn read_string(&mut self) -> Option<String> {
+        let len = self.read_u64()?;
+        if len > GGUF_MAX_STRING_LEN {
+            return None;
+        }
+        let mut buf = vec![0u8; len as usize];
+        std::io::Read::read_exact(&mut self.inner, &mut buf).ok()?;
+        Some(String::from_utf8_lossy(&buf).to_string())
+    }
+
+    fn skip(&mut self, bytes: u64) -> Option<()> {
+        std::io::Seek::seek(&mut self.inner, std::io::SeekFrom::Current(bytes as i64)).ok()?;
+        Some(())
+    }
+
+    /// Skip a metadata value of the given type tag.
+    fn skip_value(&mut self, value_type: u32) -> Option<()> {
+        match value_type {
+            8 => {
+                let len = self.read_u64()?;
+                if len > GGUF_MAX_STRING_LEN {
+                    return None;
+                }
+                self.skip(len)
+            }
+            9 => {
+                let elem_type = self.read_u32()?;
+                let count = self.read_u64()?;
+                if count > GGUF_MAX_ARRAY_LEN {
+                    return None;
+                }
+                match elem_type {
+                    8 => {
+                        for _ in 0..count {
+                            let len = self.read_u64()?;
+                            if len > GGUF_MAX_STRING_LEN {
+                                return None;
+                            }
+                            self.skip(len)?;
+                        }
+                        Some(())
+                    }
+                    9 => None, // nested arrays are not expected
+                    _ => {
+                        let size = gguf_primitive_size(elem_type)?;
+                        self.skip(size.checked_mul(count)?)
+                    }
+                }
+            }
+            _ => {
+                let size = gguf_primitive_size(value_type)?;
+                self.skip(size)
+            }
+        }
+    }
+}
+
+fn parse_gguf_from<R: std::io::Read + std::io::Seek>(reader: R) -> Option<LocalModelDetails> {
+    let mut r = GgufReader { inner: reader };
+
+    if r.read_bytes::<4>()? != *b"GGUF" {
+        return None;
+    }
+    let _version = r.read_u32()?;
+    let _tensor_count = r.read_u64()?;
+    let metadata_kv_count = r.read_u64()?;
+    if metadata_kv_count > GGUF_MAX_METADATA_KV {
+        return None;
+    }
+
+    let mut details = LocalModelDetails::default();
+
+    for _ in 0..metadata_kv_count {
+        let key = r.read_string()?;
+        let value_type = r.read_u32()?;
+
+        match key.as_str() {
+            "general.file_type" if value_type == 4 => {
+                let file_type = r.read_u32()?;
+                details.quant = ggml_type_name(file_type).map(|s| s.to_string());
+            }
+            "general.size_label" if value_type == 8 => {
+                details.parameter_count = Some(r.read_string()?);
+            }
+            _ if key.ends_with(".context_length") && value_type == 4 => {
+                details.context_length = Some(r.read_u32()?);
+            }
+            _ => {
+                r.skip_value(value_type)?;
+            }
+        }
+    }
+
+    Some(details)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn push_string(buf: &mut Vec<u8>, s: &str) {
+        buf.extend_from_slice(&(s.len() as u64).to_le_bytes());
+        buf.extend_from_slice(s.as_bytes());
+    }
+
+    fn sample_gguf() -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"GGUF");
+        buf.extend_from_slice(&3u32.to_le_bytes()); // version
+        buf.extend_from_slice(&0u64.to_le_bytes()); // tensor_count
+        buf.extend_from_slice(&5u64.to_le_bytes()); // metadata_kv_count
+
+        // general.file_type = 15 (Q4_K_M)
+        push_string(&mut buf, "general.file_type");
+        buf.extend_from_slice(&4u32.to_le_bytes());
+        buf.extend_from_slice(&15u32.to_le_bytes());
+
+        // llama.context_length = 8192
+        push_string(&mut buf, "llama.context_length");
+        buf.extend_from_slice(&4u32.to_le_bytes());
+        buf.extend_from_slice(&8192u32.to_le_bytes());
+
+        // general.size_label = "7B"
+        push_string(&mut buf, "general.size_label");
+        buf.extend_from_slice(&8u32.to_le_bytes());
+        push_string(&mut buf, "7B");
+
+        // a string array that must be skipped (type 9 of type 8)
+        push_string(&mut buf, "tokenizer.ggml.tokens");
+        buf.extend_from_slice(&9u32.to_le_bytes());
+        buf.extend_from_slice(&8u32.to_le_bytes()); // elem type: string
+        buf.extend_from_slice(&2u64.to_le_bytes()); // count
+        push_string(&mut buf, "hello");
+        push_string(&mut buf, "world");
+
+        // a primitive array that must be skipped (type 9 of type 6 = f32)
+        push_string(&mut buf, "some.floats");
+        buf.extend_from_slice(&9u32.to_le_bytes());
+        buf.extend_from_slice(&6u32.to_le_bytes());
+        buf.extend_from_slice(&3u64.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 12]);
+
+        buf
+    }
+
+    #[test]
+    fn parses_gguf_metadata() {
+        let data = sample_gguf();
+        let details = parse_gguf_from(std::io::Cursor::new(data)).expect("parse");
+        assert_eq!(details.quant.as_deref(), Some("Q4_K_M"));
+        assert_eq!(details.context_length, Some(8192));
+        assert_eq!(details.parameter_count.as_deref(), Some("7B"));
+    }
+
+    #[test]
+    fn rejects_bad_magic() {
+        let data = b"NOPE........".to_vec();
+        assert!(parse_gguf_from(std::io::Cursor::new(data)).is_none());
+    }
+
+    #[test]
+    fn rejects_truncated_file() {
+        let data = b"GGUF".to_vec();
+        assert!(parse_gguf_from(std::io::Cursor::new(data)).is_none());
+    }
+
+    #[test]
+    fn unknown_file_type_yields_none_quant() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"GGUF");
+        buf.extend_from_slice(&3u32.to_le_bytes());
+        buf.extend_from_slice(&0u64.to_le_bytes());
+        buf.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut buf, "general.file_type");
+        buf.extend_from_slice(&4u32.to_le_bytes());
+        buf.extend_from_slice(&99u32.to_le_bytes());
+
+        let details = parse_gguf_from(std::io::Cursor::new(buf)).expect("parse");
+        assert_eq!(details.quant, None);
+        assert_eq!(details.context_length, None);
+        assert_eq!(details.parameter_count, None);
+    }
+}

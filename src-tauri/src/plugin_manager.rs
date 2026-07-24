@@ -209,7 +209,31 @@ impl PluginManager {
                 .capability("coder.format", r#"{"directory":"."}"#, "Format project files")
                 .capability("coder.lint", r#"{"directory":"."}"#, "Lint project code")
                 .capability("coder.dependencies", r#"{"directory":"."}"#, "List project dependencies")
-                .build(),        ]
+                .build(),
+
+            PluginBuilder::builtin("com.weave.builtin.canvas", "Canvas")
+                .description("Visual canvas — add, update, delete and connect nodes on the shared board")
+                .category(PluginCategory::Productivity)
+                .capability("canvas.add_node", r#"{"type":"shapeNode","data":{},"position":null}"#, "Add a node to the canvas")
+                .capability("canvas.update_node", r#"{"id":"...","data":{}}"#, "Update an existing canvas node")
+                .capability("canvas.delete_node", r#"{"id":"..."}"#, "Delete a canvas node")
+                .capability("canvas.connect_nodes", r#"{"source":"...","target":"...","label":""}"#, "Connect two canvas nodes with an edge")
+                .capability("canvas.clear", r#"{}"#, "Clear the whole canvas")
+                .capability("canvas.export", r#"{}"#, "Open the canvas export dialog")
+                .capability("canvas.import", r#"{}"#, "Open the canvas import dialog")
+                .build(),
+
+            PluginBuilder::builtin("com.weave.builtin.workflow", "Workflows")
+                .description("Workflow templates — create, list, inspect and delete automated AI workflows")
+                .category(PluginCategory::Productivity)
+                .read_access(&["file://*"])
+                .write_access(&["file://*"])
+                .capability("workflow.create", r#"{"name":"...","description":"...","nodes":[],"edges":[]}"#, "Create a new workflow template")
+                .capability("workflow.list", r#"{}"#, "List all workflow templates")
+                .capability("workflow.get", r#"{"id":"..."}"#, "Get a workflow template by ID")
+                .capability("workflow.delete", r#"{"id":"..."}"#, "Delete a workflow template by ID")
+                .build(),
+        ]
     }
 
     pub fn discover(&self) -> Result<Vec<Plugin>, WeaveError> {

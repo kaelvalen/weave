@@ -17,6 +17,15 @@ pub struct RuntimeEvent {
     pub latency_ms: Option<u64>,
     pub summary: String,
     pub artifact_ref: Option<String>,
+    /// Tool input parameters (possibly truncated for size).
+    #[serde(default)]
+    pub params: Option<serde_json::Value>,
+    /// Tool result payload (possibly truncated for size).
+    #[serde(default)]
+    pub output: Option<serde_json::Value>,
+    /// Structured error message for failed steps.
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +56,9 @@ impl RuntimeEvent {
             latency_ms: None,
             summary: summary.into(),
             artifact_ref: None,
+            params: None,
+            output: None,
+            error: None,
         }
     }
 }
@@ -67,6 +79,9 @@ mod tests {
         event.capability = Some("file.read".to_string());
         event.latency_ms = Some(42);
         event.artifact_ref = Some("artifact://out".to_string());
+        event.params = Some(serde_json::json!({"path": "/tmp/out.txt", "limit": 10}));
+        event.output = Some(serde_json::json!({"bytes_written": 128}));
+        event.error = Some("boom".to_string());
 
         let json = serde_json::to_string(&event).expect("serialize");
         let back: RuntimeEvent = serde_json::from_str(&json).expect("deserialize");
@@ -79,6 +94,15 @@ mod tests {
         assert_eq!(back.latency_ms, Some(42));
         assert_eq!(back.summary, "Executed fs.read_file");
         assert_eq!(back.artifact_ref.as_deref(), Some("artifact://out"));
+        assert_eq!(
+            back.params,
+            Some(serde_json::json!({"path": "/tmp/out.txt", "limit": 10}))
+        );
+        assert_eq!(
+            back.output,
+            Some(serde_json::json!({"bytes_written": 128}))
+        );
+        assert_eq!(back.error.as_deref(), Some("boom"));
         assert_eq!(back.ts, event.ts);
     }
 
@@ -102,9 +126,32 @@ mod tests {
         assert_eq!(value["plugin_id"], serde_json::Value::Null);
         assert_eq!(value["latency_ms"], serde_json::Value::Null);
         assert_eq!(value["artifact_ref"], serde_json::Value::Null);
+        assert_eq!(value["params"], serde_json::Value::Null);
+        assert_eq!(value["output"], serde_json::Value::Null);
+        assert_eq!(value["error"], serde_json::Value::Null);
         // Field names the frontend relies on.
         assert!(value.get("step_id").is_some());
         assert!(value.get("ts").is_some());
         assert!(value.get("kind").is_some());
+    }
+
+    #[test]
+    fn runtime_event_deserializes_legacy_events_without_new_fields() {
+        // Events persisted before params/output/error existed must still parse.
+        let legacy = serde_json::json!({
+            "ts": "2026-01-01T00:00:00Z",
+            "kind": "step_started",
+            "goal_id": "g",
+            "step_id": "s",
+            "plugin_id": null,
+            "capability": null,
+            "latency_ms": null,
+            "summary": "started",
+            "artifact_ref": null
+        });
+        let event: RuntimeEvent = serde_json::from_value(legacy).expect("deserialize legacy");
+        assert_eq!(event.params, None);
+        assert_eq!(event.output, None);
+        assert_eq!(event.error, None);
     }
 }

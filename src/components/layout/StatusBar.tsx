@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
+import { useAppStore } from '@/stores/useAppStore';
+import { useChatStore } from '@/stores/useChatStore';
 import { refreshObservability } from '@/hooks/useRuntimeEvents';
+import type { ModelStats } from '@/types/runtime';
+import { effectiveTps, formatTps, formatTokensCompact } from '@/lib/modelStats';
 
 /** Mirrors `SystemStats` in src-tauri/src/commands/models.rs (RAM in bytes). */
 interface SystemStats {
@@ -18,7 +22,11 @@ export function StatusBar() {
   const runningSteps = useRuntimeStore(
     (s) => s.executions.filter((e) => e.status === 'running').length
   );
+  const appVersion = useAppStore((s) => s.appVersion);
+  const selectedModel = useChatStore((s) => s.selectedModel);
+  const selectedProvider = useChatStore((s) => s.selectedProvider);
   const [sysStats, setSysStats] = useState<SystemStats | null>(null);
+  const [modelStats, setModelStats] = useState<ModelStats | null>(null);
 
   // Slow global poll so the stats strip stays fresh on any view.
   useEffect(() => {
@@ -28,50 +36,99 @@ export function StatusBar() {
       invoke<SystemStats>('get_system_stats')
         .then(setSysStats)
         .catch(() => {});
+      invoke<ModelStats>('runtime_get_model_stats')
+        .then(setModelStats)
+        .catch(() => {});
     };
     tick();
     const interval = setInterval(tick, 15000);
     return () => clearInterval(interval);
   }, []);
 
+  const tps = effectiveTps(modelStats);
+
+  // Only segments backed by real data get pushed — anything unknown stays hidden.
+  const segments: ReactNode[] = [];
+
+  if (selectedModel) {
+    segments.push(
+      <span className="flex items-center gap-1.5 text-foreground">
+        <span className="font-semibold">{selectedModel}</span>
+        {selectedProvider && <span className="text-muted-foreground">· {selectedProvider}</span>}
+      </span>
+    );
+  }
+
+  if (modelStats) {
+    segments.push(
+      <span
+        className="flex items-center gap-1.5"
+        title={modelStats.ollama_running ? 'Ollama is running' : 'Ollama is not running'}
+      >
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${
+            modelStats.ollama_running ? 'bg-green-500' : 'bg-red-500'
+          }`}
+        />
+        <span>Ollama</span>
+      </span>
+    );
+    segments.push(
+      <span title="Tokens generated since app start">
+        {formatTokensCompact(modelStats.total_tokens)} tok
+      </span>
+    );
+    if (tps != null) {
+      segments.push(
+        <span
+          title={
+            modelStats.avg_tps != null
+              ? 'Average tokens/sec since app start'
+              : 'Tokens/sec of the last response'
+          }
+        >
+          {formatTps(tps)} tps
+        </span>
+      );
+    }
+  }
+
+  if (sysStats) {
+    segments.push(
+      <span title={`RAM ${formatGb(sysStats.ram_usage)} / ${formatGb(sysStats.ram_total)} GB`}>
+        CPU {Math.round(sysStats.cpu_usage)}% · RAM {formatGb(sysStats.ram_usage)}GB
+      </span>
+    );
+  }
+
+  segments.push(
+    <span>
+      Planner: {runningSteps > 0 ? <span className="text-orange-500">busy</span> : 'idle'}
+    </span>
+  );
+
+  if (runningSteps > 0) {
+    segments.push(
+      <span className="flex items-center gap-1.5 text-orange-500">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+        <span>{runningSteps} running</span>
+      </span>
+    );
+  }
+
   return (
     <footer className="h-6 flex items-center justify-between px-3 bg-background border-t border-border font-mono text-[11px] text-muted-foreground select-none flex-shrink-0 z-40">
       <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5 text-foreground">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          <span className="font-semibold">DeepSeek R1</span>
-        </span>
-        <span className="text-border">•</span>
-        <span>320ms</span>
-        {sysStats && (
-          <>
-            <span className="text-border">•</span>
-            <span
-              title={`RAM ${formatGb(sysStats.ram_usage)} / ${formatGb(sysStats.ram_total)} GB`}
-            >
-              VRAM 7.3/8GB · RAM {formatGb(sysStats.ram_usage)}GB
-            </span>
-          </>
-        )}
-        <span className="text-border">•</span>
-        <span>Planner: {runningSteps > 0 ? <span className="text-orange-500">busy</span> : 'idle'}</span>
-        <span className="text-border">•</span>
-        <span>Queue: {runningSteps > 0 ? 2 : 0}</span>
-        <span className="text-border">•</span>
-        <span>Workers: 18</span>
-        {runningSteps > 0 && (
-          <>
-            <span className="text-border">•</span>
-            <span className="flex items-center gap-1.5 text-orange-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-              <span>{runningSteps} running</span>
-            </span>
-          </>
-        )}
+        {segments.map((node, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span className="text-border">•</span>}
+            {node}
+          </Fragment>
+        ))}
       </div>
 
       <div className="flex items-center gap-2">
-        <span>v1.0.0</span>
+        <span>v{appVersion}</span>
       </div>
     </footer>
   );

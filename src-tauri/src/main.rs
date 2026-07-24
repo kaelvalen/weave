@@ -70,6 +70,10 @@ fn main() {
             weave::commands::system::system_open_plugin_dir,
             weave::commands::system::system_set_cwd,
             weave::commands::runtime::runtime_get_observability,
+            weave::commands::runtime::trace_list,
+            weave::commands::runtime::trace_get,
+            weave::commands::runtime::runtime_note_plan,
+            weave::commands::runtime::runtime_get_model_stats,
             weave::commands::models::list_local_models,
             weave::commands::models::delete_local_model,
             weave::commands::models::download_local_model,
@@ -78,6 +82,7 @@ fn main() {
             weave::commands::models::local_server_start,
             weave::commands::models::local_server_stop,
             weave::commands::models::local_model_switch,
+            weave::commands::models::local_model_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

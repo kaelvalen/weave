@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
 import { useChatStore } from '@/stores/useChatStore';
+import { useArtifactsForGoals } from '@/components/workspace/runtimeSelectors';
 import { FileText, Code2, Search, X, ArrowRight } from 'lucide-react';
 
 export function ArtifactsListPanel() {
@@ -8,6 +9,14 @@ export function ArtifactsListPanel() {
   const openArtifact = useAppStore((s) => s.openArtifact);
   const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
   const messages = useChatStore((s) => s.messages);
+
+  // This thread's goal ids — each assistant message id is the traceId passed
+  // to plugin_execute, so runtime artifact_produced events join on them.
+  const threadGoalIds = useMemo(
+    () => messages.filter((m) => m.role === 'assistant').map((m) => m.id),
+    [messages]
+  );
+  const eventArtifacts = useArtifactsForGoals(threadGoalIds);
 
   // Collect artifacts strictly from active chat thread messages
   const chatArtifacts: ActiveArtifact[] = [];
@@ -53,10 +62,37 @@ export function ArtifactsListPanel() {
     }
   }
 
-  const filtered = threadArtifacts.filter(
-    (a) =>
-      a.title.toLowerCase().includes(search.toLowerCase()) ||
-      a.content.toLowerCase().includes(search.toLowerCase())
+  // Merge real `artifact_produced` runtime events for this thread's goals.
+  // These events carry only a ref (path/title) and no content, so anything not
+  // already covered by a scraped artifact (which has content) is listed as
+  // "reference only" rather than pretending we can preview it.
+  const refOnlyArtifacts: ActiveArtifact[] = [];
+  for (const ea of eventArtifacts) {
+    const title = ea.ref.split('/').pop() || ea.ref;
+    const covered =
+      threadArtifacts.some((a) => a.title === title || a.path === ea.ref) ||
+      refOnlyArtifacts.some((a) => a.path === ea.ref);
+    if (!covered) {
+      refOnlyArtifacts.push({
+        title,
+        type: ea.capability?.includes('note') ? 'note' : 'file',
+        content: '',
+        path: ea.ref,
+      });
+    }
+  }
+
+  const rows = [
+    ...threadArtifacts.map((artifact) => ({ artifact, referenceOnly: false })),
+    ...refOnlyArtifacts.map((artifact) => ({ artifact, referenceOnly: true })),
+  ];
+
+  const query = search.toLowerCase();
+  const filtered = rows.filter(
+    ({ artifact: a }) =>
+      a.title.toLowerCase().includes(query) ||
+      a.content.toLowerCase().includes(query) ||
+      (a.path?.toLowerCase().includes(query) ?? false)
   );
 
   return (
@@ -65,7 +101,7 @@ export function ArtifactsListPanel() {
       <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 bg-card select-none">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-foreground" />
-          <span className="font-bold text-foreground text-sm">Thread Artifacts ({threadArtifacts.length})</span>
+          <span className="font-bold text-foreground text-sm">Thread Artifacts ({rows.length})</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -114,11 +150,13 @@ export function ArtifactsListPanel() {
             </p>
           </div>
         ) : (
-          filtered.map((art, idx) => (
+          filtered.map(({ artifact: art, referenceOnly }, idx) => (
             <div
-              key={idx}
-              onClick={() => openArtifact(art)}
-              className="p-2.5 rounded border border-border/60 bg-card hover:bg-muted/40 cursor-pointer transition-all flex items-center justify-between group"
+              key={`${art.path ?? art.title}-${idx}`}
+              onClick={referenceOnly ? undefined : () => openArtifact(art)}
+              className={`artifact-enter p-2.5 rounded border border-border/60 bg-card transition-all flex items-center justify-between group ${
+                referenceOnly ? 'cursor-default opacity-80' : 'hover:bg-muted/40 cursor-pointer'
+              }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-7 h-7 rounded border border-border bg-background flex items-center justify-center shrink-0">
@@ -129,16 +167,24 @@ export function ArtifactsListPanel() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-foreground text-xs truncate group-hover:underline">
+                  <div
+                    className={`font-bold text-foreground text-xs truncate ${
+                      referenceOnly ? '' : 'group-hover:underline'
+                    }`}
+                  >
                     {art.title}
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate max-w-[240px]">
-                    {art.content.replace(/^#+\s+/gm, '').slice(0, 60)}...
+                    {referenceOnly
+                      ? `reference only · ${art.path}`
+                      : `${art.content.replace(/^#+\s+/gm, '').slice(0, 60)}...`}
                   </div>
                 </div>
               </div>
 
-              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+              {!referenceOnly && (
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+              )}
             </div>
           ))
         )}

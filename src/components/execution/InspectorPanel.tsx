@@ -1,12 +1,19 @@
-import { useMemo } from 'react';
-import { useRuntimeStore, type ExecutionGroup } from '@/stores/useRuntimeStore';
+import { useMemo, useState } from 'react';
+import {
+  useRuntimeStore,
+  foldEventsToSteps,
+  stepsForGoal,
+} from '@/stores/useRuntimeStore';
 import { useAppStore } from '@/stores/useAppStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Check, ChevronRight, Loader2, X, Circle } from 'lucide-react';
+import type { ExecutionStep, RuntimeEvent } from '@/types/runtime';
 
-function StatusIcon({ status }: { status: ExecutionGroup['status'] }) {
+const JSON_TRUNCATE_AT = 4096;
+
+function StatusIcon({ status }: { status: ExecutionStep['status'] }) {
   switch (status) {
     case 'running':
       return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
@@ -30,24 +37,85 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** Collapsible JSON block, truncated to ~4KB with an expand toggle. */
+function JsonSection({
+  label,
+  value,
+  defaultOpen = false,
+}: {
+  label: string;
+  value: unknown;
+  defaultOpen?: boolean;
+}) {
+  const [showFull, setShowFull] = useState(false);
+  if (value === null || value === undefined) return null;
+
+  const full = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const isLong = full.length > JSON_TRUNCATE_AT;
+  const text = isLong && !showFull ? `${full.slice(0, JSON_TRUNCATE_AT)}\n…` : full;
+
+  return (
+    <Collapsible defaultOpen={defaultOpen}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground hover:text-foreground transition-colors group">
+        <ChevronRight className="w-3 h-3 transition-transform group-data-[state=open]:rotate-90" />
+        {label}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <pre className="mt-1 p-2 rounded border border-border bg-background font-mono text-[11px] text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
+          {text}
+        </pre>
+        {isLong && (
+          <button
+            type="button"
+            onClick={() => setShowFull((v) => !v)}
+            className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showFull ? 'Show less' : `Show all (${full.length.toLocaleString()} chars)`}
+          </button>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** All events for a step: live ring buffer first, then loaded persisted traces. */
+function findStepEvents(
+  events: RuntimeEvent[],
+  loadedTraceEvents: Record<string, RuntimeEvent[]>,
+  stepId: string
+): RuntimeEvent[] {
+  const live = events.filter((e) => e.step_id === stepId);
+  if (live.length > 0) return live;
+  for (const traceEvents of Object.values(loadedTraceEvents)) {
+    const match = traceEvents.filter((e) => e.step_id === stepId);
+    if (match.length > 0) return match;
+  }
+  return [];
+}
+
 export function InspectorPanel() {
-  const executions = useRuntimeStore((s) => s.executions);
+  const events = useRuntimeStore((s) => s.events);
+  const loadedTraceEvents = useRuntimeStore((s) => s.loadedTraceEvents);
   const selectedStepId = useRuntimeStore((s) => s.selectedStepId);
   const selectStep = useRuntimeStore((s) => s.selectStep);
   const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
 
-  const step = useMemo(
-    () => executions.find((e) => e.step_id === selectedStepId) ?? null,
-    [executions, selectedStepId]
+  const stepEvents = useMemo(
+    () => (selectedStepId ? findStepEvents(events, loadedTraceEvents, selectedStepId) : []),
+    [events, loadedTraceEvents, selectedStepId]
   );
+
+  const step = useMemo(() => foldEventsToSteps(stepEvents)[0] ?? null, [stepEvents]);
+  const goalId = stepEvents.find((e) => e.goal_id != null)?.goal_id ?? null;
+  const lastEvent = stepEvents[stepEvents.length - 1] ?? null;
 
   // Other steps in the same trace (goal_id), for quick navigation.
   const traceSiblings = useMemo(() => {
-    if (!step?.goal_id) return [];
-    return executions.filter((e) => e.goal_id === step.goal_id && e.step_id !== step.step_id);
-  }, [executions, step]);
-
-  const lastEvent = step?.events[step.events.length - 1] ?? null;
+    if (!goalId || !step) return [];
+    return stepsForGoal({ events, loadedTraceEvents }, goalId).filter(
+      (s) => s.step_id !== step.step_id
+    );
+  }, [events, loadedTraceEvents, goalId, step]);
 
   return (
     <aside className="w-80 flex-shrink-0 flex flex-col h-full border-l border-border bg-card">
@@ -89,9 +157,15 @@ export function InspectorPanel() {
                 value={step.latency_ms != null ? `${step.latency_ms} ms` : null}
               />
               <Field label="Step ID" value={step.step_id} />
-              <Field label="Trace ID" value={step.goal_id} />
-              <Field label="Summary" value={lastEvent?.summary} />
-              {lastEvent?.artifact_ref && <Field label="Artifact" value={lastEvent.artifact_ref} />}
+              <Field label="Trace ID" value={goalId} />
+              <Field label="Summary" value={step.summary} />
+              {step.artifact_ref && <Field label="Artifact" value={step.artifact_ref} />}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <JsonSection label="Params" value={step.params} />
+              <JsonSection label="Output" value={step.output} />
+              <JsonSection label="Error" value={step.error} defaultOpen />
             </div>
 
             <Collapsible>
