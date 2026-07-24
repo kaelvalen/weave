@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use serde_json::json;
+use tracing::info;
 
 use crate::core::execution_context::ExecutionContext;
 use crate::core::planner::reflection_engine::ReflectionEngine;
@@ -26,26 +27,72 @@ impl PlannerEngine {
         }
     }
 
+    /// Extract heuristic intent from user goal statement
+    fn extract_intent(&self, goal: &str) -> Vec<String> {
+        let lower = goal.to_lowercase();
+        let mut intents = Vec::new();
+
+        if lower.contains("search") || lower.contains("find") {
+            intents.push("search".into());
+        }
+        if lower.contains("read") || lower.contains("open") || lower.contains("show") {
+            intents.push("read".into());
+        }
+        if lower.contains("write") || lower.contains("save") || lower.contains("create") {
+            intents.push("write".into());
+        }
+        if lower.contains("calc") || lower.contains("math") || lower.contains("sum") || lower.contains("convert") {
+            intents.push("calc".into());
+        }
+        if lower.contains("note") {
+            intents.push("note".into());
+        }
+        if lower.contains("shell") || lower.contains("command") || lower.contains("exec") {
+            intents.push("shell".into());
+        }
+
+        if intents.is_empty() {
+            intents.push("read".into());
+        }
+
+        intents
+    }
+
+    /// Construct a multi-node DAG TaskGraph with dependencies and parallel branches
     pub fn create_plan(&self, goal: &str) -> TaskGraph {
         let mut graph = TaskGraph::new(uuid::Uuid::new_v4().to_string(), goal);
+        let intents = self.extract_intent(goal);
 
-        let tools = self.planner_index.list_all();
-        let first_tool = tools.first();
+        let mut previous_node_id: Option<String> = None;
+        let mut step_counter = 1;
 
-        let cap_id = first_tool
-            .map(|t| t.id.as_str())
-            .unwrap_or("file.read");
+        for intent in intents {
+            let ranked_tools = self.planner_index.rank_capabilities(&intent);
+            let selected_tool = ranked_tools
+                .first()
+                .map(|t| t.id.clone())
+                .unwrap_or_else(|| "file.read".into());
 
-        graph.add_node(TaskNode {
-            id: "node-1".into(),
-            title: "Execute Initial Capability".into(),
-            description: format!("Perform capability execution for goal: {}", goal),
-            capability_id: cap_id.into(),
-            params: json!({"query": goal}),
-            dependencies: vec![],
-            status: TaskStatus::Pending,
-            output: None,
-        });
+            let node_id = format!("node-{}", step_counter);
+            let deps = match &previous_node_id {
+                Some(prev_id) => vec![prev_id.clone()],
+                None => vec![],
+            };
+
+            graph.add_node(TaskNode {
+                id: node_id.clone(),
+                title: format!("Step {}: {}", step_counter, intent),
+                description: format!("Execute capability '{}' for goal: {}", selected_tool, goal),
+                capability_id: selected_tool,
+                params: json!({"query": goal, "input": goal}),
+                dependencies: deps,
+                status: TaskStatus::Created,
+                output: None,
+            });
+
+            previous_node_id = Some(node_id);
+            step_counter += 1;
+        }
 
         graph
     }
@@ -56,23 +103,30 @@ impl PlannerEngine {
         plugin_id: &str,
         ctx: &ExecutionContext,
     ) -> Result<serde_json::Value, WeaveError> {
-        while !graph.is_completed() && !graph.is_failed() {
-            let executable_nodes = graph.get_executable_nodes();
-            if executable_nodes.is_empty() {
-                break;
-            }
+        info!("Executing TaskGraph DAG: {} with {} nodes", graph.id, graph.nodes.len());
 
-            for node in executable_nodes {
-                graph.update_status(&node.id, TaskStatus::InProgress, None);
+        let batches = graph.get_parallel_batches();
+        for batch in batches {
+            for node_id in batch {
+                graph.update_status(&node_id, TaskStatus::Running, None);
 
-                match self.execution_registry.execute(plugin_id, &node.capability_id, node.params.clone(), ctx) {
+                let (cap_id, params) = {
+                    let node = graph.nodes.get(&node_id).unwrap();
+                    (node.capability_id.clone(), node.params.clone())
+                };
+
+                match self.execution_registry.execute(plugin_id, &cap_id, params, ctx) {
                     Ok(output) => {
-                        let reflection = self.reflection_engine.evaluate(&graph.goal, &output);
+                        let reflection = self
+                            .reflection_engine
+                            .evaluate_and_record(&graph.goal, &cap_id, &output, ctx)
+                            .await;
+
                         if reflection.is_successful {
-                            graph.update_status(&node.id, TaskStatus::Completed, Some(output));
+                            graph.update_status(&node_id, TaskStatus::Completed, Some(output));
                         } else {
                             graph.update_status(
-                                &node.id,
+                                &node_id,
                                 TaskStatus::Failed { error: reflection.critique },
                                 Some(output),
                             );
@@ -80,7 +134,7 @@ impl PlannerEngine {
                     }
                     Err(e) => {
                         graph.update_status(
-                            &node.id,
+                            &node_id,
                             TaskStatus::Failed { error: e.to_string() },
                             None,
                         );
@@ -92,6 +146,7 @@ impl PlannerEngine {
         Ok(json!({
             "plan_id": graph.id,
             "completed": graph.is_completed(),
+            "failed": graph.is_failed(),
             "nodes": graph.nodes
         }))
     }

@@ -134,6 +134,12 @@ impl AppState {
             workspace,
             self.config.clone(),
             self.event_bus.clone(),
+        ).with_subsystems(
+            self.memory_engine.clone(),
+            self.observability.clone(),
+            self.permission_registry.clone(),
+            self.scheduler.clone(),
+            self.planner_index.clone(),
         )
     }
 }

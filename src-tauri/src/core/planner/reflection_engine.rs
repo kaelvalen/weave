@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use crate::core::execution_context::ExecutionContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReflectionOutcome {
@@ -16,21 +17,39 @@ impl ReflectionEngine {
         Self
     }
 
-    pub fn evaluate(&self, expected_goal: &str, output: &Value) -> ReflectionOutcome {
-        if output.is_null() {
-            return ReflectionOutcome {
-                is_successful: false,
-                critique: "Output returned null or empty content".into(),
-                suggested_adjustments: vec!["Retry capability with updated parameters".into()],
-                confidence_score: 0.0,
-            };
+    pub async fn evaluate_and_record(
+        &self,
+        expected_goal: &str,
+        tool_id: &str,
+        output: &Value,
+        ctx: &ExecutionContext,
+    ) -> ReflectionOutcome {
+        let is_successful = !output.is_null();
+        let critique = if is_successful {
+            format!("Task execution for capability '{}' produced valid output", tool_id)
+        } else {
+            format!("Capability '{}' returned null output", tool_id)
+        };
+
+        let outcome = ReflectionOutcome {
+            is_successful,
+            critique: critique.clone(),
+            suggested_adjustments: if is_successful { vec![] } else { vec!["Adjust parameters".into()] },
+            confidence_score: if is_successful { 0.95 } else { 0.0 },
+        };
+
+        // 1. Feedback score into PlannerIndex
+        if let Some(ref planner_idx) = ctx.planner_index {
+            planner_idx.record_feedback(tool_id, 10, is_successful);
         }
 
-        ReflectionOutcome {
-            is_successful: true,
-            critique: format!("Task execution for goal '{}' produced valid output", expected_goal),
-            suggested_adjustments: vec![],
-            confidence_score: 0.95,
+        // 2. Persist execution outcome into MemoryEngine
+        if let Some(ref memory) = ctx.memory {
+            let key = format!("reflection:{}", tool_id);
+            let content = format!("Goal: {} | Critique: {}", expected_goal, critique);
+            let _ = memory.store(&key, &content, "execution_reflection").await;
         }
+
+        outcome
     }
 }

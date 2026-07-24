@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::config::AppConfig;
 use crate::core::event_bus::EventBus;
+use crate::core::memory::memory_engine::MemoryEngine;
+use core::option::Option;
+use crate::core::observability::Observability;
+use crate::core::registries::permission_registry::PermissionRegistry;
+use crate::core::registries::planner_index::PlannerIndex;
+use crate::core::scheduler::Scheduler;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressMessage {
@@ -21,6 +27,11 @@ pub struct ExecutionContext {
     pub workspace_root: PathBuf,
     pub config: Arc<RwLock<AppConfig>>,
     pub event_bus: Arc<EventBus>,
+    pub memory: Option<Arc<MemoryEngine>>,
+    pub observability: Option<Arc<Observability>>,
+    pub permission: Option<Arc<PermissionRegistry>>,
+    pub scheduler: Option<Arc<Scheduler>>,
+    pub planner_index: Option<Arc<PlannerIndex>>,
     pub cancellation_token: CancellationToken,
     pub progress_tx: Option<tokio::sync::mpsc::Sender<ProgressMessage>>,
 }
@@ -37,9 +48,30 @@ impl ExecutionContext {
             workspace_root,
             config,
             event_bus,
+            memory: None,
+            observability: None,
+            permission: None,
+            scheduler: None,
+            planner_index: None,
             cancellation_token: CancellationToken::new(),
             progress_tx: None,
         }
+    }
+
+    pub fn with_subsystems(
+        mut self,
+        memory: Arc<MemoryEngine>,
+        observability: Arc<Observability>,
+        permission: Arc<PermissionRegistry>,
+        scheduler: Arc<Scheduler>,
+        planner_index: Arc<PlannerIndex>,
+    ) -> Self {
+        self.memory = Some(memory);
+        self.observability = Some(observability);
+        self.permission = Some(permission);
+        self.scheduler = Some(scheduler);
+        self.planner_index = Some(planner_index);
+        self
     }
 
     pub fn with_cancellation(mut self, token: CancellationToken) -> Self {

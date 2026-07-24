@@ -1,14 +1,26 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskStatus {
-    Pending,
-    InProgress,
+    Created,
+    Queued,
+    Planning,
+    WaitingPermission { reason: String },
+    WaitingUser { prompt: String },
+    Running,
+    Retrying { attempt: u32 },
+    RollingBack,
+    Cancelled,
     Completed,
     Failed { error: String },
-    Skipped,
+}
+
+impl Default for TaskStatus {
+    fn default() -> Self {
+        Self::Created
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +30,7 @@ pub struct TaskNode {
     pub description: String,
     pub capability_id: String,
     pub params: Value,
-    pub dependencies: Vec<String>, // Node IDs that must complete first
+    pub dependencies: Vec<String>, // Parent node IDs that must complete first
     pub status: TaskStatus,
     pub output: Option<Value>,
 }
@@ -47,11 +59,11 @@ impl TaskGraph {
         self.nodes
             .values()
             .filter(|n| {
-                if n.status != TaskStatus::Pending {
+                if n.status != TaskStatus::Created && n.status != TaskStatus::Queued {
                     return false;
                 }
 
-                // All dependencies must be completed
+                // All dependencies must be Completed
                 n.dependencies.iter().all(|dep_id| {
                     self.nodes
                         .get(dep_id)
@@ -63,15 +75,60 @@ impl TaskGraph {
             .collect()
     }
 
+    /// Computes parallel execution batches in topological order.
+    pub fn get_parallel_batches(&self) -> Vec<Vec<String>> {
+        let mut batches = Vec::new();
+        let mut completed: HashSet<String> = self
+            .nodes
+            .values()
+            .filter(|n| n.status == TaskStatus::Completed)
+            .map(|n| n.id.clone())
+            .collect();
+
+        let mut remaining: HashSet<String> = self
+            .nodes
+            .values()
+            .filter(|n| n.status != TaskStatus::Completed)
+            .map(|n| n.id.clone())
+            .collect();
+
+        while !remaining.is_empty() {
+            let mut current_batch = Vec::new();
+            for node_id in &remaining {
+                if let Some(node) = self.nodes.get(node_id) {
+                    let ready = node.dependencies.iter().all(|dep| completed.contains(dep));
+                    if ready {
+                        current_batch.push(node_id.clone());
+                    }
+                }
+            }
+
+            if current_batch.is_empty() {
+                break; // Circular dependency or blocked nodes
+            }
+
+            for id in &current_batch {
+                remaining.remove(id);
+                completed.insert(id.clone());
+            }
+
+            batches.push(current_batch);
+        }
+
+        batches
+    }
+
     pub fn update_status(&mut self, node_id: &str, status: TaskStatus, output: Option<Value>) {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.status = status;
-            node.output = output;
+            if let Some(out) = output {
+                node.output = Some(out);
+            }
         }
     }
 
     pub fn is_completed(&self) -> bool {
-        self.nodes.values().all(|n| n.status == TaskStatus::Completed || n.status == TaskStatus::Skipped)
+        self.nodes.values().all(|n| n.status == TaskStatus::Completed)
     }
 
     pub fn is_failed(&self) -> bool {
