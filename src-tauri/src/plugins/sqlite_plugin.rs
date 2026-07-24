@@ -8,13 +8,13 @@ use crate::utils::errors::WeaveError;
 pub struct SqlitePlugin;
 
 impl PluginExecutor for SqlitePlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        SqlitePlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        SqlitePlugin::execute(capability, params, ctx)
     }
 }
 
 impl SqlitePlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "db.query" => Self::query(params),
             "db.execute" => Self::execute_statement(params),

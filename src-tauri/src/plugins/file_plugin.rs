@@ -12,13 +12,13 @@ const BLOCKED_WRITE_FILES: &[&str] = &[".ssh/id_rsa", ".ssh/id_ed25519", ".ssh/a
 pub struct FilePlugin;
 
 impl PluginExecutor for FilePlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        FilePlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        FilePlugin::execute(capability, params, ctx)
     }
 }
 
 impl FilePlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "file.read" => Self::read(params),
             "file.write" => Self::write(params),

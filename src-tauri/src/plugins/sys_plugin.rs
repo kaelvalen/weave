@@ -9,13 +9,13 @@ use crate::utils::errors::WeaveError;
 pub struct SysPlugin;
 
 impl PluginExecutor for SysPlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        SysPlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        SysPlugin::execute(capability, params, ctx)
     }
 }
 
 impl SysPlugin {
-    pub fn execute(capability: &str, _params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, _params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "sys.info" => Self::info(),
             "sys.time" => Self::time(),

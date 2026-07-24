@@ -6152,6 +6152,7 @@ dependencies = [
 name = "weave"
 version = "0.2.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "diffy",
  "dirs 5.0.1",
@@ -6177,6 +6178,7 @@ dependencies = [
  "tauri-plugin-shell",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",

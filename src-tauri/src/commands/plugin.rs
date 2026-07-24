@@ -156,7 +156,8 @@ pub async fn plugin_execute(
     app_state: State<'_, AppState>,
 ) -> Result<serde_json::Value, WeaveError> {
     debug!("Executing: {}::{} with params: {:?}", plugin_id, capability, params);
-    app_state.plugin_manager.execute_capability(&plugin_id, &capability, params)
+    let ctx = app_state.create_execution_context("ipc_session");
+    app_state.plugin_manager.execute_capability(&plugin_id, &capability, params, &ctx)
 }
 
 #[tauri::command]

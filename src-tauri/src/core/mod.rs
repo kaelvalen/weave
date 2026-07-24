@@ -1,6 +1,13 @@
+pub mod ai;
 pub mod ai_bridge;
+pub mod capability_registry;
 pub mod event_bus;
+pub mod execution_context;
 pub mod github_plugin;
+pub mod memory;
+pub mod planner;
 pub mod plugin_manager;
+pub mod policy_engine;
 pub mod sandbox;
 pub mod tool_registry;
+pub mod workflow;

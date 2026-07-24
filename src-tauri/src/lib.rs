@@ -12,9 +12,15 @@ pub mod runtime;
 pub mod utils;
 
 use core::ai_bridge::AiBridge;
+use core::capability_registry::CapabilityRegistry;
 use core::event_bus::EventBus;
+use core::execution_context::ExecutionContext;
+use core::memory::memory_engine::MemoryEngine;
+use core::planner::planner_engine::PlannerEngine;
 use core::plugin_manager::PluginManager;
+use core::policy_engine::PolicyEngine;
 use core::tool_registry::PluginRegistry;
+use core::workflow::workflow_engine::WorkflowEngine;
 use models::chat::ChatMessage;
 use utils::config::AppConfig;
 use utils::errors::WeaveError;
@@ -24,6 +30,11 @@ pub struct AppState {
     pub ai_bridge: Arc<AiBridge>,
     pub event_bus: Arc<EventBus>,
     pub tool_registry: Arc<PluginRegistry>,
+    pub capability_registry: Arc<CapabilityRegistry>,
+    pub policy_engine: Arc<PolicyEngine>,
+    pub planner_engine: Arc<PlannerEngine>,
+    pub workflow_engine: Arc<WorkflowEngine>,
+    pub memory_engine: Arc<MemoryEngine>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
@@ -61,6 +72,12 @@ impl AppState {
         let event_bus = Arc::new(EventBus::new(1000));
         let tool_registry = Arc::new(PluginRegistry::new());
 
+        let policy_engine = Arc::new(PolicyEngine::default_engine());
+        let capability_registry = Arc::new(CapabilityRegistry::new(plugin_dir.clone(), policy_engine.clone()));
+        let planner_engine = Arc::new(PlannerEngine::new(capability_registry.clone()));
+        let workflow_engine = Arc::new(WorkflowEngine::new(capability_registry.clone()));
+        let memory_engine = Arc::new(MemoryEngine::default_engine());
+
         let _ = plugin_manager.discover();
 
         info!("Weave application state initialized successfully");
@@ -70,6 +87,11 @@ impl AppState {
             ai_bridge,
             event_bus,
             tool_registry,
+            capability_registry,
+            policy_engine,
+            planner_engine,
+            workflow_engine,
+            memory_engine,
             config: config_arc,
             chat_history: Arc::new(RwLock::new(Vec::new())),
             abort_generation: Arc::new(AtomicBool::new(false)),
@@ -77,6 +99,15 @@ impl AppState {
             local_server: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
-}
 
-// Tauri commands defined in main.rs via generate_handler!
+    pub fn create_execution_context(&self, session_id: &str) -> ExecutionContext {
+        let workspace = std::env::current_dir().unwrap_or_default();
+
+        ExecutionContext::new(
+            session_id.to_string(),
+            workspace,
+            self.config.clone(),
+            self.event_bus.clone(),
+        )
+    }
+}

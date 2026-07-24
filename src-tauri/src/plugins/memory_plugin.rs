@@ -10,13 +10,13 @@ use crate::utils::errors::WeaveError;
 pub struct MemoryPlugin;
 
 impl PluginExecutor for MemoryPlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        MemoryPlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        MemoryPlugin::execute(capability, params, ctx)
     }
 }
 
 impl MemoryPlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "memory.store" => Self::store(params),
             "memory.recall" => Self::recall(params),

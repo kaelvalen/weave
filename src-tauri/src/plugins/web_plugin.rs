@@ -7,13 +7,13 @@ use crate::utils::errors::WeaveError;
 pub struct WebPlugin;
 
 impl PluginExecutor for WebPlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        WebPlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        WebPlugin::execute(capability, params, ctx)
     }
 }
 
 impl WebPlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "web.fetch" => Self::fetch(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),

@@ -8,13 +8,13 @@ use crate::utils::errors::WeaveError;
 pub struct HttpPlugin;
 
 impl PluginExecutor for HttpPlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        HttpPlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        HttpPlugin::execute(capability, params, ctx)
     }
 }
 
 impl HttpPlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "http.request" => Self::request(params),
             _ => Err(WeaveError::CapabilityNotFound(capability.to_string())),

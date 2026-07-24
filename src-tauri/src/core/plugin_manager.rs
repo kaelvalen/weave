@@ -382,6 +382,7 @@ impl PluginManager {
         plugin_id: &str,
         capability: &str,
         params: serde_json::Value,
+        ctx: &crate::core::execution_context::ExecutionContext,
     ) -> Result<serde_json::Value, WeaveError> {
         let plugin = self.get_plugin(plugin_id)
             .ok_or_else(|| WeaveError::PluginNotFound(plugin_id.to_string()))?;
@@ -416,7 +417,7 @@ impl PluginManager {
         // Use executor registry instead of hardcoded match
         let executors = self.executors.read();
         if let Some(executor) = executors.get(plugin_id) {
-            return executor.execute(capability, params);
+            return executor.execute(capability, params, ctx);
         }
 
         Err(WeaveError::PluginError(

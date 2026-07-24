@@ -7,6 +7,8 @@ pub enum WeaveError {
     PluginError(String),
     #[error("AI API error: {0}")]
     AiApiError(String),
+    #[error("AI error: {0}")]
+    AiError(String),
     #[error("Invalid manifest: {0}")]
     InvalidManifest(String),
     #[error("Capability not found: {0}")]

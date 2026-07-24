@@ -25,13 +25,13 @@ pub struct Note {
 pub struct NotePlugin;
 
 impl PluginExecutor for NotePlugin {
-    fn execute(&self, capability: &str, params: Value) -> Result<Value, WeaveError> {
-        NotePlugin::execute(capability, params)
+    fn execute(&self, capability: &str, params: Value, ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
+        NotePlugin::execute(capability, params, ctx)
     }
 }
 
 impl NotePlugin {
-    pub fn execute(capability: &str, params: Value) -> Result<Value, WeaveError> {
+    pub fn execute(capability: &str, params: Value, _ctx: &crate::core::execution_context::ExecutionContext) -> Result<Value, WeaveError> {
         match capability {
             "note.create" => Self::create(params),
             "note.list" => Self::list(),
