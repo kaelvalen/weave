@@ -19,9 +19,9 @@ import { usePluginStore } from '@/stores/usePluginStore';
 function StatusIcon({ status }: { status: 'running' | 'completed' | 'failed' | 'unknown' }) {
   switch (status) {
     case 'running':
-      return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
+      return <Loader2 className="w-3.5 h-3.5 text-brand animate-spin" />;
     case 'completed':
-      return <Check className="w-3.5 h-3.5 text-emerald-500" />;
+      return <Check className="w-3.5 h-3.5 text-brand check-pop" />;
     case 'failed':
       return <X className="w-3.5 h-3.5 text-destructive" />;
     default:
@@ -54,34 +54,38 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-2 last:mb-0">
-      <div className="border border-border rounded-md bg-card">
-        <CollapsibleTrigger className="w-full flex items-center gap-2 px-2 py-1.5 font-mono text-xs hover:bg-muted/50 rounded-t-md transition-colors group">
+      <div className="rounded-lg bg-surface-1">
+        <CollapsibleTrigger className="w-full flex items-center gap-2 px-2.5 py-1.5 font-mono text-xs hover:bg-surface-2 rounded-t-lg transition-colors group">
           <ChevronRight className="w-3 h-3 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
           <StatusIcon status={stats.status} />
           <span className="text-foreground font-semibold truncate">Trace: {goalId.slice(0, 8)}</span>
           {stats.status === 'running' && (
-            <span className="rounded border border-emerald-500/40 px-1 font-mono text-[9px] uppercase tracking-wider text-emerald-500">
+            <span className="rounded bg-brand/10 px-1 font-mono text-[9px] uppercase tracking-wider text-brand">
               live
             </span>
           )}
           <span className="text-muted-foreground text-[11px]">
-            · {stats.durationMs ? `${stats.durationMs}ms` : 'running'}
+            {stats.durationMs != null
+              ? `· ${stats.durationMs}ms`
+              : stats.status === 'running'
+                ? '· running'
+                : ''}
           </span>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t border-border flex flex-col">
+          <div className="flex flex-col px-2.5 pb-2.5">
             {/* PLANNING SECTION */}
             {plan && plan.length > 0 && (
-              <div className="p-2 border-b border-border/50 bg-muted/10">
+              <div className="py-2">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
                   <GitMerge className="w-3 h-3" />
                   Planning
-                  {stats.status === 'running' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1" />}
+                  {stats.status === 'running' && <div className="w-1.5 h-1.5 rounded-full bg-brand status-pulse ml-1" />}
                 </div>
                 <div className="flex flex-col gap-1 pl-5">
                   {plan.map((p, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs font-mono text-foreground/80">
-                      <span className="w-4 h-4 flex items-center justify-center rounded-full bg-border text-[9px]">{i + 1}</span>
+                      <span className="w-4 h-4 flex items-center justify-center rounded-full bg-surface-3 text-[9px]">{i + 1}</span>
                       <span>{getCapabilityLabel(p.capability)}</span>
                       <span className="text-muted-foreground/50 text-[10px]">{p.capability}</span>
                     </div>
@@ -91,7 +95,7 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
             )}
 
             {/* STEPS SECTION */}
-            <div className="p-2 border-b border-border/50">
+            <div className="py-2">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
                 <Activity className="w-3 h-3" />
                 Steps
@@ -105,14 +109,14 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
 
             {/* ARTIFACTS SECTION */}
             {artifacts.length > 0 && (
-              <div className="p-2 border-b border-border/50 bg-muted/10">
+              <div className="py-2">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
                   <Package className="w-3 h-3" />
                   Artifacts
                 </div>
                 <div className="flex flex-col gap-1 pl-5">
                   {artifacts.map((art, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs font-mono text-foreground/80 bg-background border border-border/50 p-1.5 rounded">
+                    <div key={i} className="flex items-center justify-between text-xs font-mono text-foreground/80 bg-surface-2 p-1.5 rounded">
                       <span className="truncate">{art.ref}</span>
                       <span className="text-[10px] text-muted-foreground">
                         {art.size_bytes != null ? formatBytes(art.size_bytes) : 'unknown size'}
@@ -125,14 +129,14 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
 
             {/* MEMORY SECTION */}
             {memory.length > 0 && (
-              <div className="p-2 bg-muted/10">
+              <div className="py-2">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
                   <Brain className="w-3 h-3" />
                   Memory Updates
                 </div>
                 <div className="flex flex-col gap-1 pl-5">
                   {memory.map((m, i) => (
-                    <div key={i} className="flex flex-col text-xs font-mono text-foreground/80 bg-background border border-border/50 p-1.5 rounded">
+                    <div key={i} className="flex flex-col text-xs font-mono text-foreground/80 bg-surface-2 p-1.5 rounded">
                       <span className="font-semibold">{m.capability}</span>
                       <span className="text-muted-foreground">{m.summary}</span>
                     </div>

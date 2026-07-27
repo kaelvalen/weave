@@ -177,6 +177,14 @@ pub fn chat_delete_session(id: String) -> Result<(), WeaveError> {
         std::fs::remove_file(path)?;
     }
 
-    info!("Deleted session: {}", id);
+    // Delete session specific artifacts directory if it exists
+    if let Ok(app_dir) = AppConfig::app_data_dir() {
+        let artifacts_dir = app_dir.join("artifacts").join(&id);
+        if artifacts_dir.exists() {
+            let _ = std::fs::remove_dir_all(artifacts_dir);
+        }
+    }
+
+    info!("Deleted session and associated artifacts: {}", id);
     Ok(())
 }

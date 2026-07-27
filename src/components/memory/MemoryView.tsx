@@ -228,39 +228,50 @@ export function MemoryView() {
   };
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden">
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-        <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 font-mono text-xs">
-          <span className="font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Brain className="w-3.5 h-3.5" />
-            Memory
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            {filtered.length} of {entries.length}
-            {lastMemoryUpdateTs && (
-              <span className="text-muted-foreground/60">
-                {' '}
-                · updated {formatTs(lastMemoryUpdateTs)}
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Brain className="w-5 h-5 text-brand" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              Memory Substrate
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
+                {filtered.length} entries
               </span>
-            )}
-          </span>
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Persistent knowledge, learned directives, and semantic context graph</p>
+          </div>
         </div>
 
-        <div className="px-3 py-2 flex items-center gap-2 border-b border-border flex-shrink-0">
-          <div className="relative flex-1">
-            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className="flex items-center gap-3">
+          <div className="relative w-64">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search memory..."
-              className="pl-7 h-7 text-xs font-mono bg-card border-border"
+              placeholder="Search memory graph..."
+              className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
             />
+          </div>
+        </div>
+      </header>
+
+      {/* ── Memory content ── */}
+      <div className="flex-1 min-h-0 w-full overflow-y-auto p-6 max-w-6xl mx-auto space-y-6">
+        {/* Teach AI Bar */}
+        <div className="p-4 rounded-xl bg-surface-1 border border-border/40 flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground shrink-0">
+            <Plus className="w-4 h-4 text-brand" />
+            Teach AI
           </div>
           <Input
             value={teachKey}
             onChange={(e) => setTeachKey(e.target.value)}
-            placeholder="key"
-            className="w-40 h-7 text-xs font-mono bg-card border-border"
+            placeholder="key (e.g. preferred_theme)"
+            className="w-48 h-8 text-xs font-mono bg-surface-2 border-border/40"
           />
           <Input
             value={teachValue}
@@ -268,17 +279,15 @@ export function MemoryView() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleTeach();
             }}
-            placeholder="Teach the assistant something..."
-            className="flex-1 h-7 text-xs font-mono bg-card border-border"
+            placeholder="Teach the assistant a rule, preference, or fact..."
+            className="flex-1 h-8 text-xs font-mono bg-surface-2 border-border/40"
           />
           <button
             type="button"
             onClick={handleTeach}
             disabled={isTeaching || !teachKey.trim() || !teachValue.trim()}
-            className="flex items-center gap-1.5 px-2 h-7 rounded border border-border font-mono text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            title="Store a new memory entry"
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-brand text-brand-foreground font-mono text-xs hover:bg-brand/90 transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
           >
-            <Plus className="w-3 h-3" />
             Teach
           </button>
         </div>

@@ -193,7 +193,7 @@ export function ChatPanel({
       <div className="flex flex-col flex-1 min-w-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300">
           {/* ── Toolbar ── */}
-          <div className={`flex items-center justify-between px-3.5 flex-shrink-0 gap-2 border-b border-border/40 bg-card/80 backdrop-blur-md z-10 ${isDocked ? 'h-11 rounded-none bg-muted/30' : 'h-12 rounded-t-2xl'}`}>
+          <div className={`flex items-center justify-between px-3.5 flex-shrink-0 gap-2 border-b border-border/40 bg-card z-10 ${isDocked ? 'h-11 rounded-none bg-muted/30' : 'h-12 rounded-t-2xl'}`}>
             <div className="flex items-center gap-2 min-w-0">
               {isDocked ? (
                 <div className="flex items-center gap-2 min-w-0 pr-2">

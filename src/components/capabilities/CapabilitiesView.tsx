@@ -114,31 +114,36 @@ export function CapabilitiesView() {
   const selectedMetrics = selectedRow ? observability?.tool_metrics[selectedRow.name] : undefined;
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden">
-      {/* ── Capability list column ── */}
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-        <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 font-mono text-xs">
-          <span className="font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Boxes className="w-3.5 h-3.5" />
-            Capabilities
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            {filtered.length} of {rows.length}
-          </span>
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Boxes className="w-5 h-5 text-brand" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              Capabilities & Tools
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
+                {filtered.length} / {rows.length}
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">System tool contracts, schemas and execution reliability</p>
+          </div>
         </div>
 
-        <div className="px-3 py-2 flex items-center gap-2 border-b border-border flex-shrink-0">
-          <div className="relative flex-1">
-            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className="flex items-center gap-3">
+          <div className="relative w-56">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search capabilities..."
-              className="pl-7 h-7 text-xs font-mono bg-card border-border"
+              className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
             />
           </div>
           <Select value={pluginFilter} onValueChange={setPluginFilter}>
-            <SelectTrigger className="w-44 h-7 text-xs font-mono">
+            <SelectTrigger className="w-40 h-8 text-xs font-mono bg-surface-2 border-border/40">
               <SelectValue placeholder="All plugins" />
             </SelectTrigger>
             <SelectContent>
@@ -155,17 +160,22 @@ export function CapabilitiesView() {
           <button
             type="button"
             onClick={() => setApprovalOnly((v) => !v)}
-            className={`flex items-center gap-1.5 px-2 h-7 rounded border font-mono text-[11px] transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 h-8 rounded border font-mono text-[11px] transition-colors ${
               approvalOnly
                 ? 'border-destructive/50 text-destructive bg-destructive/10'
-                : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                : 'border-border/40 text-muted-foreground hover:text-foreground bg-surface-2'
             }`}
             title="Show only capabilities that require approval"
           >
-            <ShieldAlert className="w-3 h-3" />
+            <ShieldAlert className="w-3.5 h-3.5" />
             Requires approval
           </button>
         </div>
+      </header>
+
+      {/* ── Capability list and detail split ── */}
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 h-full border-r border-border/40">
 
         <ScrollArea className="flex-1">
           {grouped.length === 0 ? (
@@ -306,6 +316,7 @@ export function CapabilitiesView() {
           </ScrollArea>
         </aside>
       )}
+      </div>
     </div>
   );
 }

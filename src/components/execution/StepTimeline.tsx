@@ -26,14 +26,14 @@ function StatusIcon({ status, live }: { status: ExecutionStep['status']; live?: 
     return (
       <Loader2
         size={12}
-        className={`animate-spin text-muted-foreground ${live ? 'step-node-running' : ''}`}
+        className={`animate-spin text-brand ${live ? 'step-node-running' : ''}`}
       />
     );
   }
   if (status === 'failed') {
     return <X size={12} className="text-destructive" />;
   }
-  return <Check size={12} className="text-green-500" />;
+  return <Check size={12} className="text-brand check-pop" />;
 }
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
@@ -43,7 +43,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded border border-border bg-surface-2 p-2 font-mono text-[11px]">
+      <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-surface-2 p-2 font-mono text-[11px]">
         {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

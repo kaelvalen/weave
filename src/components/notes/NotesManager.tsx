@@ -453,13 +453,13 @@ export function NotesManager() {
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   return (
-    <div className="flex h-full w-full bg-transparent pt-16">
+    <div className="flex h-full w-full bg-background overflow-hidden">
       {/* ── Column 1: Notes Tree Sidebar ── */}
-      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card/50 backdrop-blur-md">
-        <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">
+      <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r border-border/40 bg-surface-1">
+        <div className="h-14 px-4 flex items-center justify-between border-b border-border/40 flex-shrink-0 bg-surface-1">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" />
-            <h3 className="text-xs font-bold tracking-wide uppercase text-foreground">Notes Tree ({notes.length})</h3>
+            <FileText className="w-4 h-4 text-brand" />
+            <h3 className="text-xs font-semibold tracking-wide text-foreground">Notes ({notes.length})</h3>
           </div>
           <Button
             variant="ghost"

@@ -190,7 +190,7 @@ export function FileDiffViewer({ oldContent = '', newContent = '', filename }: F
   return (
     <div className="flex-1 flex flex-col w-full h-full overflow-hidden bg-background/90 text-xs font-mono select-text">
       {/* ── Summary Header Bar ── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/80 bg-muted/40 backdrop-blur-md shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/80 bg-muted/40 shrink-0">
         <div className="flex items-center gap-2 font-sans font-semibold text-foreground/90">
           <FileDiff className="w-4 h-4 text-primary inline" />
           <span>Live Diff Comparison</span>

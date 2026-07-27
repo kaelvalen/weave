@@ -15,14 +15,16 @@ export default {
     extend: {
       fontFamily: {
         sans: ['var(--font-family, Inter)', 'system-ui', 'sans-serif'],
+        display: ['"IBM Plex Sans"', 'var(--font-family, Inter)', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'Fira Code', 'monospace'],
       },
       fontWeight: {
         normal: '400',
         medium: '500',
         semibold: '600',
-        bold: '600', // Cap at 600
-        extrabold: '600',
-        black: '600',
+        bold: '700',
+        extrabold: '700',
+        black: '700',
       },
       borderWidth: {
         DEFAULT: 'var(--border-width, 1px)',
@@ -64,6 +66,11 @@ export default {
         surface: {
           1: 'hsl(var(--surface-1))',
           2: 'hsl(var(--surface-2))',
+          3: 'hsl(var(--surface-3))',
+        },
+        brand: {
+          DEFAULT: 'hsl(var(--brand))',
+          foreground: 'hsl(var(--brand-foreground))',
         },
       },
       boxShadow: {

@@ -29,8 +29,42 @@ import {
   Star,
 } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
+import { toast } from 'sonner';
 
 type ModelOption = { value: string; label: string; provider: Provider };
+
+/** Extensions that are always safe to attach as inline text. */
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'markdown', 'json', 'jsonl', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+  'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
+  'html', 'htm', 'css', 'scss', 'less', 'xml', 'svg', 'yaml', 'yml', 'toml', 'ini',
+  'cfg', 'conf', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'graphql', 'lua', 'r',
+  'vue', 'svelte', 'astro', 'tex', 'csv', 'log', 'diff', 'patch', 'gitignore',
+  'dockerfile', 'makefile', 'cmake', 'gradle', 'lock', 'env', 'editorconfig',
+]);
+
+/** Per-file cap so an attachment can't blow up the model context. */
+const MAX_FILE_CHARS = 200_000;
+
+/** Image extensions — Linux pickers/drag-drop often return an empty MIME type.
+    (`svg` deliberately excluded: it is XML, far more useful to the model as text.) */
+const IMAGE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'ico', 'tif', 'tiff',
+]);
+
+function isProbablyText(file: File): boolean {
+  if (file.type.startsWith('text/')) return true;
+  if (
+    ['application/json', 'application/xml', 'application/javascript', 'application/x-yaml'].includes(
+      file.type
+    )
+  ) {
+    return true;
+  }
+  const name = file.name.toLowerCase();
+  const ext = name.includes('.') ? (name.split('.').pop() ?? '') : name;
+  return TEXT_EXTENSIONS.has(ext);
+}
 
 const FALLBACK_MODELS: ModelOption[] = [
   { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
@@ -111,6 +145,7 @@ export function ChatInput() {
   const [input, setInput] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [images, setImages] = useState<string[]>([]);
+  const [files, setFiles] = useState<{ name: string; content: string }[]>([]);
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -187,21 +222,22 @@ export function ChatInput() {
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
-    if ((!trimmed && images.length === 0) || isStreaming) return;
+    if ((!trimmed && images.length === 0 && files.length === 0) || isStreaming) return;
     setInput('');
     const currentImages = [...images];
     setImages([]);
+    // Attached text files travel inline so every model (vision or not) sees them.
+    const fileBlocks = files
+      .map((f) => `\n\n<file name="${f.name}">\n${f.content}\n</file>`)
+      .join('');
+    setFiles([]);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (selectedModel) addRecentModel(selectedModel);
-    await sendMessage(trimmed, currentImages);
-  }, [input, images, isStreaming, sendMessage, selectedModel, addRecentModel]);
+    await sendMessage(trimmed + fileBlocks, currentImages);
+  }, [input, images, files, isStreaming, sendMessage, selectedModel, addRecentModel]);
 
-  const handleStop = useCallback(async () => {
-    try {
-      await invoke('chat_abort_generation');
-    } catch (err) {
-      console.error('Failed to abort generation:', err);
-    }
+  const handleStop = useCallback(() => {
+    useChatStore.getState().stopStreaming();
   }, []);
 
   const query = input.trimStart();
@@ -298,48 +334,77 @@ export function ChatInput() {
   }, []);
 
   const processFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
+    // Images keep the vision pipeline (compressed data-URL previews).
+    // MIME can be empty on Linux — fall back to the extension.
+    const ext = file.name.toLowerCase().split('.').pop() ?? '';
+    if (file.type.startsWith('image/') || IMAGE_EXTENSIONS.has(ext)) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          // Compress image using canvas
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1200;
+            const MAX_HEIGHT = 1200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            setImages((prev) => [...prev, dataUrl]);
+          };
+          img.src = result;
+        }
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // Everything else: attach as inline text so any model can see it.
+    if (!isProbablyText(file)) {
+      toast.error(`"${file.name}" looks binary — only text files and images can be attached.`);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (result) {
-        // Compress image using canvas
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 1200;
-          const MAX_HEIGHT = 1200;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          setImages((prev) => [...prev, dataUrl]);
-        };
-        img.src = result;
+      let text = (e.target?.result as string) ?? '';
+      // NUL bytes in the head mean the "text" guess was wrong (compiled/binary format).
+      if (text.slice(0, 2048).includes('\u0000')) {
+        toast.error(`"${file.name}" looks binary — skipped.`);
+        return;
       }
+      if (text.length > MAX_FILE_CHARS) {
+        text = `${text.slice(0, MAX_FILE_CHARS)}\n… (truncated)`;
+      }
+      setFiles((prev) => [...prev, { name: file.name, content: text }]);
     };
-    reader.readAsDataURL(file);
+    reader.readAsText(file);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
+      if (items[i].kind === 'file') {
         const file = items[i].getAsFile();
         if (file) {
           processFile(file);
@@ -362,7 +427,8 @@ export function ChatInput() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const canSend = (!!input.trim() || images.length > 0) && !isStreaming && !isSwitchingModel;
+  const canSend =
+    (!!input.trim() || images.length > 0 || files.length > 0) && !isStreaming && !isSwitchingModel;
 
   return (
     <div className="flex-shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
@@ -396,8 +462,8 @@ export function ChatInput() {
         </div>
       )}
 
-      {/* Clean Monochrome Chat Input Box */}
-      <div className="border border-border rounded-lg bg-card p-2 flex flex-col gap-2">
+      {/* Tonal composer — the one floating object; focus makes it glow */}
+      <div className="composer elevate rounded-xl bg-surface-1 border border-transparent focus-within:bg-surface-2 p-2 flex flex-col gap-2">
         {/* Attached image previews */}
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 px-1 pt-1">
@@ -408,6 +474,30 @@ export function ChatInput() {
                   type="button"
                   onClick={() => removeImage(idx)}
                   className="absolute top-0.5 right-0.5 bg-background/80 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Attached text-file chips — content rides inline with the message */}
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+            {files.map((f, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-muted-foreground"
+              >
+                <FileText className="w-3 h-3 shrink-0" />
+                <span className="max-w-[160px] truncate text-foreground">{f.name}</span>
+                <span>{Math.max(1, Math.round(f.content.length / 1000))}k</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(idx)}
+                  className="hover:text-foreground transition-colors"
+                  title="Remove attachment"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -430,13 +520,13 @@ export function ChatInput() {
         />
 
         {/* Action Row */}
-        <div className="flex items-center justify-between pt-1 border-t border-border/40 font-mono text-xs">
+        <div className="flex items-center justify-between pt-1 font-mono text-xs">
           <div className="flex items-center gap-2">
             {/* Model Selector */}
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger
                 disabled={modelsLoading || isStreaming || isSwitchingModel}
-                className="h-7 text-xs bg-muted/50 hover:bg-muted border border-border px-2.5 rounded gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
+                className="h-7 text-xs bg-surface-2 hover:bg-surface-3 px-2.5 rounded-md gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
               >
                 <span className="truncate max-w-[120px] font-medium">
                   {modelsLoading || isSwitchingModel
@@ -495,19 +585,18 @@ export function ChatInput() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Paperclip Attach */}
+            {/* Paperclip Attach — every file type is visible; text rides inline, images use vision */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Attach image"
+              title="Attach file (text or image)"
             >
               <Paperclip className="w-3.5 h-3.5" />
             </button>
             <input
               type="file"
               ref={fileInputRef}
-              accept="image/*"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -532,7 +621,7 @@ export function ChatInput() {
               type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="flex items-center gap-1 px-3 py-1 bg-foreground text-background font-semibold rounded text-xs hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1 bg-brand text-brand-foreground font-semibold rounded-md text-xs hover:bg-brand/90 disabled:opacity-40 transition-all cursor-pointer"
             >
               <span>Send</span>
               <ArrowUp className="w-3.5 h-3.5" />

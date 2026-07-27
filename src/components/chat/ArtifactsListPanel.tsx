@@ -96,12 +96,12 @@ export function ArtifactsListPanel() {
   );
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-background border-l border-border font-mono text-xs overflow-hidden">
+    <div className="flex-1 flex flex-col h-full font-mono text-xs overflow-hidden">
       {/* Header */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 bg-card select-none">
+      <div className="h-11 px-3 flex items-center justify-between flex-shrink-0 select-none">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-foreground" />
-          <span className="font-bold text-foreground text-sm">Thread Artifacts ({rows.length})</span>
+          <span className="font-semibold text-foreground text-sm">Thread Artifacts ({rows.length})</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -109,7 +109,7 @@ export function ArtifactsListPanel() {
             type="button"
             onClick={() => setRightPanelOpen(false)}
             title="Close side panel"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -117,7 +117,7 @@ export function ArtifactsListPanel() {
       </div>
 
       {/* Search Input */}
-      <div className="p-2 border-b border-border/60 bg-muted/20">
+      <div className="px-2 pb-2">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -125,7 +125,7 @@ export function ArtifactsListPanel() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search artifacts & notes..."
-            className="w-full bg-background border border-border rounded px-8 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors"
+            className="w-full bg-surface-2 border border-transparent rounded-md px-8 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
           />
           {search && (
             <button
@@ -140,7 +140,7 @@ export function ArtifactsListPanel() {
       </div>
 
       {/* Artifacts List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground font-sans">
             <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -154,12 +154,12 @@ export function ArtifactsListPanel() {
             <div
               key={`${art.path ?? art.title}-${idx}`}
               onClick={referenceOnly ? undefined : () => openArtifact(art)}
-              className={`artifact-enter p-2.5 rounded border border-border/60 bg-card transition-all flex items-center justify-between group ${
-                referenceOnly ? 'cursor-default opacity-80' : 'hover:bg-muted/40 cursor-pointer'
+              className={`artifact-enter p-2.5 rounded-lg bg-surface-2 transition-colors flex items-center justify-between group ${
+                referenceOnly ? 'cursor-default opacity-80' : 'hover:bg-surface-3 cursor-pointer'
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded border border-border bg-background flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-md bg-surface-3 flex items-center justify-center shrink-0">
                   {art.type === 'code' ? (
                     <Code2 className="w-3.5 h-3.5 text-foreground" />
                   ) : (
@@ -168,7 +168,7 @@ export function ArtifactsListPanel() {
                 </div>
                 <div className="min-w-0">
                   <div
-                    className={`font-bold text-foreground text-xs truncate ${
+                    className={`font-medium text-foreground text-xs truncate ${
                       referenceOnly ? '' : 'group-hover:underline'
                     }`}
                   >

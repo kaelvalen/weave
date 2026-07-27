@@ -229,16 +229,40 @@ export function ArtifactsView() {
   const isCode = selected?.type === 'code' || !!selected?.language;
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden">
-      {/* ── Artifact list column ── */}
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-        <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 font-mono text-xs">
-          <span className="font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <FolderOpen className="w-3.5 h-3.5" />
-            Artifact Explorer
-          </span>
-          <span className="text-[11px] text-muted-foreground">{items.length} items</span>
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Package className="w-5 h-5 text-brand" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              Artifact Explorer
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
+                {items.length} items
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Synthesized products, generated code, and dynamic workspace outputs</p>
+          </div>
         </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative w-64">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search artifacts..."
+              className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* ── Artifact list and preview split ── */}
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 h-full border-r border-border/40">
 
         <div className="px-3 py-2 border-b border-border flex-shrink-0">
           <div className="relative">
@@ -412,6 +436,7 @@ export function ArtifactsView() {
           </div>
         </aside>
       )}
+      </div>
     </div>
   );
 }

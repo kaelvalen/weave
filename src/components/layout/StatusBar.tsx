@@ -1,133 +1,115 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { Fragment, type ReactNode } from 'react';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { useAppStore } from '@/stores/useAppStore';
 import { useChatStore } from '@/stores/useChatStore';
-import { refreshObservability } from '@/hooks/useRuntimeEvents';
-import type { ModelStats } from '@/types/runtime';
-import { effectiveTps, formatTps, formatTokensCompact } from '@/lib/modelStats';
-
-/** Mirrors `SystemStats` in src-tauri/src/commands/models.rs (RAM in bytes). */
-interface SystemStats {
-  cpu_usage: number;
-  ram_usage: number;
-  ram_total: number;
-}
+import { useSystemPulse } from '@/hooks/useSystemPulse';
+import { effectiveTps, formatTps } from '@/lib/modelStats';
 
 function formatGb(bytes: number): string {
   return (bytes / 1_073_741_824).toFixed(1);
 }
 
+/**
+ * Live runtime strip. Each segment is a small "label + value" pair;
+ * the planner segment is the heartbeat — it lights up in the brand
+ * accent and pulses while the runtime is executing.
+ */
 export function StatusBar() {
   const runningSteps = useRuntimeStore(
     (s) => s.executions.filter((e) => e.status === 'running').length
   );
   const appVersion = useAppStore((s) => s.appVersion);
   const selectedModel = useChatStore((s) => s.selectedModel);
-  const selectedProvider = useChatStore((s) => s.selectedProvider);
-  const [sysStats, setSysStats] = useState<SystemStats | null>(null);
-  const [modelStats, setModelStats] = useState<ModelStats | null>(null);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const { sysStats, modelStats } = useSystemPulse();
 
-  // Slow global poll so the stats strip stays fresh on any view.
-  useEffect(() => {
-    const tick = () => {
-      refreshObservability();
-      // On failure keep the previous values; this strip is best-effort.
-      invoke<SystemStats>('get_system_stats')
-        .then(setSysStats)
-        .catch(() => {});
-      invoke<ModelStats>('runtime_get_model_stats')
-        .then(setModelStats)
-        .catch(() => {});
-    };
-    tick();
-    const interval = setInterval(tick, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
+  const busy = isStreaming || runningSteps > 0;
   const tps = effectiveTps(modelStats);
+  const observability = useRuntimeStore((s) => s.observability);
 
   // Only segments backed by real data get pushed — anything unknown stays hidden.
   const segments: ReactNode[] = [];
 
+  // Planner heartbeat — the ambient "alive" signal. Idle means the runtime
+  // is watching the workspace, not that it is off.
+  segments.push(
+    <span className="flex items-center gap-1.5">
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${
+          busy ? 'bg-brand status-pulse' : 'bg-muted-foreground/50'
+        }`}
+      />
+      <span className="text-muted-foreground">Planner</span>
+      {busy ? (
+        <span className="text-brand font-medium">
+          thinking{runningSteps > 0 ? ` · ${runningSteps}` : ''}
+        </span>
+      ) : (
+        <span className="text-foreground">watching</span>
+      )}
+    </span>
+  );
+
   if (selectedModel) {
     segments.push(
-      <span className="flex items-center gap-1.5 text-foreground">
-        <span className="font-semibold">{selectedModel}</span>
-        {selectedProvider && <span className="text-muted-foreground">· {selectedProvider}</span>}
-      </span>
-    );
-  }
-
-  if (modelStats) {
-    segments.push(
-      <span
-        className="flex items-center gap-1.5"
-        title={modelStats.ollama_running ? 'Ollama is running' : 'Ollama is not running'}
-      >
+      <span className="flex items-center gap-1.5">
         <span
           className={`w-1.5 h-1.5 rounded-full ${
-            modelStats.ollama_running ? 'bg-green-500' : 'bg-red-500'
+            modelStats?.ollama_running ? 'bg-brand' : 'bg-muted-foreground/40'
           }`}
+          title={modelStats?.ollama_running ? 'Runtime connected' : 'Runtime not detected'}
         />
-        <span>Ollama</span>
+        <span className="text-foreground max-w-[160px] truncate">{selectedModel}</span>
+        {tps != null && (
+          <span className="text-muted-foreground" title="Tokens/sec">
+            {formatTps(tps)} tok/s
+          </span>
+        )}
       </span>
     );
-    segments.push(
-      <span title="Tokens generated since app start">
-        {formatTokensCompact(modelStats.total_tokens)} tok
-      </span>
-    );
-    if (tps != null) {
-      segments.push(
-        <span
-          title={
-            modelStats.avg_tps != null
-              ? 'Average tokens/sec since app start'
-              : 'Tokens/sec of the last response'
-          }
-        >
-          {formatTps(tps)} tps
-        </span>
-      );
-    }
   }
 
   if (sysStats) {
     segments.push(
-      <span title={`RAM ${formatGb(sysStats.ram_usage)} / ${formatGb(sysStats.ram_total)} GB`}>
-        CPU {Math.round(sysStats.cpu_usage)}% · RAM {formatGb(sysStats.ram_usage)}GB
+      <span title="CPU / RAM usage">
+        <span className="text-muted-foreground">CPU</span>{' '}
+        <span className="text-foreground">{Math.round(sysStats.cpu_usage)}%</span>
+        <span className="text-muted-foreground"> · RAM</span>{' '}
+        <span className="text-foreground">
+          {formatGb(sysStats.ram_usage)}/{formatGb(sysStats.ram_total)} GB
+        </span>
       </span>
     );
   }
 
-  segments.push(
-    <span>
-      Planner: {runningSteps > 0 ? <span className="text-orange-500">busy</span> : 'idle'}
-    </span>
-  );
+  if (observability && observability.memory_reads > 0) {
+    const hitRate = Math.round((observability.memory_hits / observability.memory_reads) * 100);
+    segments.push(
+      <span title={`${observability.memory_hits} hits / ${observability.memory_reads} reads`}>
+        <span className="text-muted-foreground">Memory</span>{' '}
+        <span className="text-foreground">{hitRate}% hits</span>
+      </span>
+    );
+  }
 
   if (runningSteps > 0) {
     segments.push(
-      <span className="flex items-center gap-1.5 text-orange-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-        <span>{runningSteps} running</span>
+      <span>
+        <span className="text-muted-foreground">Queue</span>{' '}
+        <span className="text-foreground">{runningSteps}</span>
       </span>
     );
   }
 
   return (
-    <footer className="h-6 flex items-center justify-between px-3 bg-background border-t border-border font-mono text-[11px] text-muted-foreground select-none flex-shrink-0 z-40">
-      <div className="flex items-center gap-3">
+    <footer className="h-7 flex items-center justify-between px-4 bg-background font-mono text-[11px] text-muted-foreground select-none flex-shrink-0 z-40">
+      <div className="flex items-center gap-4 min-w-0 overflow-hidden">
         {segments.map((node, i) => (
-          <Fragment key={i}>
-            {i > 0 && <span className="text-border">•</span>}
-            {node}
-          </Fragment>
+          <Fragment key={i}>{node}</Fragment>
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <span>v{appVersion}</span>
       </div>
     </footer>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'katex/dist/katex.min.css';
 
 @tailwind base;
@@ -7,7 +7,7 @@
 
 @layer base {
   :root {
-    /* Light mode — Minimalist Vercel/Linear style */
+    /* Light mode — tonal steps strong enough to read on white */
     --background: 0 0% 100%;
     --foreground: 0 0% 9%;
     --card: 0 0% 100%;
@@ -22,51 +22,62 @@
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 0 0% 92.5%;
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    /* Crisp thin borders */
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 0 0% 9%;
+    /* Rare, hairline-only borders */
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 222 90% 52%;
     --radius: 0.5rem;
 
-    --surface-1: 0 0% 98%;
-    --surface-2: 0 0% 96%;
+    --surface-1: 0 0% 96%;
+    --surface-2: 0 0% 92.5%;
+    --surface-3: 0 0% 87%;
+
+    /* Single accent — used only for active / running / success / focus */
+    --brand: 222 90% 52%;
+    --brand-foreground: 0 0% 100%;
   }
 
   .dark {
-    /* Dark mode — Deep monochrome */
-    --background: 0 0% 4%;
+    /* Dark mode — layered surfaces instead of borders */
+    --background: 0 0% 6.7%; /* #111111 */
     --foreground: 0 0% 93%;
-    --card: 0 0% 4%;
+    --card: 0 0% 8.2%; /* #151515 */
     --card-foreground: 0 0% 93%;
-    --popover: 0 0% 6%;
+    --popover: 0 0% 9.8%; /* #191919 */
     --popover-foreground: 0 0% 93%;
 
     /* Primary is almost white */
     --primary: 0 0% 93%;
-    --primary-foreground: 0 0% 4%;
+    --primary-foreground: 0 0% 6.7%;
 
-    --secondary: 0 0% 11%;
+    --secondary: 0 0% 9.8%;
     --secondary-foreground: 0 0% 93%;
-    --muted: 0 0% 11%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 11%;
+    --muted: 0 0% 9.8%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 0% 12.5%;
     --accent-foreground: 0 0% 93%;
-    --destructive: 0 62% 30%;
+    --destructive: 0 62% 45%;
     --destructive-foreground: 0 0% 93%;
 
-    /* Subtle dark borders */
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
-    --ring: 0 0% 93%;
+    /* Rare, hairline-only borders */
+    --border: 0 0% 13%;
+    --input: 0 0% 13%;
+    --ring: 222 100% 68%;
 
-    --surface-1: 0 0% 8%;
-    --surface-2: 0 0% 11%;
+    /* Tonal surface scale: surface → hover → selected */
+    --surface-1: 0 0% 8.2%; /* #151515 */
+    --surface-2: 0 0% 9.8%; /* #191919 */
+    --surface-3: 0 0% 12.5%; /* #202020 */
+
+    /* Single accent — used only for active / running / success / focus */
+    --brand: 222 100% 68%; /* #5B8CFF */
+    --brand-foreground: 0 0% 100%;
   }
 
   * {
@@ -175,8 +186,83 @@
 
   /* ─── Selection ─── */
   ::selection {
-    background: hsl(var(--foreground));
-    color: hsl(var(--background));
+    background: hsl(var(--brand) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  /* ─── Selective elevation (shadows stay off by default; these opt back in) ─── */
+  .elevate {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.05),
+      0 8px 30px -6px rgb(0 0 0 / 0.1) !important;
+  }
+  .dark .elevate {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 10px 34px -6px rgb(0 0 0 / 0.55) !important;
+  }
+
+  /* Composer — the one floating object on screen; focus makes it breathe */
+  .composer {
+    transition:
+      box-shadow 0.25s ease,
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+  .composer:focus-within {
+    box-shadow:
+      0 0 0 1px hsl(var(--brand) / 0.45),
+      0 12px 44px -10px hsl(var(--brand) / 0.3) !important;
+  }
+
+  /* Hover lift for suggestion / artifact cards */
+  .lift {
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      background-color 0.18s ease;
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.05),
+      0 10px 26px -8px rgb(0 0 0 / 0.12) !important;
+  }
+  .dark .lift:hover {
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.4),
+      0 12px 30px -8px rgb(0 0 0 / 0.55) !important;
+  }
+
+  /* Ambient glow — a slow-breathing brand halo behind the empty-state hero */
+  .ambient-glow {
+    background: radial-gradient(
+      closest-side,
+      hsl(var(--brand) / 0.09),
+      hsl(var(--brand) / 0.03) 55%,
+      transparent 75%
+    );
+    animation: glowBreath 7s ease-in-out infinite;
+  }
+  @keyframes glowBreath {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.06);
+    }
+  }
+
+  /* Barely-there brand atmosphere at the top of the app shell */
+  .app-shell {
+    background-image: radial-gradient(
+      1100px 520px at 72% -12%,
+      hsl(var(--brand) / 0.045),
+      transparent 70%
+    );
   }
 }
 
@@ -367,6 +453,59 @@
     }
     50% {
       opacity: 0.45;
+    }
+  }
+
+  /* Ambient status dot — opacity/scale pulse (no box-shadow; shadows are disabled globally) */
+  .status-pulse {
+    animation: statusPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes statusPulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.75);
+    }
+  }
+
+  /* Completion check — single decisive pop, then rest */
+  .check-pop {
+    animation: checkPop 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  @keyframes checkPop {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Indeterminate goal progress — a quiet scan while the planner runs */
+  .goal-progress {
+    position: relative;
+    overflow: hidden;
+  }
+  .goal-progress::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: hsl(var(--brand) / 0.9);
+    animation: goalScan 1.4s ease-in-out infinite;
+  }
+  @keyframes goalScan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
     }
   }
 

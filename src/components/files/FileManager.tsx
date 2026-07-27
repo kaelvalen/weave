@@ -429,9 +429,9 @@ export function FileManager() {
   };
 
   return (
-    <div className="flex h-full w-full bg-transparent pt-16 select-none">
+    <div className="flex h-full w-full bg-background overflow-hidden select-none">
       {/* ── IDE Activity Bar ── */}
-      <div className="w-12 border-r border-border/80 bg-card/80 backdrop-blur-md flex flex-col items-center py-3 gap-3 shrink-0 z-10">
+      <div className="w-12 border-r border-border/80 bg-card flex flex-col items-center py-3 gap-3 shrink-0 z-10">
         <button
           type="button"
           onClick={() => setSidebarTab('explorer')}
@@ -471,7 +471,7 @@ export function FileManager() {
       </div>
 
       {/* ── Column 1: Active Sidebar Tab Content ── */}
-      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card/50 backdrop-blur-md">
+      <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card">
         {sidebarTab === 'explorer' && (
           <div className="flex flex-col h-full">
             <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">
@@ -559,7 +559,7 @@ export function FileManager() {
       {/* ── Main Area (Columns 2 & 3) ── */}
       <div className="flex-1 flex h-full min-w-0">
         {/* ── Column 2: File Editor / Code View ── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-background/90 backdrop-blur-md relative">
+        <div className="flex-1 flex flex-col min-w-0 bg-background relative">
           {/* Tabbed Editor Header Bar */}
           {openedTabs.length > 0 && (
             <div className="h-9 border-b border-border/60 bg-muted/30 flex items-center overflow-x-auto shrink-0 px-1 gap-1">
@@ -698,7 +698,7 @@ export function FileManager() {
 
         {/* ── Column 3: AI Agent Right Sidebar (Docked Antigravity style) ── */}
         {isChatExpanded && (
-          <div className="w-[360px] sm:w-[400px] lg:w-[440px] border-l border-border/80 bg-card/95 backdrop-blur-xl flex flex-col h-full shrink-0 shadow-2xl z-10 animate-in slide-in-from-right duration-200">
+          <div className="w-[360px] sm:w-[400px] lg:w-[440px] border-l border-border/80 bg-card flex flex-col h-full shrink-0 z-10 animate-in slide-in-from-right duration-200">
             <ChatPanel
               isDocked={true}
               isAgentVariant={true}

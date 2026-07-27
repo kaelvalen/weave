@@ -23,7 +23,7 @@ export function ExecutionSection({
   const isLive = live || steps.some((s) => s.status === 'running');
 
   return (
-    <div className="my-2 rounded-md border border-border bg-surface-1 px-3 py-2">
+    <div className="my-2 rounded-lg bg-surface-1 px-3 py-2">
       {plan && (
         <div className={steps.length > 0 ? 'mb-2' : ''}>
           <SectionLabel>Plan</SectionLabel>
@@ -32,7 +32,7 @@ export function ExecutionSection({
               <span
                 key={`${step.capability}-${i}`}
                 title={step.plugin_id ?? step.capability}
-                className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
               >
                 {step.capability}
               </span>

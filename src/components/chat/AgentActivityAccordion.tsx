@@ -58,13 +58,13 @@ export function AgentActivityAccordion({
           return (
             <div key={i} className="flex items-center gap-2">
               {isCallPending ? (
-                <Loader2 className="w-3.5 h-3.5 text-orange-500 animate-spin shrink-0" />
+                <Loader2 className="w-3.5 h-3.5 text-brand animate-spin shrink-0" />
               ) : isCallError ? (
                 <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
               ) : (
-                <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                <Check className="w-3.5 h-3.5 text-brand shrink-0 check-pop" />
               )}
-              <span className={isCallError ? "text-destructive font-medium" : (isCallPending ? "text-orange-500 font-medium" : "text-foreground font-medium")}>
+              <span className={isCallError ? "text-destructive font-medium" : (isCallPending ? "text-brand font-medium" : "text-foreground font-medium")}>
                 {call.capability.split('.').pop()?.replace(/_/g, ' ')}
               </span>
               <span className="text-muted-foreground opacity-60 ml-1">

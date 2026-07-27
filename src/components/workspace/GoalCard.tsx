@@ -1,21 +1,39 @@
 import { SectionLabel } from './SectionLabel';
 
 /**
- * Flat surface card framing a user message as an executable GOAL.
+ * Goal object framing a user message as an executable GOAL.
  * Presentational wrapper — hover actions and body are injected by the caller
  * so copy/edit behavior stays in ChatMessage.
+ *
+ * WDL: goals are primary objects. State is communicated by motion
+ * (pulse while running, a single check-pop on completion), never by chrome.
  */
 import type { GoalStats } from '@/stores/useRuntimeStore';
-import { Loader2, Check, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
-function StatusIcon({ status }: { status: GoalStats['status'] }) {
+function StatusChip({ status }: { status: GoalStats['status'] }) {
   switch (status) {
     case 'running':
-      return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
+      return (
+        <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-surface-2 text-[10px] uppercase font-mono tracking-wider font-medium text-brand">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand status-pulse" />
+          Running
+        </div>
+      );
     case 'completed':
-      return <Check className="w-3.5 h-3.5 text-emerald-500" />;
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-[10px] uppercase font-mono tracking-wider font-medium text-brand">
+          <Check className="w-3 h-3 check-pop" />
+          Done
+        </div>
+      );
     case 'failed':
-      return <X className="w-3.5 h-3.5 text-destructive" />;
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-[10px] uppercase font-mono tracking-wider font-medium text-destructive">
+          <X className="w-3 h-3" />
+          Failed
+        </div>
+      );
     default:
       return null;
   }
@@ -30,44 +48,53 @@ export function GoalCard({
   stats?: GoalStats;
   children: React.ReactNode;
 }) {
+  const running = stats?.status === 'running';
+
   return (
-    <div className="rounded-md border border-border bg-surface-1 px-4 py-3">
+    <div className="relative overflow-hidden rounded-xl bg-surface-1 px-4 py-3">
+      {/* Goal spine — the primary object carries the accent, nothing else does */}
+      <span
+        className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-brand/70 via-brand/25 to-transparent"
+        aria-hidden
+      />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SectionLabel>Goal</SectionLabel>
-          {stats && stats.status !== 'unknown' && (
-            <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-muted/50 text-[10px] uppercase font-mono tracking-wider font-bold text-muted-foreground border border-border/50">
-              <StatusIcon status={stats.status} />
-              {stats.status}
-            </div>
-          )}
+          {stats && stats.status !== 'unknown' && <StatusChip status={stats.status} />}
         </div>
         <div className="flex items-center gap-2">{headerRight}</div>
       </div>
+
       <div className="mt-2 text-foreground">{children}</div>
+
+      {/* Live progress — a quiet scan while the planner works */}
+      {running && (
+        <div className="mt-3 h-0.5 w-full rounded-full bg-surface-3 goal-progress" aria-hidden />
+      )}
+
       {stats && stats.status !== 'unknown' && (
-        <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-6 overflow-x-auto text-[10px] font-mono text-muted-foreground uppercase tracking-wider font-bold">
+        <div className="mt-3 flex items-center gap-5 overflow-x-auto text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
           {stats.durationMs != null && (
-            <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
               <span>Duration</span>
               <span className="text-foreground">{stats.durationMs}ms</span>
             </div>
           )}
-          <div className="flex flex-col gap-1">
-            <span>Planner</span>
+          <div className="flex items-center gap-1.5">
+            <span>Plan</span>
             <span className="text-foreground">{stats.planCount} steps</span>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
             <span>Execution</span>
             <span className="text-foreground">{stats.stepCount} tools</span>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
             <span>Artifacts</span>
-            <span className="text-foreground">{stats.artifactCount} items</span>
+            <span className="text-foreground">{stats.artifactCount}</span>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
             <span>Memory</span>
-            <span className="text-foreground">{stats.memoryCount} updates</span>
+            <span className="text-foreground">{stats.memoryCount}</span>
           </div>
         </div>
       )}

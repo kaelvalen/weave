@@ -29,18 +29,18 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
   }, [call.status, call.capability]);
 
   return (
-    <div className="border border-border/60 rounded bg-background/80 text-xs font-mono">
+    <div className="rounded-lg bg-surface-1 text-xs font-mono">
       <div
-        className="flex items-center justify-between px-2.5 py-1 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="flex items-center justify-between px-2.5 py-1.5 cursor-pointer hover:bg-surface-2 rounded-lg transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-1.5 truncate">
           {isPending ? (
-            <Loader2 className="w-3 h-3 text-foreground animate-spin shrink-0" />
+            <Loader2 className="w-3 h-3 text-brand animate-spin shrink-0" />
           ) : isError ? (
             <AlertCircle className="w-3 h-3 text-destructive shrink-0" />
           ) : (
-            <Check className="w-3 h-3 text-muted-foreground shrink-0" />
+            <Check className="w-3 h-3 text-brand shrink-0 check-pop" />
           )}
           <span className="text-foreground font-medium truncate">
             {call.capability}
@@ -53,11 +53,11 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
       </div>
 
       {expanded && (
-        <div className="p-2 border-t border-border/40 bg-muted/20 space-y-2">
+        <div className="p-2 space-y-2">
           {call.params && Object.keys(call.params).length > 0 && (
             <div>
               <span className="text-[10px] text-muted-foreground uppercase font-sans font-bold">Params</span>
-              <pre className="mt-0.5 p-1.5 bg-background rounded border text-[11px] font-mono overflow-x-auto text-foreground whitespace-pre-wrap max-h-40">
+              <pre className="mt-0.5 p-1.5 bg-surface-2 rounded text-[11px] font-mono overflow-x-auto text-foreground whitespace-pre-wrap max-h-40">
                 {JSON.stringify(call.params, null, 2)}
               </pre>
             </div>
@@ -89,7 +89,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
                   Preview Artifact ↗
                 </button>
               </div>
-              <pre className="mt-0.5 p-1.5 bg-background rounded border text-[11px] font-mono overflow-x-auto text-foreground whitespace-pre-wrap max-h-48">
+              <pre className="mt-0.5 p-1.5 bg-surface-2 rounded text-[11px] font-mono overflow-x-auto text-foreground whitespace-pre-wrap max-h-48">
                 {typeof call.result === 'string'
                   ? call.result
                   : JSON.stringify(call.result, null, 2)}

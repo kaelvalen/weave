@@ -1,3 +1,4 @@
+use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
 use std::path::{Path, PathBuf};
 
@@ -14,6 +15,9 @@ pub fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
         Ok(home.join(&path[2..]))
     } else if Path::new(path).is_absolute() {
         Ok(PathBuf::from(path))
+    } else if path.starts_with("artifacts/") || path.starts_with("artifacts\\") {
+        let app_dir = AppConfig::app_data_dir()?;
+        Ok(app_dir.join(path))
     } else {
         Ok(std::env::current_dir()
             .map_err(|e| WeaveError::Io(e.to_string()))?

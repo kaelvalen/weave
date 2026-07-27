@@ -1,16 +1,18 @@
 import React, { useState, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import { useChatStore } from '@/stores/useChatStore';
+import { usePluginStore } from '@/stores/usePluginStore';
+import { extractError } from '@/lib/errors';
 import type { ChatMessage as ChatMessageType, PluginCall } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, Brain, Edit2, RefreshCw, Loader2 } from 'lucide-react';
+import { Copy, Check, Brain, Edit2, RefreshCw, Loader2, FileCode } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
 import { AgentActivityAccordion } from './AgentActivityAccordion';
 import { ArtifactCard } from './ArtifactCard';
-import { ActiveArtifact } from '@/stores/useAppStore';
+import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronRight } from 'lucide-react';
 import { GoalCard } from '@/components/workspace/GoalCard';
 import { GoalTrace } from '@/components/execution/ExecutionPanel';
 import { usePlanForGoal, useStepsForGoal, useGoalStats } from '@/components/workspace/runtimeSelectors';
@@ -61,23 +63,59 @@ const CodeBlock = React.memo(function CodeBlock({ inline, className, children, .
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const handleSaveAsArtifact = async () => {
+    const codeContent = String(children).replace(/\n$/, '');
+    const ext = lang === 'python' ? 'py' : lang === 'rust' ? 'rs' : lang === 'typescript' || lang === 'tsx' ? 'ts' : lang || 'txt';
+    const conversationId = useChatStore.getState().conversationId || 'default';
+    const filename = `code_artifact_${Date.now().toString().slice(-4)}.${ext}`;
+    const artifactPath = `artifacts/${conversationId}/${filename}`;
+    const pluginId = usePluginStore.getState().getPluginIdForCapability('coder.write_file') || 'com.weave.builtin.coder';
+    try {
+      await invoke('plugin_execute', {
+        pluginId,
+        capability: 'coder.write_file',
+        params: { path: artifactPath, content: codeContent },
+      });
+      toast.success(`Saved artifact to session storage: ${filename}`);
+      useAppStore.getState().openArtifact({
+        type: 'file',
+        title: filename,
+        content: codeContent,
+        path: artifactPath,
+      });
+    } catch (err) {
+      toast.error(`Failed to save artifact: ${extractError(err)}`);
+    }
+  };
+
   if (!inline && match) {
     return (
-      <div className="relative group rounded-md overflow-hidden my-4 border border-border">
-        <div className="flex items-center justify-between px-4 py-1.5 bg-muted/50 border-b border-border">
-          <span className="text-xs font-mono text-muted-foreground">{lang}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-foreground transition-opacity opacity-0 group-hover:opacity-100"
-            onClick={handleCopy}
-          >
-            {isCopied ? (
-              <Check className="w-3.5 h-3.5 text-green-500" />
-            ) : (
-              <Copy className="w-3.5 h-3.5" />
-            )}
-          </Button>
+      <div className="relative group rounded-xl overflow-hidden my-4 border border-border/40 bg-surface-1">
+        <div className="flex items-center justify-between px-4 py-2 bg-surface-2 border-b border-border/40 font-mono text-xs">
+          <span className="text-muted-foreground font-semibold">{lang}</span>
+          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={handleSaveAsArtifact}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-surface-3 text-muted-foreground hover:text-brand hover:border-brand/40 border border-border/40 transition-colors"
+              title="Save as Artifact in Workspace"
+            >
+              <FileCode className="w-3.5 h-3.5 text-brand" />
+              Save Artifact
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              onClick={handleCopy}
+            >
+              {isCopied ? (
+                <Check className="w-3.5 h-3.5 text-green-500" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          </div>
         </div>
         <SyntaxHighlighter
           {...props}
@@ -494,9 +532,9 @@ export const ChatMessage = React.memo(function ChatMessage({
             {thinkingText && (
               <details
                 open
-                className="mb-3 group/think border border-border/80 bg-muted/20 rounded-lg overflow-hidden text-xs"
+                className="mb-3 group/think bg-surface-1 rounded-lg overflow-hidden text-xs"
               >
-                <summary className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none font-mono text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                <summary className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none font-mono text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors">
                   <Brain className="w-3.5 h-3.5 text-foreground shrink-0" />
                   <span>Thought Process</span>
                   <span className="text-[10px] text-muted-foreground/70 font-mono ml-auto group-open/think:hidden">
@@ -506,7 +544,7 @@ export const ChatMessage = React.memo(function ChatMessage({
                     [-] Hide
                   </span>
                 </summary>
-                <div className="p-3 bg-background/80 border-t border-border/60 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+                <div className="p-3 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
                   {thinkingText}
                 </div>
               </details>
@@ -515,46 +553,36 @@ export const ChatMessage = React.memo(function ChatMessage({
         );
       })()}
 
-      {/* Output section — the execution's de-emphasized text result */}
+      {/* Output section — main assistant response */}
       {(hasOutputContent || showsCompletedNotice) && (
-        <Collapsible defaultOpen={!hasRuntimeExecution} className="mt-2">
-          <div className="flex items-center gap-2 mb-1.5">
-            <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors group/summary">
-              <ChevronRight className="w-3.5 h-3.5 transition-transform group-data-[state=open]/summary:rotate-90" />
-              Assistant Summary
-            </CollapsibleTrigger>
-          </div>
-          <CollapsibleContent>
-            <div className="text-sm text-foreground leading-relaxed break-words w-full font-sans pl-2 border-l-2 border-border/50 ml-1">
-              {imagesBlock}
-              {showsExecutingPlaceholder ? (
-                <div className="flex items-center gap-1.5 py-1 font-mono text-xs text-muted-foreground">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Executing...</span>
-                  {showCursor && <span className="streaming-cursor" />}
+        <div className="mt-2 text-sm text-foreground leading-relaxed break-words w-full font-sans">
+          {imagesBlock}
+          {showsExecutingPlaceholder ? (
+            <div className="flex items-center gap-1.5 py-1 font-mono text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-brand" />
+              <span>Executing...</span>
+              {showCursor && <span className="streaming-cursor" />}
+            </div>
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
+              {showsCompletedNotice ? (
+                <div className="mt-1 py-2 px-3.5 bg-surface-2 border border-border/40 rounded-xl text-xs font-medium text-foreground flex items-center gap-2">
+                  <Check className="w-4 h-4 text-brand flex-shrink-0" />
+                  <span>Autonomous task execution completed successfully.</span>
                 </div>
               ) : (
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
-                  {showsCompletedNotice ? (
-                    <div className="mt-1 py-2 px-3.5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl text-xs font-medium text-primary flex items-center gap-2 animate-fade-in">
-                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>Autonomous task execution completed successfully.</span>
-                    </div>
-                  ) : (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{ code: CodeBlock }}
-                    >
-                      {cleanedMarkdown}
-                    </ReactMarkdown>
-                  )}
-                </div>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{ code: CodeBlock }}
+                >
+                  {cleanedMarkdown}
+                </ReactMarkdown>
               )}
-              {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          )}
+          {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
+        </div>
       )}
     </div>
   );

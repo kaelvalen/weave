@@ -23,6 +23,7 @@ interface ChatState {
   sendMessage: (content: string, images?: string[]) => Promise<void>;
   editAndResend: (messageId: string, newContent: string) => Promise<void>;
   regenerateResponse: (messageId: string) => Promise<void>;
+  stopStreaming: () => void;
   appendChunk: (chunk: string, messageId: string) => void;
   finalizeMessage: (messageId: string) => void;
   executeToolCall: (messageId: string, capName: string, isApproved: boolean) => Promise<void>;
@@ -369,7 +370,25 @@ export const useChatStore = create<ChatState>()(
             timestamp: Date.now(),
           });
         });
+      } finally {
+        const state = get();
+        const lastMsg = state.messages[state.messages.length - 1];
+        const hasPendingTools = lastMsg?.metadata?.plugin_calls?.some(
+          (c) => c.status === 'pending' || c.status === 'pending_approval'
+        );
+        if (!hasPendingTools) {
+          set((s) => {
+            s.isStreaming = false;
+          });
+        }
       }
+    },
+
+    stopStreaming: () => {
+      set((state) => {
+        state.isStreaming = false;
+      });
+      invoke('chat_abort_generation').catch(() => {});
     },
 
     editAndResend: async (messageId: string, newContent: string) => {
@@ -462,6 +481,17 @@ export const useChatStore = create<ChatState>()(
             timestamp: Date.now(),
           });
         });
+      } finally {
+        const state = get();
+        const lastMsg = state.messages[state.messages.length - 1];
+        const hasPendingTools = lastMsg?.metadata?.plugin_calls?.some(
+          (c) => c.status === 'pending' || c.status === 'pending_approval'
+        );
+        if (!hasPendingTools) {
+          set((s) => {
+            s.isStreaming = false;
+          });
+        }
       }
     },
 
@@ -546,6 +576,17 @@ export const useChatStore = create<ChatState>()(
             timestamp: Date.now(),
           });
         });
+      } finally {
+        const state = get();
+        const lastMsg = state.messages[state.messages.length - 1];
+        const hasPendingTools = lastMsg?.metadata?.plugin_calls?.some(
+          (c) => c.status === 'pending' || c.status === 'pending_approval'
+        );
+        if (!hasPendingTools) {
+          set((s) => {
+            s.isStreaming = false;
+          });
+        }
       }
     },
 
@@ -608,6 +649,7 @@ export const useChatStore = create<ChatState>()(
             title: store.conversationTitle,
             messages: store.messages,
           }).catch((err) => toast.error(extractError(err)));
+          localStorage.setItem('weave_active_session_id', store.conversationId);
         }
       };
 
@@ -1116,6 +1158,15 @@ export const useChatStore = create<ChatState>()(
         set((state) => {
           state.sessions = sessions;
         });
+
+        // Auto-restore last active session on page refresh/mount if no messages loaded yet
+        if (get().messages.length === 0 && sessions.length > 0) {
+          const savedId = localStorage.getItem('weave_active_session_id');
+          const targetSession = sessions.find((s) => s.id === savedId) || sessions[0];
+          if (targetSession) {
+            get().loadSession(targetSession.id);
+          }
+        }
       } catch (err) {
         toast.error(extractError(err));
       }
@@ -1135,6 +1186,7 @@ export const useChatStore = create<ChatState>()(
           state.messages = hydratedMessages;
           state.error = null;
         });
+        localStorage.setItem('weave_active_session_id', session.id);
         // Restore backend history to match session
         await invoke('chat_set_history', { history: hydratedMessages });
       } catch (err) {
@@ -1152,12 +1204,14 @@ export const useChatStore = create<ChatState>()(
       } catch (err) {
         toast.error(extractError(err));
       }
+      const newId = generateId();
       set((state) => {
-        state.conversationId = generateId();
+        state.conversationId = newId;
         state.conversationTitle = 'New Chat';
         state.messages = [];
         state.error = null;
       });
+      localStorage.setItem('weave_active_session_id', newId);
     },
 
     deleteSession: async (id: string) => {

@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { extractError } from '@/lib/errors';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useRuntimeStore } from '@/stores/useRuntimeStore';
+import { useChatStore } from '@/stores/useChatStore';
 import type { LocalModelDetails, ModelStats } from '@/types/runtime';
 import {
   effectiveTps,
@@ -25,6 +27,7 @@ interface LocalModelInfo {
 }
 
 interface SystemStats {
+  cpu_usage: number;
   ram_usage: number;
   ram_total: number;
 }
@@ -42,6 +45,47 @@ interface LocalServerStatus {
   url: string;
   pid: number | null;
   message: string;
+}
+
+/** One row of the process monitor — dot, process name, live detail, value. */
+function ProcessRow({
+  live,
+  name,
+  detail,
+  value,
+}: {
+  live: boolean;
+  name: string;
+  detail: string;
+  value?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-2 transition-colors">
+      <span
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+          live ? 'bg-brand status-pulse' : 'bg-muted-foreground/40'
+        }`}
+      />
+      <span className="w-24 flex-shrink-0 text-[13px] font-medium text-foreground">{name}</span>
+      <span className="flex-1 min-w-0 font-mono text-[11px] text-muted-foreground truncate">
+        {detail}
+      </span>
+      {value && (
+        <span className="font-mono text-[11px] text-foreground flex-shrink-0">{value}</span>
+      )}
+    </div>
+  );
+}
+
+function Meter({ percent }: { percent: number }) {
+  return (
+    <div className="h-1 w-full bg-surface-3 rounded-full overflow-hidden">
+      <div
+        className="h-full bg-brand/80 transition-all duration-700"
+        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+      />
+    </div>
+  );
 }
 
 export function RuntimeView() {
@@ -63,6 +107,14 @@ export function RuntimeView() {
       return [];
     }
   });
+
+  const executions = useRuntimeStore((s) => s.executions);
+  const observability = useRuntimeStore((s) => s.observability);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+
+  const runningSteps = executions.filter((e) => e.status === 'running').length;
+  const plannerBusy = isStreaming || runningSteps > 0;
+  const tps = effectiveTps(modelStats);
 
   const toggleFavorite = (name: string) => {
     setFavorites((prev) => {
@@ -240,117 +292,167 @@ export function RuntimeView() {
     return local ? (modelDetails[local.name]?.context_length ?? null) : null;
   };
 
+  // ── Process monitor derivations (real data only) ──
+  const activeModelName =
+    modelStats?.active_model ?? modelStats?.loaded_models[0]?.name ?? null;
+  const activeLoaded = activeModelName
+    ? modelStats?.loaded_models.find((lm) => lm.name === activeModelName)
+    : undefined;
+  const inferenceDetail = !modelStats
+    ? 'probing…'
+    : !modelStats.ollama_running
+      ? 'offline — server not running'
+      : activeModelName
+        ? activeModelName +
+          (activeLoaded?.vram_bytes != null ? ` · VRAM ${formatVram(activeLoaded.vram_bytes)}` : '') +
+          (loadedContextLength(activeModelName) != null
+            ? ` · Ctx ${formatContextLength(loadedContextLength(activeModelName)!)}`
+            : '')
+        : 'no model loaded';
+
+  const toolFailures = observability
+    ? Object.values(observability.tool_metrics).reduce((acc, m) => acc + m.failure_count, 0)
+    : 0;
+  const memHitRate =
+    observability && observability.memory_reads > 0
+      ? Math.round((observability.memory_hits / observability.memory_reads) * 100)
+      : null;
+
   return (
-    <div className="flex flex-col h-full w-full bg-background pt-16">
-      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
-        {/* Header */}
-        <div className="flex items-center justify-between py-8 flex-shrink-0">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <Cpu className="w-6 h-6 text-primary" />
-              Runtime
-            </h2>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
-              models & execution resources
-            </p>
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Activity className="w-5 h-5 text-brand" />
           </div>
-          <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              Runtime Process Monitor
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
+                {models.length} local models
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Live process telemetry, inference performance & resource allocation</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative w-64">
             <Input
               placeholder="Paste HuggingFace .gguf URL..."
               value={downloadUrl}
               onChange={(e) => setDownloadUrl(e.target.value)}
-              className="w-72"
+              className="h-8 bg-surface-2 border-border/40 text-xs focus-visible:ring-1 focus-visible:ring-brand"
             />
-            <Button className="gap-2" onClick={handleDownload} disabled={!!activeDownload}>
-              <Download className="w-4 h-4" /> Download
-            </Button>
           </div>
+          <Button
+            size="sm"
+            className="gap-1.5 h-8 text-xs bg-brand text-brand-foreground hover:bg-brand/90"
+            onClick={handleDownload}
+            disabled={!!activeDownload}
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download GGUF
+          </Button>
         </div>
+      </header>
 
-        {/* Loaded runtime — fed by the same 10s runtime_get_model_stats poll below */}
-        <div className="border border-border rounded-lg bg-surface-1 mb-6 flex-shrink-0 font-mono">
-          <div className="border-b border-border px-4 py-2 flex items-center justify-between gap-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Loaded runtime
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 max-w-6xl mx-auto w-full space-y-4">
+
+        {/* ── Process Monitor — the Activity Monitor heart of the view ── */}
+        <div className="rounded-xl bg-surface-1 px-2 py-2 flex-shrink-0">
+          <div className="flex items-center justify-between px-3 pt-1 pb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+              Processes
             </span>
-            {modelStats && (
-              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    modelStats.ollama_running ? 'bg-green-500' : 'bg-red-500'
-                  }`}
-                />
-                {modelStats.ollama_running ? 'Ollama running' : 'Ollama not running'}
-              </span>
-            )}
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  plannerBusy ? 'bg-brand status-pulse' : 'bg-muted-foreground/40'
+                }`}
+              />
+              {plannerBusy ? 'active' : 'ambient'}
+            </span>
           </div>
-          <div className="px-4 py-3 text-xs">
-            {!modelStats ? (
-              <p className="text-muted-foreground">Loading runtime stats…</p>
-            ) : !modelStats.ollama_running ? (
-              <p className="text-muted-foreground">
-                Ollama is not running — start the server below to load models.
-              </p>
-            ) : modelStats.loaded_models.length === 0 ? (
-              <p className="text-muted-foreground">No model loaded — start one below.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {modelStats.loaded_models.map((lm) => {
-                  const ctx = loadedContextLength(lm.name);
-                  const tps = isActiveModel(modelStats, lm.name)
-                    ? effectiveTps(modelStats)
-                    : null;
-                  return (
-                    <div key={lm.name} className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                      <span className="text-foreground font-semibold">{lm.name}</span>
-                      {lm.vram_bytes != null && (
-                        <span className="text-muted-foreground">
-                          VRAM {formatVram(lm.vram_bytes)}
-                        </span>
-                      )}
-                      {ctx != null && (
-                        <span className="text-muted-foreground">
-                          Ctx {formatContextLength(ctx)}
-                        </span>
-                      )}
-                      {tps != null && (
-                        <span className="text-green-500">{formatTps(tps)} tps</span>
-                      )}
-                      <span className="text-muted-foreground">
-                        {formatTokensCompact(modelStats.total_tokens)} tok this session
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ProcessRow
+            live={plannerBusy}
+            name="Planner"
+            detail={
+              plannerBusy
+                ? `executing · ${runningSteps || 1} step${(runningSteps || 1) === 1 ? '' : 's'}`
+                : 'watching workspace'
+            }
+            value={observability ? `${observability.total_planner_runs} runs` : undefined}
+          />
+          <ProcessRow
+            live={!!modelStats?.ollama_running && !!activeModelName}
+            name="Inference"
+            detail={inferenceDetail}
+            value={
+              tps != null
+                ? `${formatTps(tps)} tok/s`
+                : modelStats
+                  ? `${formatTokensCompact(modelStats.total_tokens)} tok`
+                  : undefined
+            }
+          />
+          <ProcessRow
+            live={!!observability && observability.total_tool_calls > 0}
+            name="Tools"
+            detail={
+              observability
+                ? `${observability.total_tool_calls} calls this session`
+                : 'no activity yet'
+            }
+            value={toolFailures > 0 ? `${toolFailures} failed` : 'ok'}
+          />
+          <ProcessRow
+            live={memHitRate != null}
+            name="Memory"
+            detail={
+              observability && observability.memory_reads > 0
+                ? `${observability.memory_hits}/${observability.memory_reads} reads served`
+                : 'no reads yet'
+            }
+            value={memHitRate != null ? `${memHitRate}% hits` : undefined}
+          />
+          <ProcessRow
+            live={!!serverStatus?.running}
+            name="Server"
+            detail={
+              serverStatus?.running
+                ? `${serverStatus.url}${serverStatus.pid ? ` · pid ${serverStatus.pid}` : ''}`
+                : serverStatus?.message || 'stopped'
+            }
+            value={serverStatus?.running ? 'listening' : 'stopped'}
+          />
         </div>
 
         {/* Body */}
-        <div className="flex-1 grid grid-cols-3 gap-6 pb-32 min-h-0">
-          {/* Main List */}
-          <div className="col-span-2 border rounded-xl bg-card overflow-hidden flex flex-col">
-            <div className="border-b px-6 py-3 bg-muted/20 flex justify-between items-center gap-4">
+        <div className="grid grid-cols-3 gap-4 min-h-0">
+          {/* Installed Models */}
+          <div className="col-span-2 rounded-xl bg-surface-1 overflow-hidden flex flex-col max-h-[52vh]">
+            <div className="px-4 py-3 flex justify-between items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm">Installed Models</h3>
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-mono">
-                  {models.length} Models
+                <h3 className="font-display font-semibold text-sm">Installed Models</h3>
+                <span className="text-[10px] bg-surface-2 text-muted-foreground px-2 py-0.5 rounded-full font-mono">
+                  {models.length}
                 </span>
               </div>
-              <div className="relative w-64">
+              <div className="relative w-56">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                 <Input
                   placeholder="Search installed models..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-8 text-xs font-mono"
+                  className="pl-8 h-8 text-xs font-mono bg-surface-2 border-transparent"
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
               {activeDownload && !activeDownload.done && (
-                <div className="border border-primary/30 bg-primary/5 rounded-lg p-4 flex flex-col gap-2 relative overflow-hidden">
+                <div className="bg-surface-2 rounded-lg p-4 flex flex-col gap-2 relative overflow-hidden mb-1">
                   <div className="flex justify-between items-center z-10">
                     <span className="font-medium text-sm">{activeDownload.filename}</span>
                     <span className="text-xs text-muted-foreground">
@@ -358,15 +460,15 @@ export function RuntimeView() {
                       {activeDownload.total ? formatBytes(activeDownload.total) : '?'}
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden z-10">
+                  <div className="h-1 w-full bg-surface-3 rounded-full overflow-hidden z-10">
                     <div
-                      className="h-full bg-primary transition-all duration-300"
+                      className="h-full bg-brand transition-all duration-300"
                       style={{
                         width: activeDownload.total
                           ? `${(activeDownload.downloaded / activeDownload.total) * 100}%`
                           : '5%',
                       }}
-                    ></div>
+                    />
                   </div>
                 </div>
               )}
@@ -393,68 +495,64 @@ export function RuntimeView() {
                     const isFav = favorites.includes(m.name);
                     const details = modelDetails[m.name];
                     const loaded = findLoadedModel(modelStats, m.name);
-                    const tps = isActiveModel(modelStats, m.name)
+                    const rowTps = isActiveModel(modelStats, m.name)
                       ? effectiveTps(modelStats)
                       : null;
                     return (
                       <div
                         key={m.name}
-                        className="flex justify-between items-center p-4 border rounded-lg hover:bg-muted/30 transition-colors"
+                        className="flex justify-between items-center px-3 py-2.5 rounded-lg hover:bg-surface-2 transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center">
-                            <Cpu className="w-5 h-5 text-muted-foreground" />
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-surface-2 flex items-center justify-center flex-shrink-0">
+                            <Cpu className="w-4 h-4 text-muted-foreground" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold text-sm">{m.name}</h4>
+                              <h4 className="font-medium text-[13px] truncate">{m.name}</h4>
                               {isFav && (
-                                <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-0.5">
-                                  <Star className="w-3 h-3 fill-amber-500" /> Favorite
-                                </span>
+                                <Star className="w-3 h-3 fill-amber-500 text-amber-500 flex-shrink-0" />
                               )}
                             </div>
-                            <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span className="text-foreground">Size</span> {formatBytes(m.size_bytes)}
-                              </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                              <span className="text-[11px] text-muted-foreground font-mono">
+                                {formatBytes(m.size_bytes)}
+                              </span>
                               {details?.quant && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                  <span className="text-foreground">Quant</span> {details.quant}
-                                </div>
+                                <span className="text-[11px] text-muted-foreground font-mono">
+                                  {details.quant}
+                                </span>
                               )}
                               {details?.context_length != null && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                  <span className="text-foreground">Ctx</span>{' '}
-                                  {formatContextLength(details.context_length)}
-                                </div>
+                                <span className="text-[11px] text-muted-foreground font-mono">
+                                  ctx {formatContextLength(details.context_length)}
+                                </span>
                               )}
                               {details?.parameter_count && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                  <span className="text-foreground">Params</span>{' '}
+                                <span className="text-[11px] text-muted-foreground font-mono">
                                   {details.parameter_count}
-                                </div>
+                                </span>
                               )}
                               {loaded && (
-                                <div className="flex items-center gap-1.5 text-xs font-mono">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                  <span className="text-green-500">Loaded</span>
+                                <span className="flex items-center gap-1.5 text-[11px] font-mono text-brand">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-brand" />
+                                  loaded
                                   {loaded.vram_bytes != null && (
                                     <span className="text-muted-foreground">
-                                      · VRAM {formatVram(loaded.vram_bytes)}
+                                      · {formatVram(loaded.vram_bytes)}
                                     </span>
                                   )}
-                                </div>
+                                </span>
                               )}
-                              {tps != null && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                  <span className="text-green-500">{formatTps(tps)} tps</span>
-                                </div>
+                              {rowTps != null && (
+                                <span className="text-[11px] font-mono text-brand">
+                                  {formatTps(rowTps)} tok/s
+                                </span>
                               )}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -467,7 +565,7 @@ export function RuntimeView() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            className="text-muted-foreground hover:text-destructive"
                             onClick={() => setModelToDelete(m.name)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -480,55 +578,55 @@ export function RuntimeView() {
             </div>
           </div>
 
-          {/* Performance Monitor Panel */}
-          <div className="border rounded-xl bg-card overflow-hidden flex flex-col">
-            <div className="border-b px-6 py-4 bg-muted/20 flex items-center justify-between">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" /> System Resources
-              </h3>
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
+          {/* Resources + Server control */}
+          <div className="rounded-xl bg-surface-1 overflow-hidden flex flex-col max-h-[52vh]">
+            <div className="px-4 py-3 flex items-center gap-2 flex-shrink-0">
+              <Activity className="w-4 h-4 text-muted-foreground" />
+              <h3 className="font-display font-semibold text-sm">Resources</h3>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="px-4 pb-4 space-y-5 overflow-y-auto">
               {stats && (
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground font-medium">RAM Usage</span>
-                    <span className="font-mono text-xs">
-                      {formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}
-                    </span>
+                <>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="text-muted-foreground">CPU</span>
+                      <span className="font-mono text-foreground">
+                        {Math.round(stats.cpu_usage)}%
+                      </span>
+                    </div>
+                    <Meter percent={stats.cpu_usage} />
                   </div>
-                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary/80 transition-all duration-500"
-                      style={{ width: `${(stats.ram_usage / stats.ram_total) * 100}%` }}
-                    ></div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="text-muted-foreground">RAM</span>
+                      <span className="font-mono text-foreground">
+                        {formatBytes(stats.ram_usage)} / {formatBytes(stats.ram_total)}
+                      </span>
+                    </div>
+                    <Meter percent={(stats.ram_usage / stats.ram_total) * 100} />
                   </div>
-                </div>
+                </>
               )}
 
-              <div className="pt-6 border-t">
-                <h4 className="text-sm font-semibold mb-4">Active Server</h4>
-                <div className="bg-muted/30 rounded-lg p-4 border flex flex-col items-center justify-center gap-3">
+              <div className="pt-1">
+                <h4 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70 mb-2">
+                  Local Server
+                </h4>
+                <div className="bg-surface-2 rounded-lg p-4 flex flex-col items-center justify-center gap-3">
                   {serverStatus?.running ? (
                     <>
-                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                        </span>
-                        <span className="text-xs font-mono">Server running</span>
+                      <div className="flex items-center gap-2 text-brand">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand status-pulse" />
+                        <span className="text-xs font-mono">listening</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground font-mono text-center break-all">
                         {serverStatus.url}
                         {serverStatus.pid ? ` (pid ${serverStatus.pid})` : ''}
                       </p>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="h-8 gap-2 mt-1"
+                        className="h-8 gap-2 mt-1 hover:bg-surface-3"
                         onClick={handleStopServer}
                         disabled={serverBusy}
                       >
@@ -542,9 +640,8 @@ export function RuntimeView() {
                         {serverStatus?.message || 'Server is stopped.'}
                       </p>
                       <Button
-                        variant="default"
                         size="sm"
-                        className="h-8 gap-2 mt-1"
+                        className="h-8 gap-2 mt-1 bg-brand text-brand-foreground hover:bg-brand/90"
                         onClick={handleStartServer}
                         disabled={serverBusy}
                       >

@@ -92,65 +92,66 @@ export function PluginMarket() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-transparent pt-16">
-      <div className="flex flex-col h-full max-w-6xl mx-auto w-full px-6">
-        {/* ── Compact Command Bar ── */}
-        <div className="flex items-center justify-between gap-4 py-4 flex-shrink-0 border-b border-border/60">
-          <div className="flex items-center gap-3 flex-1 max-w-xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search plugins by name, ID, or capability..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-card/80 border-border/80 h-9 text-xs focus-visible:ring-1"
-              />
-            </div>
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="text-xs text-muted-foreground hover:text-foreground px-2"
-              >
-                Clear
-              </button>
-            )}
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Puzzle className="w-5 h-5 text-brand" />
           </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setShowGithub((s) => !s)}
-              size="sm"
-              variant={showGithub ? 'default' : 'outline'}
-              className="gap-1.5 h-9 text-xs shadow-sm"
-              title="Browse and install plugins from GitHub"
-            >
-              <Github className="w-3.5 h-3.5" />
-              {showGithub ? 'Marketplace' : 'GitHub'}
-            </Button>
-            <Button
-              onClick={handleInstall}
-              disabled={installing || isLoading}
-              size="sm"
-              variant="outline"
-              className="gap-1.5 h-9 text-xs shadow-sm bg-card"
-              title="Install a plugin from a .wpk file"
-            >
-              <Download className={`w-3.5 h-3.5 ${installing ? 'animate-spin' : ''}`} />
-              + Install .wpk
-            </Button>
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshing || isLoading}
-              size="sm"
-              variant="ghost"
-              className="gap-1.5 h-9 text-xs hover:bg-muted"
-              title="Refresh plugins"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              Plugin Marketplace
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
+                {plugins.length} loaded
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Extend AI OS capabilities and integrations</p>
           </div>
         </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search plugins & capabilities..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 bg-surface-2 border-border/40 h-8 text-xs focus-visible:ring-1 focus-visible:ring-brand"
+            />
+          </div>
+          <Button
+            onClick={() => setShowGithub((s) => !s)}
+            size="sm"
+            variant={showGithub ? 'default' : 'outline'}
+            className="gap-1.5 h-8 text-xs border-border/40"
+          >
+            <Github className="w-3.5 h-3.5" />
+            {showGithub ? 'Marketplace' : 'GitHub'}
+          </Button>
+          <Button
+            onClick={handleInstall}
+            disabled={installing || isLoading}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 text-xs border-border/40 bg-surface-2"
+          >
+            <Download className={`w-3.5 h-3.5 ${installing ? 'animate-spin' : ''}`} />
+            Install .wpk
+          </Button>
+          <Button
+            onClick={handleRefresh}
+            disabled={refreshing || isLoading}
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 h-8 text-xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 max-w-6xl mx-auto w-full">
 
         {/* ── Category Tabs ── */}
         {!showGithub && (

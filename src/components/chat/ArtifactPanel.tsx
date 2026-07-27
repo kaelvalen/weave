@@ -38,21 +38,21 @@ export function ArtifactPanel() {
   const isCode = activeArtifact.type === 'code' || activeArtifact.language;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-background border-l border-border font-mono text-xs overflow-hidden">
+    <div className="flex-1 flex flex-col h-full font-mono text-xs overflow-hidden">
       {/* Header Bar */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border flex-shrink-0 bg-card select-none">
+      <div className="h-11 px-3 flex items-center justify-between flex-shrink-0 select-none">
         <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={closeArtifact}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs font-mono pr-2 border-r border-border/60 transition-colors"
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs font-mono pr-2 transition-colors"
             title="Back to artifacts list"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             <span>Artifacts</span>
           </button>
           {isCode ? <Code2 className="w-4 h-4 text-foreground shrink-0" /> : <FileText className="w-4 h-4 text-foreground shrink-0" />}
-          <span className="font-bold text-foreground text-xs truncate">
+          <span className="font-semibold text-foreground text-xs truncate">
             {activeArtifact.title || 'Untitled Artifact'}
           </span>
         </div>
@@ -62,24 +62,23 @@ export function ArtifactPanel() {
             type="button"
             onClick={handleCopy}
             title="Copy content"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-foreground" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-brand check-pop" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
           <button
             type="button"
             onClick={handleDownload}
             title="Download file"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
-          <div className="h-4 w-px bg-border/60 mx-1" />
           <button
             type="button"
             onClick={() => setRightPanelOpen(false)}
             title="Close side panel"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -98,8 +97,7 @@ export function ArtifactPanel() {
                 padding: '1.25rem',
                 borderRadius: '0.5rem',
                 fontSize: '0.8rem',
-                backgroundColor: 'hsl(var(--muted) / 0.4)',
-                border: '1px solid hsl(var(--border))',
+                backgroundColor: 'hsl(var(--surface-1))',
               }}
             >
               {activeArtifact.content}

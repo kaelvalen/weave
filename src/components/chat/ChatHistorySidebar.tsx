@@ -162,7 +162,7 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
 
         {!isEditing && (
           <div
-            className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 flex-shrink-0 bg-background/95 backdrop-blur shadow-sm rounded-md border border-border/50 px-0.5 py-0.5 transition-opacity duration-200 ${
+            className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 flex-shrink-0 bg-surface-3 rounded-md px-0.5 py-0.5 transition-opacity duration-200 ${
               conversationId === session.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -213,7 +213,7 @@ export function ChatHistorySidebar({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <div className="absolute inset-y-0 left-0 z-20 w-72 h-full border-r bg-card/95 backdrop-blur-xl flex flex-col flex-shrink-0 rounded-l-2xl overflow-hidden shadow-2xl">
+    <div className="absolute inset-y-0 left-0 z-20 w-72 h-full bg-surface-2 flex flex-col flex-shrink-0 rounded-l-2xl overflow-hidden">
       <div className="p-3 flex items-center justify-between border-b bg-card/40 rounded-tl-2xl">
         <button
           type="button"

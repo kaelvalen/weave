@@ -31,7 +31,7 @@ function App() {
   return (
     <ThemeProvider>
       <TooltipProvider delayDuration={200}>
-        <div className="h-screen w-screen flex flex-col bg-transparent text-foreground overflow-hidden">
+        <div className="app-shell h-screen w-screen flex flex-col bg-transparent text-foreground overflow-hidden">
           <TopNav />
           <div className="flex-1 flex min-h-0">
             {isLeftSidebarOpen && <WorkspaceSidebar />}

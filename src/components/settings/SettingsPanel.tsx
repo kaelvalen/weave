@@ -65,45 +65,47 @@ export function SettingsPanel() {
 
   if (!config) {
     return (
-      <div className="flex flex-col h-full w-full bg-transparent pt-16">
-        <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
-          <div className="flex items-center justify-between py-8 flex-shrink-0">
-            <div className="space-y-2">
-              <Skeleton className="h-7 w-40" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-            <Skeleton className="h-10 w-32" />
+      <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+        <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+          <div className="space-y-1">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-3 w-64" />
           </div>
-          <div className="flex-1 flex flex-col min-h-0 bg-card rounded-t-xl border-x border-t shadow-sm">
-            <div className="border-b px-4">
-              <Skeleton className="h-14 w-64" />
-            </div>
-            <div className="flex-1 p-6 lg:p-10 space-y-6">
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-          </div>
+          <Skeleton className="h-8 w-28" />
+        </header>
+        <div className="flex-1 p-6 space-y-6">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-transparent pt-16">
-      <div className="flex flex-col h-full max-w-5xl mx-auto w-full px-6">
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between py-8 flex-shrink-0">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Settings</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage your application preferences and themes.
-            </p>
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+      {/* ── Unified View Header ── */}
+      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
+            <Monitor className="w-5 h-5 text-brand" />
           </div>
-          <Button onClick={handleSave} className="gap-2 shadow-sm">
-            <Save className="w-4 h-4" /> Save Changes
+          <div>
+            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+              System Settings
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Manage runtime environment, AI providers, and visual theme</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} size="sm" className="gap-1.5 h-8 text-xs bg-brand text-brand-foreground hover:bg-brand/90">
+            <Save className="w-3.5 h-3.5" />
+            Save Changes
           </Button>
         </div>
+      </header>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 max-w-5xl mx-auto w-full"> 
 
         {/* ── Body ── */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card rounded-t-xl border-x border-t shadow-sm">

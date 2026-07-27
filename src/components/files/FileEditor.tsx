@@ -319,7 +319,7 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
       tabIndex={-1} // Allow div to receive keyboard events
     >
       {/* ── Toolbar / Breadcrumb ── */}
-      <div className="flex items-center justify-between px-4 h-12 border-b bg-card/80 backdrop-blur-md flex-shrink-0 z-10 transition-colors">
+      <div className="flex items-center justify-between px-4 h-12 border-b bg-card flex-shrink-0 z-10 transition-colors">
         <div className="flex items-center gap-2 overflow-hidden">
           <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-medium truncate text-foreground/90">{filename}</span>
@@ -424,7 +424,7 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
       </div>
 
       {/* ── Status Bar ── */}
-      <div className="h-7 border-t bg-card/90 backdrop-blur text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
+      <div className="h-7 border-t bg-card text-[10px] text-muted-foreground flex items-center justify-between px-3 flex-shrink-0 select-none z-10 font-mono tracking-tight">
         <div className="flex items-center gap-4">
           <span
             className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
