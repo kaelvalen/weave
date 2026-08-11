@@ -97,9 +97,9 @@ impl PluginManager {
             PluginBuilder::builtin("com.weave.builtin.calc", "Calculator")
                 .description("Mathematical expression evaluator, unit converter, and statistics calculator")
                 .category(PluginCategory::Productivity)
-                .capability("calc.eval", r#"{"expression":"2+2*3"}"#, "Evaluate a math expression (supports +,-,*,/,^,sqrt,sin,cos,tan,log,pi,e)")
-                .capability("calc.convert", r#"{"value":100,"from":"km","to":"miles"}"#, "Convert between units (length, weight, volume, temperature)")
-                .capability("calc.stats", r#"{"numbers":[1,2,3,4,5]}"#, "Calculate statistics: mean, median, min, max, std_dev, sum")
+                .capability("calc.eval", r#"{"type":"object","properties":{"expression":{"type":"string"}},"required":["expression"]}"#, "Evaluate a math expression (supports +,-,*,/,^,sqrt,sin,cos,tan,log,pi,e)")
+                .capability("calc.convert", r#"{"type":"object","properties":{"value":{"type":"number"},"from":{"type":"string"},"to":{"type":"string"}},"required":["value","from","to"]}"#, "Convert between units (length, weight, volume, temperature)")
+                .capability("calc.stats", r#"{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"}}},"required":["numbers"]}"#, "Calculate statistics: mean, median, min, max, std_dev, sum")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.note", "Notes")

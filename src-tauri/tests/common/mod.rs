@@ -1,0 +1,368 @@
+//! Shared Phase-5 test harness: a mock OpenAI-compatible SSE provider plus
+//! the agent-loop scaffolding, used by every per-plugin migration test.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+use parking_lot::RwLock;
+use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
+
+use weave::agent::{AgentEvent, AgentLoop, ApprovalRegistry};
+use weave::ai_bridge::{AiBridge, ModelTelemetry};
+use weave::models::chat::{ChatMessage, ChatRole, ModelConfig, Provider};
+use weave::plugin_manager::PluginManager;
+use weave::utils::config::AppConfig;
+use weave::utils::errors::WeaveError;
+
+use runtime_kernel::event_bus::EventBus;
+use runtime_kernel::event_store::EventSourcingStore;
+use runtime_kernel::observability::Observability;
+
+// ---------------------------------------------------------------------------
+// Mock OpenAI-compatible SSE provider
+// ---------------------------------------------------------------------------
+
+pub struct MockServer {
+    /// Per-request capture of the request body (for assertions).
+    pub bodies: Arc<Mutex<Vec<String>>>,
+    /// SSE `data:` lines to stream, one Vec per request.
+    script: Vec<Vec<String>>,
+    request_count: Arc<AtomicUsize>,
+}
+
+impl MockServer {
+    pub async fn spawn(script: Vec<Vec<String>>) -> (Self, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = MockServer {
+            bodies: Arc::new(Mutex::new(Vec::new())),
+            script,
+            request_count: Arc::new(AtomicUsize::new(0)),
+        };
+
+        let bodies = server.bodies.clone();
+        let script = server.script.clone();
+        let count = server.request_count.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let (stream, _) = match listener.accept().await {
+                    Ok(pair) => pair,
+                    Err(_) => break,
+                };
+                let bodies = bodies.clone();
+                let script = script.clone();
+                let count = count.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(stream, bodies, script, count).await {
+                        eprintln!("mock server connection error: {}", e);
+                    }
+                });
+            }
+        });
+
+        let url = format!("http://{}/v1/chat/completions", addr);
+        (server, url)
+    }
+}
+
+async fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
+    let mut buf = Vec::new();
+    let mut byte = [0u8; 1];
+    let mut header_end = None;
+    while header_end.is_none() {
+        stream.read_exact(&mut byte).await?;
+        buf.push(byte[0]);
+        if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+            header_end = Some(buf.len());
+        }
+    }
+    let headers = String::from_utf8_lossy(&buf).to_string();
+    let content_length = headers
+        .lines()
+        .find_map(|l| {
+            let lower = l.to_lowercase();
+            lower
+                .strip_prefix("content-length:")
+                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+        })
+        .unwrap_or(0);
+    let mut body = vec![0u8; content_length];
+    if content_length > 0 {
+        stream.read_exact(&mut body).await?;
+    }
+    let mut all = headers;
+    all.push_str(&String::from_utf8_lossy(&body));
+    Ok(all)
+}
+
+async fn handle_connection(
+    mut stream: TcpStream,
+    bodies: Arc<Mutex<Vec<String>>>,
+    script: Vec<Vec<String>>,
+    count: Arc<AtomicUsize>,
+) -> std::io::Result<()> {
+    let request = match read_http_request(&mut stream).await {
+        Ok(r) => r,
+        Err(_) => return Ok(()), // client closed
+    };
+    if request.is_empty() {
+        return Ok(());
+    }
+
+    let index = count.fetch_add(1, Ordering::SeqCst);
+    bodies.lock().unwrap().push(request.clone());
+
+    let sse_lines = script.get(index).cloned().unwrap_or_else(|| {
+        vec![
+            r#"data: {"id":"x","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"(mock exhausted) "},"finish_reason":null}]}"#.to_string(),
+            r#"data: {"id":"x","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#.to_string(),
+            "data: [DONE]".to_string(),
+        ]
+    });
+
+    // `Connection: close` + no Content-Length: reqwest reads the SSE body
+    // until the socket closes, so each response terminates its stream.
+    let mut response = String::from(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+    );
+    for line in &sse_lines {
+        response.push_str(line);
+        response.push_str("\n\n");
+    }
+    stream.write_all(response.as_bytes()).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+/// SSE script: request 1 asks the model to call `capability` with `args_json`
+/// (streamed as one arguments fragment), request 2 returns plain text.
+pub fn tool_call_script(capability: &str, args_json: &str, final_text: &str) -> Vec<Vec<String>> {
+    let mut lines = vec![
+        r#"data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"Running..."},"finish_reason":null}]}"#.to_string(),
+    ];
+    let arguments_json = Value::String(args_json.to_string());
+    lines.push(format!(
+        r#"data: {{"id":"1","object":"chat.completion.chunk","choices":[{{"index":0,"delta":{{"tool_calls":[{{"index":0,"id":"call_p","type":"function","function":{{"name":{},"arguments":{}}}}}]}},"finish_reason":null}}]}}"#,
+        Value::String(capability.to_string()),
+        arguments_json
+    ));
+    lines.push(
+        r#"data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#.to_string(),
+    );
+    lines.push("data: [DONE]".to_string());
+
+    vec![
+        lines,
+        vec![
+            format!(
+                r#"data: {{"id":"2","object":"chat.completion.chunk","choices":[{{"index":0,"delta":{{"role":"assistant","content":{}}},"finish_reason":null}}]}}"#,
+                Value::String(final_text.to_string())
+            ),
+            r#"data: {"id":"2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#.to_string(),
+            "data: [DONE]".to_string(),
+        ],
+    ]
+}
+
+/// SSE script for a single plain-text turn (no tool calls).
+pub fn plain_text_script(text: &str) -> Vec<Vec<String>> {
+    vec![vec![
+        format!(
+            r#"data: {{"id":"2","object":"chat.completion.chunk","choices":[{{"index":0,"delta":{{"role":"assistant","content":{}}},"finish_reason":null}}]}}"#,
+            Value::String(text.to_string())
+        ),
+        r#"data: {"id":"2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#.to_string(),
+        "data: [DONE]".to_string(),
+    ]]
+}
+
+// ---------------------------------------------------------------------------
+// Harness
+// ---------------------------------------------------------------------------
+
+pub struct Harness {
+    pub server: MockServer,
+    pub config: Arc<RwLock<AppConfig>>,
+    pub approvals: Arc<ApprovalRegistry>,
+    pub loop_: Arc<AgentLoop>,
+    pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
+}
+
+impl Harness {
+    pub async fn new(script: Vec<Vec<String>>) -> Harness {
+        let (server, url) = MockServer::spawn(script).await;
+
+        let mut cfg = AppConfig::default();
+        cfg.ai.openai.api_key = "test-key".to_string();
+        cfg.ai.openai.api_url = Some(url);
+        let config = Arc::new(RwLock::new(cfg));
+
+        let observability = Arc::new(Observability::new());
+        let event_bus = Arc::new(EventBus::new(1000));
+        let event_store = Arc::new(EventSourcingStore::new());
+        let telemetry = Arc::new(parking_lot::Mutex::new(ModelTelemetry::default()));
+
+        let ai_bridge = Arc::new(AiBridge::new(
+            Arc::new(RwLock::new(config.read().ai.clone())),
+            observability.clone(),
+            telemetry,
+        ));
+
+        let temp_dir =
+            std::env::temp_dir().join(format!("weave_agent_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let (canvas_tx, _) = tokio::sync::broadcast::channel(16);
+        let plugin_manager = Arc::new(PluginManager::new(temp_dir, canvas_tx));
+
+        let approvals = Arc::new(ApprovalRegistry::new());
+        let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
+        let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let agent_loop = Arc::new(AgentLoop {
+            ai_bridge: ai_bridge.clone(),
+            plugin_manager: plugin_manager.clone(),
+            approvals: approvals.clone(),
+            config: config.clone(),
+            chat_history: chat_history.clone(),
+            abort,
+            event_bus,
+            observability,
+            event_store,
+        });
+
+        Harness {
+            server,
+            config,
+            approvals,
+            loop_: agent_loop,
+            chat_history,
+        }
+    }
+
+    pub fn bodies(&self) -> Vec<String> {
+        self.server.bodies.lock().unwrap().clone()
+    }
+
+    pub fn model_config(&self) -> ModelConfig {
+        let cfg = self.config.read();
+        ModelConfig {
+            provider: Provider::Openai,
+            model: "mock-model".to_string(),
+            api_key: Some("test-key".to_string()),
+            api_url: cfg.ai.openai.api_url.clone(),
+            temperature: 0.7,
+            max_tokens: 4096,
+        }
+    }
+
+    pub fn seed_history(&self) {
+        let mut history = self.chat_history.write();
+        history.push(ChatMessage::new_user("Run the tool".to_string()));
+        let assistant = ChatMessage::new_assistant(String::new());
+        history.push(assistant);
+    }
+
+    /// Run the agent loop, auto-resolving every pending approval with
+    /// `decision`. Returns the accumulated final text and the events.
+    pub async fn run_loop(&self, decision: ApprovalDecision) -> (String, Vec<AgentEvent>) {
+        self.seed_history();
+        let history = self.chat_history.read().clone();
+        let assistant_id = history
+            .iter()
+            .rev()
+            .find(|m| m.role == ChatRole::Assistant)
+            .map(|m| m.id.clone())
+            .unwrap();
+
+        let (event_tx, mut event_rx) = mpsc::channel(128);
+        let loop_ = self.loop_.clone();
+        let approvals = self.approvals.clone();
+        let model_config = self.model_config();
+
+        let task = tokio::spawn(async move {
+            loop_
+                .run(
+                    model_config,
+                    "You are Weave, a test assistant.".to_string(),
+                    history,
+                    assistant_id,
+                    "test_session",
+                    event_tx,
+                )
+                .await
+        });
+
+        let mut events = Vec::new();
+        loop {
+            let event = match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
+                .await
+            {
+                Ok(Some(e)) => e,
+                _ => break,
+            };
+            if let AgentEvent::PendingApproval { call_id, .. } = &event {
+                approvals.resolve(call_id, decision).unwrap();
+            }
+            let is_complete = matches!(event, AgentEvent::RunComplete { .. });
+            events.push(event);
+            if is_complete {
+                break;
+            }
+        }
+
+        let result: Result<(), WeaveError> = task.await.unwrap();
+        result.unwrap();
+        let final_text = events
+            .iter()
+            .filter_map(|e| match e {
+                AgentEvent::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        (final_text, events)
+    }
+}
+
+/// Result of a full tool-call round trip through the spine.
+pub struct RoundTrip {
+    pub final_text: String,
+    pub events: Vec<AgentEvent>,
+    pub bodies: Vec<String>,
+}
+
+/// One full spine round trip: mock provider asks for `capability` with
+/// `args_json`, the agent loop executes it (approving pending calls with
+/// `decision`), and the second request carries the paired tool result.
+pub async fn round_trip(
+    capability: &str,
+    args_json: &str,
+    decision: ApprovalDecision,
+) -> RoundTrip {
+    let harness = Harness::new(tool_call_script(capability, args_json, "Done.")).await;
+    let (final_text, events) = harness.run_loop(decision).await;
+    RoundTrip {
+        final_text,
+        events,
+        bodies: harness.bodies(),
+    }
+}
+
+pub fn saw_approval(events: &[AgentEvent], capability: &str) -> bool {
+    events.iter().any(|e| {
+        matches!(e, AgentEvent::PendingApproval { capability: c, .. } if c == capability)
+    })
+}
+
+/// The second request body — the one that must carry the paired tool result.
+pub fn second_request_body(rt: &RoundTrip) -> &str {
+    rt.bodies
+        .get(1)
+        .expect("loop must re-request after tool execution")
+}
+
+pub use weave::agent::ApprovalDecision;
