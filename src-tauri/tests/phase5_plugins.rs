@@ -155,3 +155,47 @@ async fn git_directory_outside_workspace_is_denied_and_still_paired() {
         second
     );
 }
+
+// ---------------------------------------------------------------------------
+// sqlite_plugin — hardened in Phase 1 (fs_security), migrated schemas here.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn db_query_round_trips_with_gate() {
+    let rt = round_trip(
+        "db.query",
+        r#"{"query":"SELECT 1","db_path":"target/phase5_test.db"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "db.query"), "db.query is sensitive");
+    let second = second_request_body(&rt);
+    assert!(second.contains("1"), "SELECT 1 must return 1 in the paired result");
+}
+
+#[tokio::test]
+async fn db_execute_and_tables_round_trip() {
+    let rt = round_trip(
+        "db.execute",
+        r#"{"statement":"CREATE TABLE IF NOT EXISTS t5 (id INTEGER)","db_path":"target/phase5_test.db"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "db.execute"), "db.execute is destructive");
+    assert!(
+        second_request_body(&rt).contains("executed successfully"),
+        "db.execute must report success"
+    );
+
+    let rt = round_trip(
+        "db.tables",
+        r#"{"db_path":"target/phase5_test.db"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "db.tables"), "db.tables is sensitive");
+    assert!(
+        second_request_body(&rt).contains("t5"),
+        "db.tables must list the created table"
+    );
+}

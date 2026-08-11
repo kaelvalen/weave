@@ -142,9 +142,9 @@ impl PluginManager {
                 .category(PluginCategory::System)
                 .read_access(&["file://*.db"])
                 .write_access(&["file://*.db"])
-                .capability("db.query", r#"{"query":"SELECT ...","db_path":"weave.db"}"#, "Run a SELECT query and return JSON results")
-                .capability("db.execute", r#"{"statement":"CREATE TABLE ...","db_path":"weave.db"}"#, "Execute a write statement (INSERT/UPDATE/DELETE/CREATE)")
-                .capability("db.tables", r#"{"db_path":"weave.db"}"#, "List all tables and views in the database")
+                .capability("db.query", r#"{"type":"object","properties":{"db_path":{"type":"string"},"query":{"type":"string"}},"required":["query"]}"#, "Run a SELECT query and return JSON results")
+                .capability("db.execute", r#"{"type":"object","properties":{"db_path":{"type":"string"},"statement":{"type":"string"}},"required":["statement"]}"#, "Execute a write statement (INSERT/UPDATE/DELETE/CREATE)")
+                .capability("db.tables", r#"{"type":"object","properties":{"db_path":{"type":"string"}}}"#, "List all tables and views in the database")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.git", "Git")
