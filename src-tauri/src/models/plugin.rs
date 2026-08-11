@@ -38,8 +38,10 @@ pub struct Capabilities {
     pub write: Vec<String>,
     #[serde(default)]
     pub provide: Vec<String>,
+    /// JSON Schema document per capability (provider-agnostic object schema,
+    /// consumed directly by native tool-calling).
     #[serde(default)]
-    pub schemas: HashMap<String, String>,
+    pub schemas: HashMap<String, serde_json::Value>,
     /// Human-readable descriptions for each capability.
     #[serde(default)]
     pub descriptions: HashMap<String, String>,
@@ -199,13 +201,16 @@ impl PluginBuilder {
         self
     }
 
-    /// Register a capability with its schema and description.
+    /// Register a capability with its schema and description. The schema is
+    /// given as an example parameter object (e.g. `{"path":"..."}`) which is
+    /// converted into a best-effort JSON Schema at registration time. Plugins
+    /// that need precise contracts can pass an explicit schema object instead.
     pub fn capability(mut self, name: &str, schema: &str, desc: &str) -> Self {
         self.plugin.capabilities.provide.push(name.to_string());
         self.plugin
             .capabilities
             .schemas
-            .insert(name.to_string(), schema.to_string());
+            .insert(name.to_string(), schema_from_example(schema));
         self.plugin
             .capabilities
             .descriptions
@@ -215,5 +220,44 @@ impl PluginBuilder {
 
     pub fn build(self) -> Plugin {
         self.plugin
+    }
+}
+
+/// Convert an example parameter object (or an explicit JSON Schema object)
+/// into a provider-usable JSON Schema document.
+///
+/// Examples are wrapped into an object schema by inferring a `type` per
+/// property (string/number/boolean/array/object). Documents that already
+/// look like a schema (`type` present) pass through unchanged.
+pub fn schema_from_example(example: &str) -> serde_json::Value {
+    let parsed: serde_json::Value =
+        serde_json::from_str(example.trim()).unwrap_or(serde_json::Value::Object(Default::default()));
+    schema_from_value(&parsed)
+}
+
+fn schema_from_value(value: &serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = value.as_object() {
+        // Already an explicit JSON Schema document.
+        if obj.contains_key("type") {
+            return value.clone();
+        }
+        let mut properties = serde_json::Map::new();
+        for (key, v) in obj {
+            properties.insert(key.clone(), schema_from_value(v));
+        }
+        serde_json::json!({
+            "type": "object",
+            "properties": properties,
+        })
+    } else if value.is_string() {
+        serde_json::json!({"type": "string"})
+    } else if value.is_number() {
+        serde_json::json!({"type": "number"})
+    } else if value.is_boolean() {
+        serde_json::json!({"type": "boolean"})
+    } else if value.is_array() {
+        serde_json::json!({"type": "array"})
+    } else {
+        serde_json::json!({"type": "object"})
     }
 }

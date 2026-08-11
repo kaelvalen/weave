@@ -491,6 +491,58 @@ impl PluginManager {
             .collect()
     }
 
+    /// Resolve the plugin id that provides `capability`, or None.
+    pub fn resolve_capability(&self, capability: &str) -> Option<String> {
+        self.plugins
+            .read()
+            .values()
+            .find(|p| p.has_capability(capability))
+            .map(|p| p.id.clone())
+    }
+
+    /// Build the provider-specific `tools` array for native function-calling
+    /// from every loaded plugin's capabilities (phase1-spine-spec.md §4).
+    ///
+    /// OpenAI and Ollama use the `{"type":"function",...}` envelope;
+    /// Anthropic uses `{"name","description","input_schema"}`.
+    pub fn tools_for_provider(&self, provider: &crate::utils::config::Provider) -> Vec<serde_json::Value> {
+        let mut tools: Vec<serde_json::Value> = Vec::new();
+        for plugin in self.get_loaded() {
+            for cap in &plugin.capabilities.provide {
+                let schema = plugin
+                    .capabilities
+                    .schemas
+                    .get(cap)
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
+                let description = plugin
+                    .capabilities
+                    .descriptions
+                    .get(cap)
+                    .cloned()
+                    .unwrap_or_default();
+
+                let tool = match provider {
+                    crate::utils::config::Provider::Anthropic => serde_json::json!({
+                        "name": cap,
+                        "description": description,
+                        "input_schema": schema,
+                    }),
+                    _ => serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": cap,
+                            "description": description,
+                            "parameters": schema,
+                        },
+                    }),
+                };
+                tools.push(tool);
+            }
+        }
+        tools
+    }
+
     pub fn get_system_prompt(&self) -> String {
         let mut prompt = String::new();
         prompt.push_str("You are Weave, an advanced autonomous Agentic Coding Assistant.\n\n");
@@ -519,8 +571,8 @@ impl PluginManager {
                     .capabilities
                     .schemas
                     .get(cap)
-                    .map(|s| s.as_str())
-                    .unwrap_or("{}");
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "{}".to_string());
                 let desc = plugin
                     .capabilities
                     .descriptions

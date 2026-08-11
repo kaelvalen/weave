@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use tauri::{Emitter, State};
 use tracing::{error, info};
 
+use crate::agent::{AgentEvent, ApprovalDecision};
 use crate::models::chat::ChatMessage;
 use crate::utils::errors::WeaveError;
 use crate::AppState;
@@ -12,6 +13,17 @@ struct StreamChunk {
     chunk: String,
     message_id: String,
     done: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ToolCallDetected {
+    call_id: String,
+    message_id: String,
+    plugin_id: String,
+    capability: String,
+    params: serde_json::Value,
+    status: String,
+    result: Option<serde_json::Value>,
 }
 
 #[tauri::command]
@@ -120,7 +132,7 @@ pub async fn chat_send_message(
         })
     };
 
-    let history = {
+    let history: Vec<ChatMessage> = {
         let h = app_state.chat_history.read().clone();
         h.into_iter()
             .filter(|m| !m.content.trim().is_empty())
@@ -133,51 +145,123 @@ pub async fn chat_send_message(
         system_prompt.push_str(&format!("\n\n[SYSTEM CONTEXT: The user is currently viewing the '{}' screen in the application. Tailor your context-aware suggestions accordingly.]", ctx));
     }
 
-    let stream_result = app_state
-        .ai_bridge
-        .chat_stream(history, model_config, system_prompt)
-        .await;
+    let model_config = match model_config {
+        Some(cfg) => cfg,
+        None => {
+            error!("No model configuration available");
+            return Err(WeaveError::AiError("No model configured".to_string()));
+        }
+    };
 
-    match stream_result {
-        Ok(mut rx) => {
-            while let Some(chunk) = rx.recv().await {
-                if app_state.abort_generation.load(Ordering::SeqCst) {
-                    app_state.abort_generation.store(false, Ordering::SeqCst);
-                    break;
-                }
+    // ---- Agent loop (phase1-spine-spec.md §3) ----
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(128);
+    let agent_loop = app_state.agent_loop.clone();
+    let history_for_loop = history.clone();
+    let abort = app_state.abort_generation.clone();
+    let loop_assistant_id = assistant_id.clone();
+
+    let loop_handle = tauri::async_runtime::spawn(async move {
+        agent_loop
+            .run(
+                model_config,
+                system_prompt,
+                history_for_loop,
+                loop_assistant_id,
+                "ipc_session",
+                event_tx,
+            )
+            .await
+    });
+
+    while let Some(event) = event_rx.recv().await {
+        if abort.load(Ordering::SeqCst) {
+            break;
+        }
+        match event {
+            AgentEvent::Text { text } => {
                 let mut history = app_state.chat_history.write();
                 if let Some(last) = history.last_mut() {
                     if last.id == assistant_id {
-                        last.content.push_str(&chunk);
+                        last.content.push_str(&text);
                     }
                 }
                 let _ = app_handle.emit(
                     "chat-stream-chunk",
                     StreamChunk {
-                        chunk: chunk.clone(),
+                        chunk: text,
                         message_id: assistant_id.clone(),
                         done: false,
                     },
                 );
             }
-            // Signal stream end
-            let _ = app_handle.emit(
-                "chat-stream-chunk",
-                StreamChunk {
-                    chunk: String::new(),
-                    message_id: assistant_id.clone(),
-                    done: true,
-                },
-            );
-        }
-        Err(e) => {
-            error!("Streaming error: {}", e);
-            let mut history = app_state.chat_history.write();
-            if let Some(last) = history.last_mut() {
-                if last.id == assistant_id {
-                    last.content = format!("Error: {}", e);
-                }
+            AgentEvent::ToolCall {
+                call_id,
+                plugin_id,
+                capability,
+                params,
+                status,
+                result,
+            } => {
+                let _ = app_handle.emit(
+                    "chat-tool-call-detected",
+                    ToolCallDetected {
+                        call_id,
+                        message_id: assistant_id.clone(),
+                        plugin_id,
+                        capability,
+                        params,
+                        status,
+                        result,
+                    },
+                );
             }
+            AgentEvent::PendingApproval {
+                call_id,
+                plugin_id,
+                capability,
+                params,
+            } => {
+                let _ = app_handle.emit(
+                    "chat-tool-call-detected",
+                    ToolCallDetected {
+                        call_id,
+                        message_id: assistant_id.clone(),
+                        plugin_id,
+                        capability,
+                        params,
+                        status: "pending_approval".to_string(),
+                        result: None,
+                    },
+                );
+            }
+            AgentEvent::RunComplete { final_text: _ } => {
+                let _ = app_handle.emit(
+                    "chat-stream-chunk",
+                    StreamChunk {
+                        chunk: String::new(),
+                        message_id: assistant_id.clone(),
+                        done: true,
+                    },
+                );
+            }
+            AgentEvent::RunError { error } => {
+                error!("Agent run error: {}", error);
+                let _ = app_handle.emit(
+                    "chat-stream-chunk",
+                    StreamChunk {
+                        chunk: format!("Error: {}", error),
+                        message_id: assistant_id.clone(),
+                        done: true,
+                    },
+                );
+            }
+        }
+    }
+
+    match loop_handle.await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            error!("Agent loop error: {}", e);
             let _ = app_handle.emit(
                 "chat-stream-chunk",
                 StreamChunk {
@@ -186,11 +270,43 @@ pub async fn chat_send_message(
                     done: true,
                 },
             );
-            return Err(e);
+        }
+        Err(e) => {
+            error!("Agent loop task panicked: {}", e);
+            let _ = app_handle.emit(
+                "chat-stream-chunk",
+                StreamChunk {
+                    chunk: "Error: agent loop panicked".to_string(),
+                    message_id: assistant_id.clone(),
+                    done: true,
+                },
+            );
         }
     }
 
     Ok(assistant_id)
+}
+
+/// Resolve a pending tool-call approval. The agent loop halts its turn on
+/// sensitive/destructive calls and only continues once every pending call in
+/// the turn has been resolved through this command (or rejected).
+#[tauri::command]
+pub fn chat_approve_tool_call(
+    call_id: String,
+    approved: bool,
+    app_state: State<'_, AppState>,
+) -> Result<(), WeaveError> {
+    let decision = if approved {
+        ApprovalDecision::Approved
+    } else {
+        ApprovalDecision::Rejected
+    };
+    info!(
+        "Tool call {} approval decision: {}",
+        call_id,
+        if approved { "approved" } else { "rejected" }
+    );
+    app_state.approvals.resolve(&call_id, decision)
 }
 
 #[tauri::command]

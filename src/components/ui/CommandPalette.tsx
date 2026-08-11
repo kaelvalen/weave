@@ -53,31 +53,50 @@ function memoryContentOf(value: unknown): string {
 }
 
 /**
- * Capability schemas are example param skeletons (e.g. `{"key":"..."}`), not
- * full JSON Schemas — required vs optional can't be told apart. Treat any
- * non-empty skeleton as needing user input; only `{}`/missing schemas are
- * safe to run with empty params.
+ * Capability schemas are now JSON Schema documents. Any schema with
+ * properties/required keys needs user input; `{}`/missing schemas are safe to
+ * run with empty params.
  */
-function schemaNeedsParams(schema: string | undefined): boolean {
-  const trimmed = schema?.trim();
-  if (!trimmed || trimmed === '{}') return false;
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-    return typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length > 0;
-  } catch {
-    // Unparseable skeleton — don't execute blindly, hand the user a template.
+function schemaNeedsParams(schema: unknown): boolean {
+  if (schema === undefined || schema === null) return false;
+  if (typeof schema !== 'object') return true;
+  const obj = schema as Record<string, unknown>;
+  const properties = obj.properties;
+  if (properties && typeof properties === 'object' && Object.keys(properties).length > 0) {
     return true;
   }
+  const required = obj.required;
+  if (Array.isArray(required) && required.length > 0) {
+    return true;
+  }
+  return false;
+}
+
+/** Build a `{prop: ""}` example from a schema's properties for the template. */
+function exampleFromSchema(schema: unknown): Record<string, unknown> {
+  if (typeof schema !== 'object' || schema === null) return {};
+  const properties = (schema as Record<string, unknown>).properties;
+  if (typeof properties !== 'object' || properties === null) return {};
+  const example: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(properties as Record<string, unknown>)) {
+    if (prop && typeof prop === 'object') {
+      const type = (prop as Record<string, unknown>).type;
+      if (type === 'boolean') example[key] = false;
+      else if (type === 'number') example[key] = 0;
+      else example[key] = '';
+    }
+  }
+  return example;
 }
 
 function runCapability(
   execute: (pluginId: string, capability: string, params: Record<string, unknown>) => Promise<unknown>,
   pluginId: string,
   capability: string,
-  schema: string | undefined
+  schema: unknown
 ): void {
   if (schemaNeedsParams(schema)) {
-    const template = `/${capability} ${schema?.trim() || '{}'}`;
+    const template = `/${capability} ${JSON.stringify(exampleFromSchema(schema))}`;
     navigator.clipboard.writeText(template).then(
       () => toast.success('Parametreleri doldurup sohbete yapıştırın'),
       () => toast.error('Failed to copy to clipboard')

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::process::Child;
 use tracing::info;
 
+pub mod agent;
 pub mod ai_bridge;
 pub mod commands;
 pub mod github_plugin;
@@ -14,6 +15,7 @@ pub mod plugins;
 pub mod runtime;
 pub mod utils;
 
+use agent::{AgentLoop, ApprovalRegistry};
 use ai_bridge::{AiBridge, ModelTelemetry};
 use models::chat::ChatMessage;
 use plugin_manager::PluginManager;
@@ -28,6 +30,8 @@ use utils::errors::WeaveError;
 pub struct AppState {
     pub plugin_manager: Arc<PluginManager>,
     pub ai_bridge: Arc<AiBridge>,
+    pub agent_loop: Arc<AgentLoop>,
+    pub approvals: Arc<ApprovalRegistry>,
     pub event_bus: Arc<EventBus>,
     pub event_store: Arc<EventSourcingStore>,
     pub observability: Arc<Observability>,
@@ -75,6 +79,20 @@ impl AppState {
             observability.clone(),
             model_telemetry.clone(),
         ));
+        let approvals = Arc::new(ApprovalRegistry::new());
+        let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
+        let abort_generation = Arc::new(AtomicBool::new(false));
+        let agent_loop = Arc::new(AgentLoop {
+            ai_bridge: ai_bridge.clone(),
+            plugin_manager: plugin_manager.clone(),
+            approvals: approvals.clone(),
+            config: config_arc.clone(),
+            chat_history: chat_history.clone(),
+            abort: abort_generation.clone(),
+            event_bus: event_bus.clone(),
+            observability: observability.clone(),
+            event_store: event_store.clone(),
+        });
 
         let _ = plugin_manager.discover();
 
@@ -83,12 +101,14 @@ impl AppState {
         Ok(Self {
             plugin_manager,
             ai_bridge,
+            agent_loop,
+            approvals,
             event_bus,
             event_store,
             observability,
             config: config_arc,
-            chat_history: Arc::new(RwLock::new(Vec::new())),
-            abort_generation: Arc::new(AtomicBool::new(false)),
+            chat_history,
+            abort_generation,
             canvas_tx,
             local_server: Arc::new(tokio::sync::Mutex::new(None)),
             model_telemetry,

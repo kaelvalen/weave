@@ -52,6 +52,19 @@ pub struct LocalConfig {
     pub temperature: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
+    /// Whether the local endpoint receives native `tools` in requests.
+    ///
+    /// Static flag, NOT a runtime auto-fallback: it is fixed once by an
+    /// empirical probe (send a `tools`-bearing request, check whether
+    /// `tool_calls` come back) — phase1-spine-spec.md §2 decision Q2.
+    /// Defaults to true; the 2026-08-11 probe was inconclusive (no local
+    /// server was running), so re-probe when the local setup is up.
+    #[serde(default = "default_use_native_tools")]
+    pub use_native_tools: bool,
+}
+
+fn default_use_native_tools() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +139,7 @@ impl Default for AppConfig {
                     context_length: 4096,
                     temperature: 0.7,
                     api_url: Some(OLLAMA_DEFAULT_URL.to_string()),
+                    use_native_tools: default_use_native_tools(),
                 },
             },
             plugins: PluginConfig {

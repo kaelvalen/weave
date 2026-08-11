@@ -156,7 +156,12 @@ impl Manifest {
                 read: self.capabilities.read.clone(),
                 write: self.capabilities.write.clone(),
                 provide: self.capabilities.provide.clone(),
-                schemas: self.capabilities.schemas.clone(),
+                schemas: self
+                    .capabilities
+                    .schemas
+                    .iter()
+                    .map(|(k, v)| (k.clone(), super::plugin::schema_from_example(v)))
+                    .collect(),
                 descriptions: self.capabilities.descriptions.clone(),
             },
             runtime: RuntimeConfig {
@@ -208,10 +213,9 @@ entry = "main.py"
         let plugin = manifest.to_plugin(None, false);
 
         assert_eq!(plugin.capabilities.provide, vec!["test.echo"]);
-        assert_eq!(
-            plugin.capabilities.schemas.get("test.echo"),
-            Some(&"{\"message\":\"string\"}".to_string())
-        );
+        let schema = plugin.capabilities.schemas.get("test.echo").unwrap();
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"]["message"]["type"], "string");
         assert_eq!(
             plugin.capabilities.descriptions.get("test.echo"),
             Some(&"Echoes a message back".to_string())

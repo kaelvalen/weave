@@ -68,12 +68,32 @@ struct OpenAiRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f64>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<OpenAiTool>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OpenAiMessage {
+struct OpenAiTool {
+    #[serde(rename = "type")]
+    tool_type: String,
+    function: OpenAiFunction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenAiFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub(crate) struct OpenAiMessage {
     role: String,
     content: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -101,11 +121,28 @@ impl OpenAiUsage {
 #[derive(Debug, Clone, Deserialize)]
 struct OpenAiStreamChoice {
     delta: OpenAiDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
 struct OpenAiDelta {
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<OpenAiToolCallDelta>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct OpenAiToolCallDelta {
+    index: usize,
+    id: Option<String>,
+    function: Option<OpenAiFunctionDelta>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct OpenAiFunctionDelta {
+    name: Option<String>,
+    arguments: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,9 +153,18 @@ struct AnthropicRequest {
     max_tokens: Option<u32>,
     temperature: f64,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<AnthropicTool>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct AnthropicTool {
+    name: String,
+    description: String,
+    input_schema: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AnthropicMessage {
     role: String,
     content: serde_json::Value,
@@ -127,10 +173,11 @@ struct AnthropicMessage {
 #[derive(Debug, Clone, Deserialize)]
 struct AnthropicStreamResponse {
     #[serde(rename = "type")]
-    #[allow(dead_code)]
     response_type: String,
+    /// content block index — present on `content_block_start` /
+    /// `content_block_delta` / `content_block_stop` events.
+    index: Option<usize>,
     delta: Option<AnthropicDelta>,
-    #[allow(dead_code)]
     content_block: Option<AnthropicContentBlock>,
     #[serde(default)]
     usage: Option<AnthropicUsage>,
@@ -151,13 +198,23 @@ struct AnthropicMessageUsage {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 struct AnthropicDelta {
+    #[serde(rename = "type")]
+    delta_type: Option<String>,
     text: Option<String>,
+    /// Fragments of the tool input JSON, accumulated across
+    /// `input_json_delta` events.
+    partial_json: Option<String>,
+    /// Present on `message_delta` events (`stop_reason: "tool_use"`).
+    stop_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct AnthropicContentBlock {
-    #[allow(dead_code)]
-    text: Option<String>,
+    #[serde(rename = "type")]
+    block_type: Option<String>,
+    id: Option<String>,
+    name: Option<String>,
+    input: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,12 +223,16 @@ struct OllamaRequest {
     messages: Vec<OllamaMessage>,
     stream: bool,
     options: OllamaOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct OllamaMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +255,41 @@ struct OllamaStreamResponse {
 #[derive(Debug, Clone, Deserialize, Default)]
 struct OllamaResponseMessage {
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<OllamaToolCall>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct OllamaToolCall {
+    function: OllamaToolCallFunction,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct OllamaToolCallFunction {
+    name: String,
+    arguments: serde_json::Value,
+}
+
+/// Streamed events from a provider request, carrying both free text and
+/// native tool-call deltas. Consumed by the agent loop (agent/mod.rs) and by
+/// the text-only `chat_stream` wrapper (which ignores tool events).
+#[derive(Debug, Clone)]
+pub enum AgentStreamEvent {
+    /// A piece of assistant text.
+    Text(String),
+    /// A tool-call delta: `index` identifies the call (accumulate fragments
+    /// by index; `id`/`name` arrive on the first delta), `args_fragment` is
+    /// an incremental JSON string to be concatenated.
+    ToolCall {
+        index: usize,
+        id: Option<String>,
+        name: Option<String>,
+        args_fragment: String,
+    },
+    /// Stream ended. `tool_calls` is true when the provider signalled tool
+    /// calls (finish_reason "tool_calls" / stop_reason "tool_use" / Ollama
+    /// final chunk carried tool_calls).
+    Finish { tool_calls: bool },
 }
 
 impl AiBridge {
@@ -496,6 +592,9 @@ impl AiBridge {
         result
     }
 
+    /// Text-only streaming, kept for callers that do not need tool calls.
+    /// Builds provider-native messages from the ChatMessage history and
+    /// forwards only `AgentStreamEvent::Text` chunks.
     pub async fn chat_stream(
         &self,
         messages: Vec<ChatMessage>,
@@ -564,7 +663,6 @@ impl AiBridge {
                 (provider, model, api_key, api_url, temperature, max_tokens)
             });
 
-        let client = self.client.clone();
         let (provider, model, api_key, api_url, temperature, max_tokens) = provider_config;
 
         let system_msg = ChatMessage {
@@ -578,58 +676,79 @@ impl AiBridge {
         let mut enhanced_messages = vec![system_msg];
         enhanced_messages.extend(messages);
 
-        let llama_server_clone = self.llama_server.clone();
+        let native = Self::build_native_messages(&provider, &model, api_url.as_deref(), enhanced_messages);
+        let mut events = self
+            .agent_stream(
+                provider,
+                model,
+                api_key,
+                api_url,
+                temperature,
+                max_tokens,
+                native,
+                None,
+            )
+            .await?;
+
+        tokio::spawn(async move {
+            while let Some(event) = events.recv().await {
+                if let AgentStreamEvent::Text(text) = event {
+                    if tx.send(text).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    /// Stream a request with (optional) native tool definitions, emitting
+    /// structured events. `native_messages` must be provider-native
+    /// (built via `build_native_messages`; subsequent rounds append native
+    /// tool results produced by the agent loop).
+    ///
+    /// Phase-2 spine entry point (phase1-spine-spec.md §2/§3).
+    pub async fn agent_stream(
+        &self,
+        provider: Provider,
+        model: String,
+        api_key: Option<String>,
+        api_url: Option<String>,
+        temperature: f64,
+        max_tokens: u32,
+        native_messages: Vec<serde_json::Value>,
+        tools: Option<Vec<serde_json::Value>>,
+    ) -> Result<tokio::sync::mpsc::Receiver<AgentStreamEvent>, WeaveError> {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let client = self.client.clone();
+        let llama_server = self.llama_server.clone();
         let observability = self.observability.clone();
         let telemetry = self.telemetry.clone();
 
+        let model = model;
+        let api_url = api_url;
         tokio::spawn(async move {
             let result = match provider {
-                Provider::Openai => {
-                    Self::stream_openai_internal(
+                Provider::Openai | Provider::Kimi => {
+                    Self::stream_openai_agent(
                         client,
-                        enhanced_messages,
+                        native_messages,
                         &model,
                         api_key,
                         api_url.as_deref(),
                         temperature,
                         max_tokens,
-                        tx.clone(),
-                        observability.clone(),
-                    )
-                    .await
-                }
-                Provider::Anthropic => {
-                    Self::stream_anthropic_internal(
-                        client,
-                        enhanced_messages,
-                        &model,
-                        api_key,
-                        api_url.as_deref(),
-                        temperature,
-                        max_tokens,
-                        tx.clone(),
-                        observability.clone(),
-                    )
-                    .await
-                }
-                Provider::Kimi => {
-                    Self::stream_kimi_internal(
-                        client,
-                        enhanced_messages,
-                        &model,
-                        api_key,
-                        api_url.as_deref(),
-                        temperature,
-                        max_tokens,
+                        tools,
                         tx.clone(),
                         observability.clone(),
                     )
                     .await
                 }
                 Provider::Opencode => {
-                    let mut url = api_url.unwrap_or_else(|| {
-                        "https://opencode.ai/zen/go/v1/chat/completions".to_string()
-                    });
+                    let mut url = api_url
+                        .clone()
+                        .unwrap_or("https://opencode.ai/zen/go/v1/chat/completions".to_string());
                     if url == "https://api.opencode.ai/v1"
                         || url == "https://api.opencode.ai/v1/chat/completions"
                         || url == "https://opencode.ai/go/v1"
@@ -644,29 +763,46 @@ impl AiBridge {
                         .or_else(|| model.strip_prefix("opencode-zen/"))
                         .or_else(|| model.strip_prefix("opencode/"))
                         .or_else(|| model.strip_prefix("zen/"))
-                        .unwrap_or(&model);
-                    Self::stream_openai_internal(
+                        .unwrap_or(&model)
+                        .to_string();
+                    Self::stream_openai_agent(
                         client,
-                        enhanced_messages,
-                        actual_model,
+                        native_messages,
+                        &actual_model,
                         api_key,
                         Some(&url),
                         temperature,
                         max_tokens,
+                        tools,
+                        tx.clone(),
+                        observability.clone(),
+                    )
+                    .await
+                }
+                Provider::Anthropic => {
+                    Self::stream_anthropic_agent(
+                        client,
+                        native_messages,
+                        &model,
+                        api_key,
+                        api_url.as_deref(),
+                        temperature,
+                        max_tokens,
+                        tools,
                         tx.clone(),
                         observability.clone(),
                     )
                     .await
                 }
                 Provider::Local => {
-                    Self::stream_local_internal(
+                    Self::stream_local_agent(
                         client,
-                        llama_server_clone,
-                        enhanced_messages,
+                        llama_server,
+                        native_messages,
                         &model,
                         api_url.as_deref(),
                         temperature,
-                        max_tokens,
+                        tools,
                         tx.clone(),
                         observability.clone(),
                         telemetry.clone(),
@@ -675,11 +811,10 @@ impl AiBridge {
                 }
             };
 
-            // Remember the last-used model regardless of stream outcome.
-            telemetry.lock().last_model = Some(model.clone());
+            telemetry.lock().last_model = Some(model);
 
             if let Err(e) = result {
-                let _ = tx.send(format!("\n[Stream Error: {}]", e)).await;
+                let _ = tx.send(AgentStreamEvent::Text(format!("\n[Stream Error: {}]", e))).await;
             }
         });
 
@@ -716,6 +851,7 @@ impl AiBridge {
             frequency_penalty: Some(0.3),
             presence_penalty: Some(0.3),
             stream: false,
+            tools: None,
         };
 
         let response = self
@@ -811,6 +947,7 @@ impl AiBridge {
             },
             temperature,
             stream: false,
+            tools: None,
         };
 
         let response = self
@@ -864,6 +1001,7 @@ impl AiBridge {
                     ChatRole::System => "system".to_string(),
                 },
                 content: m.content.clone(),
+                tool_calls: None,
             })
             .collect();
 
@@ -872,6 +1010,7 @@ impl AiBridge {
             messages: ollama_messages,
             stream: false,
             options: OllamaOptions { temperature },
+            tools: None,
         };
 
         let response = self
@@ -949,6 +1088,8 @@ impl AiBridge {
                         ChatRole::System => "system".to_string(),
                     },
                     content,
+                    tool_calls: None,
+                    tool_call_id: None,
                 }
             })
             .collect();
@@ -965,6 +1106,7 @@ impl AiBridge {
             frequency_penalty: None,
             presence_penalty: None,
             stream: false,
+            tools: None,
         };
 
         let response = self
@@ -1047,7 +1189,7 @@ impl AiBridge {
         result
     }
 
-    fn build_openai_messages(
+    pub(crate) fn build_openai_messages(
         messages: &[ChatMessage],
         model: &str,
         api_url: Option<&str>,
@@ -1132,6 +1274,8 @@ impl AiBridge {
                             ChatRole::System => "user".to_string(),
                         },
                         content,
+                        tool_calls: None,
+                        tool_call_id: None,
                     }
                 })
                 .collect();
@@ -1164,127 +1308,15 @@ impl AiBridge {
                         ChatRole::System => "system".to_string(),
                     },
                     content,
+                    tool_calls: None,
+                    tool_call_id: None,
                 }
             })
             .collect()
     }
 
-    async fn stream_openai_internal(
-        client: reqwest::Client,
-        messages: Vec<ChatMessage>,
-        model: &str,
-        api_key: Option<String>,
-        api_url: Option<&str>,
-        temperature: f64,
-        max_tokens: u32,
-        tx: tokio::sync::mpsc::Sender<String>,
-        observability: Arc<Observability>,
-    ) -> Result<(), WeaveError> {
-        let api_key =
-            api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("OpenAI".to_string()))?;
-        let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
-
-        let openai_messages = Self::build_openai_messages(&messages, model, api_url);
-
-        let temp = if temperature == 0.0 { 0.7 } else { temperature };
-        let request = OpenAiRequest {
-            model: model.to_string(),
-            messages: openai_messages,
-            temperature: temp,
-            max_tokens: if max_tokens == 0 {
-                None
-            } else {
-                Some(max_tokens)
-            },
-            frequency_penalty: Some(0.3),
-            presence_penalty: Some(0.3),
-            stream: true,
-        };
-
-        let response = client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(WeaveError::AiApiError(format!(
-                "OpenAI streaming error: {}",
-                error_text
-            )));
-        }
-
-        let mut stream = response.bytes_stream();
-        use futures::StreamExt;
-
-        let mut buffer = Vec::new();
-        let mut generated_text = String::new();
-        let mut stop_stream = false;
-        let mut last_usage: Option<OpenAiUsage> = None;
-
-        while let Some(chunk_result) = stream.next().await {
-            if stop_stream {
-                break;
-            }
-            let chunk = chunk_result?;
-            buffer.extend_from_slice(&chunk);
-
-            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
-                let text = String::from_utf8_lossy(&line_bytes);
-                let line = text.trim();
-
-                if line.is_empty() || line == "data: [DONE]" {
-                    continue;
-                }
-
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
-                        if let Some(usage) = json.usage {
-                            last_usage = Some(usage);
-                        }
-                        if let Some(content) =
-                            json.choices.get(0).and_then(|c| c.delta.content.clone())
-                        {
-                            generated_text.push_str(&content);
-
-                            let _ = tx.send(content).await;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Record usage when the stream exposes it (best-effort).
-        if let Some(usage) = last_usage {
-            let total = usage.total();
-            if total > 0 {
-                observability.record_tokens(total);
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn stream_anthropic_internal(
-        client: reqwest::Client,
-        messages: Vec<ChatMessage>,
-        model: &str,
-        api_key: Option<String>,
-        api_url: Option<&str>,
-        temperature: f64,
-        max_tokens: u32,
-        tx: tokio::sync::mpsc::Sender<String>,
-        observability: Arc<Observability>,
-    ) -> Result<(), WeaveError> {
-        let api_key =
-            api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Anthropic".to_string()))?;
-        let url = api_url.unwrap_or("https://api.anthropic.com/v1/messages");
-
-        let anthropic_messages: Vec<AnthropicMessage> = messages
+    pub(crate) fn build_anthropic_messages(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
+        messages
             .iter()
             .map(|m| {
                 let content = if let Some(images) = &m.images {
@@ -1313,15 +1345,206 @@ impl AiBridge {
                     serde_json::Value::String(m.content.clone())
                 };
 
-                AnthropicMessage {
-                    role: match m.role {
-                        ChatRole::User => "user".to_string(),
-                        ChatRole::Assistant => "assistant".to_string(),
-                        ChatRole::System => "user".to_string(),
+                serde_json::json!({
+                    "role": match m.role {
+                        ChatRole::User => "user",
+                        ChatRole::Assistant => "assistant",
+                        ChatRole::System => "user",
                     },
-                    content,
-                }
+                    "content": content,
+                })
             })
+            .collect()
+    }
+
+    pub(crate) fn build_ollama_messages(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
+        messages
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": match m.role {
+                        ChatRole::User => "user",
+                        ChatRole::Assistant => "assistant",
+                        ChatRole::System => "system",
+                    },
+                    "content": m.content,
+                })
+            })
+            .collect()
+    }
+
+    /// Convert ChatMessage history into provider-native messages for the
+    /// agent loop's first round. Subsequent rounds append native tool results
+    /// built by agent/mod.rs.
+    pub(crate) fn build_native_messages(
+        provider: &Provider,
+        model: &str,
+        api_url: Option<&str>,
+        messages: Vec<ChatMessage>,
+    ) -> Vec<serde_json::Value> {
+        match provider {
+            Provider::Anthropic => Self::build_anthropic_messages(&messages),
+            Provider::Local => {
+                if model.contains(".gguf") {
+                    // llama.cpp serves an OpenAI-compatible endpoint.
+                    Self::build_openai_messages(&messages, model, api_url)
+                        .into_iter()
+                        .map(|m| serde_json::to_value(&m).unwrap_or_default())
+                        .collect()
+                } else {
+                    Self::build_ollama_messages(&messages)
+                }
+            }
+            _ => Self::build_openai_messages(&messages, model, api_url)
+                .into_iter()
+                .map(|m| serde_json::to_value(&m).unwrap_or_default())
+                .collect(),
+        }
+    }
+
+    async fn stream_openai_agent(
+        client: reqwest::Client,
+        native_messages: Vec<serde_json::Value>,
+        model: &str,
+        api_key: Option<String>,
+        api_url: Option<&str>,
+        temperature: f64,
+        max_tokens: u32,
+        tools: Option<Vec<serde_json::Value>>,
+        tx: tokio::sync::mpsc::Sender<AgentStreamEvent>,
+        observability: Arc<Observability>,
+    ) -> Result<(), WeaveError> {
+        let api_key =
+            api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("OpenAI".to_string()))?;
+        let url = api_url.unwrap_or("https://api.openai.com/v1/chat/completions");
+
+        let openai_messages: Vec<OpenAiMessage> = native_messages
+            .into_iter()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
+            .collect();
+
+        let temp = if temperature == 0.0 { 0.7 } else { temperature };
+        let request = OpenAiRequest {
+            model: model.to_string(),
+            messages: openai_messages,
+            temperature: temp,
+            max_tokens: if max_tokens == 0 {
+                None
+            } else {
+                Some(max_tokens)
+            },
+            frequency_penalty: Some(0.3),
+            presence_penalty: Some(0.3),
+            stream: true,
+            tools: tools.map(|t| {
+                t.into_iter()
+                    .filter_map(|v| serde_json::from_value(v).ok())
+                    .collect()
+            }),
+        };
+
+        let response = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(WeaveError::AiApiError(format!(
+                "OpenAI streaming error: {}",
+                error_text
+            )));
+        }
+
+        let mut stream = response.bytes_stream();
+        use futures::StreamExt;
+
+        let mut buffer = Vec::new();
+        let mut saw_tool_call = false;
+        let mut last_usage: Option<OpenAiUsage> = None;
+
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result?;
+            buffer.extend_from_slice(&chunk);
+
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                let text = String::from_utf8_lossy(&line_bytes);
+                let line = text.trim();
+
+                if line.is_empty() || line == "data: [DONE]" {
+                    continue;
+                }
+
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
+                        if let Some(usage) = json.usage {
+                            last_usage = Some(usage);
+                        }
+                        if let Some(delta) = json.choices.get(0) {
+                            if let Some(content) = &delta.delta.content {
+                                let _ = tx.send(AgentStreamEvent::Text(content.clone())).await;
+                            }
+                            if let Some(tool_calls) = &delta.delta.tool_calls {
+                                for tc in tool_calls {
+                                    saw_tool_call = true;
+                                    let _ = tx
+                                        .send(AgentStreamEvent::ToolCall {
+                                            index: tc.index,
+                                            id: tc.id.clone(),
+                                            name: tc.function.as_ref().and_then(|f| f.name.clone()),
+                                            args_fragment: tc
+                                                .function
+                                                .as_ref()
+                                                .and_then(|f| f.arguments.clone())
+                                                .unwrap_or_default(),
+                                        })
+                                        .await;
+                                }
+                            }
+                            if delta.finish_reason.as_deref() == Some("tool_calls") {
+                                saw_tool_call = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Record usage when the stream exposes it (best-effort).
+        if let Some(usage) = last_usage {
+            let total = usage.total();
+            if total > 0 {
+                observability.record_tokens(total);
+            }
+        }
+
+        let _ = tx.send(AgentStreamEvent::Finish { tool_calls: saw_tool_call }).await;
+        Ok(())
+    }
+
+    async fn stream_anthropic_agent(
+        client: reqwest::Client,
+        native_messages: Vec<serde_json::Value>,
+        model: &str,
+        api_key: Option<String>,
+        api_url: Option<&str>,
+        temperature: f64,
+        max_tokens: u32,
+        tools: Option<Vec<serde_json::Value>>,
+        tx: tokio::sync::mpsc::Sender<AgentStreamEvent>,
+        observability: Arc<Observability>,
+    ) -> Result<(), WeaveError> {
+        let api_key =
+            api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Anthropic".to_string()))?;
+        let url = api_url.unwrap_or("https://api.anthropic.com/v1/messages");
+
+        let anthropic_messages: Vec<AnthropicMessage> = native_messages
+            .into_iter()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
             .collect();
 
         let request = AnthropicRequest {
@@ -1334,6 +1557,11 @@ impl AiBridge {
             },
             temperature,
             stream: true,
+            tools: tools.map(|t| {
+                t.into_iter()
+                    .filter_map(|v| serde_json::from_value(v).ok())
+                    .collect()
+            }),
         };
 
         let response = client
@@ -1359,6 +1587,13 @@ impl AiBridge {
         let mut buffer = Vec::new();
         let mut input_tokens: u64 = 0;
         let mut output_tokens: u64 = 0;
+        let mut saw_tool_call = false;
+        let mut stop_reason_tool_use = false;
+        let mut partial_json: Vec<String> = Vec::new();
+        let mut current_index: Option<usize> = None;
+        let mut current_id: Option<String> = None;
+        let mut current_name: Option<String> = None;
+
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
@@ -1388,8 +1623,58 @@ impl AiBridge {
                             input_tokens += usage.input_tokens.unwrap_or(0);
                             output_tokens += usage.output_tokens.unwrap_or(0);
                         }
-                        if let Some(text_delta) = json.delta.and_then(|d| d.text) {
-                            let _ = tx.send(text_delta).await;
+
+                        match json.response_type.as_str() {
+                            "content_block_start" => {
+                                if let Some(block) = &json.content_block {
+                                    if block.block_type.as_deref() == Some("tool_use") {
+                                        saw_tool_call = true;
+                                        current_index = json.index;
+                                        current_id = block.id.clone();
+                                        current_name = block.name.clone();
+                                        partial_json.clear();
+                                        if let Some(input) = &block.input {
+                                            if !input.is_null() {
+                                                partial_json.push(input.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "content_block_delta" => {
+                                if let Some(delta) = &json.delta {
+                                    if delta.delta_type.as_deref() == Some("input_json_delta") {
+                                        if let Some(fragment) = &delta.partial_json {
+                                            partial_json.push(fragment.clone());
+                                        }
+                                    } else if let Some(text_delta) = &delta.text {
+                                        let _ = tx
+                                            .send(AgentStreamEvent::Text(text_delta.clone()))
+                                            .await;
+                                    }
+                                }
+                            }
+                            "content_block_stop" => {
+                                if saw_tool_call && current_index == json.index {
+                                    let _ = tx
+                                        .send(AgentStreamEvent::ToolCall {
+                                            index: json.index.unwrap_or(0),
+                                            id: current_id.clone(),
+                                            name: current_name.clone(),
+                                            args_fragment: partial_json.concat(),
+                                        })
+                                        .await;
+                                    current_index = None;
+                                }
+                            }
+                            "message_delta" => {
+                                if let Some(delta) = &json.delta {
+                                    if delta.stop_reason.as_deref() == Some("tool_use") {
+                                        stop_reason_tool_use = true;
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -1400,18 +1685,23 @@ impl AiBridge {
             observability.record_tokens(input_tokens + output_tokens);
         }
 
+        let _ = tx
+            .send(AgentStreamEvent::Finish {
+                tool_calls: saw_tool_call || stop_reason_tool_use,
+            })
+            .await;
         Ok(())
     }
 
-    async fn stream_local_internal(
+    async fn stream_local_agent(
         client: reqwest::Client,
         llama_server: Arc<tokio::sync::Mutex<Option<LlamaServerHandle>>>,
-        messages: Vec<ChatMessage>,
+        native_messages: Vec<serde_json::Value>,
         model: &str,
         api_url: Option<&str>,
         temperature: f64,
-        _max_tokens: u32,
-        tx: tokio::sync::mpsc::Sender<String>,
+        tools: Option<Vec<serde_json::Value>>,
+        tx: tokio::sync::mpsc::Sender<AgentStreamEvent>,
         observability: Arc<Observability>,
         telemetry: Arc<Mutex<ModelTelemetry>>,
     ) -> Result<(), WeaveError> {
@@ -1507,14 +1797,15 @@ impl AiBridge {
             }
             drop(server_guard);
 
-            let result = Self::stream_openai_internal(
+            let result = Self::stream_openai_agent(
                 client,
-                messages,
+                native_messages,
                 model,
                 Some("dummy_key".to_string()),
                 Some("http://localhost:8080/v1/chat/completions"),
                 temperature,
                 0, // No token limit for local models
+                tools,
                 tx,
                 observability,
             )
@@ -1534,16 +1825,9 @@ impl AiBridge {
 
         let url = api_url.unwrap_or("http://localhost:11434/api/chat");
 
-        let ollama_messages: Vec<OllamaMessage> = messages
-            .iter()
-            .map(|m| OllamaMessage {
-                role: match m.role {
-                    ChatRole::User => "user".to_string(),
-                    ChatRole::Assistant => "assistant".to_string(),
-                    ChatRole::System => "system".to_string(),
-                },
-                content: m.content.clone(),
-            })
+        let ollama_messages: Vec<OllamaMessage> = native_messages
+            .into_iter()
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
             .collect();
 
         let request = OllamaRequest {
@@ -1551,6 +1835,7 @@ impl AiBridge {
             messages: ollama_messages,
             stream: true,
             options: OllamaOptions { temperature },
+            tools,
         };
 
         let response = client
@@ -1572,6 +1857,7 @@ impl AiBridge {
         let mut final_prompt_eval_count: Option<u64> = None;
         let mut final_eval_count: Option<u64> = None;
         let mut final_eval_duration: Option<u64> = None;
+        let mut saw_tool_call = false;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             buffer.extend_from_slice(&chunk);
@@ -1588,13 +1874,27 @@ impl AiBridge {
                 if let Ok(json) = serde_json::from_str::<OllamaStreamResponse>(line) {
                     if !json.done {
                         if let Some(content) = json.message.content {
-                            let _ = tx.send(content).await;
+                            let _ = tx.send(AgentStreamEvent::Text(content)).await;
                         }
                     } else {
-                        // The final chunk carries the generation statistics.
+                        // The final chunk carries the generation statistics and
+                        // any tool calls the model made.
                         final_prompt_eval_count = json.prompt_eval_count;
                         final_eval_count = json.eval_count;
                         final_eval_duration = json.eval_duration;
+                        if let Some(tool_calls) = &json.message.tool_calls {
+                            for (index, tc) in tool_calls.iter().enumerate() {
+                                saw_tool_call = true;
+                                let _ = tx
+                                    .send(AgentStreamEvent::ToolCall {
+                                        index,
+                                        id: Some(format!("ollama_call_{}", index)),
+                                        name: Some(tc.function.name.clone()),
+                                        args_fragment: tc.function.arguments.to_string(),
+                                    })
+                                    .await;
+                            }
+                        }
                     }
                 }
             }
@@ -1613,131 +1913,7 @@ impl AiBridge {
             }
         }
 
-        Ok(())
-    }
-
-    async fn stream_kimi_internal(
-        client: reqwest::Client,
-        messages: Vec<ChatMessage>,
-        model: &str,
-        api_key: Option<String>,
-        api_url: Option<&str>,
-        temperature: f64,
-        max_tokens: u32,
-        tx: tokio::sync::mpsc::Sender<String>,
-        observability: Arc<Observability>,
-    ) -> Result<(), WeaveError> {
-        let api_key = api_key.ok_or_else(|| WeaveError::ApiKeyNotConfigured("Kimi".to_string()))?;
-        let mut url = api_url
-            .unwrap_or("https://api.moonshot.cn/v1/chat/completions")
-            .to_string();
-        if !url.ends_with("/chat/completions") {
-            url = format!("{}/chat/completions", url.trim_end_matches('/'));
-        }
-
-        let kimi_messages: Vec<OpenAiMessage> = messages
-            .iter()
-            .map(|m| {
-                let content = if let Some(images) = &m.images {
-                    let mut content_arr = vec![serde_json::json!({
-                        "type": "text",
-                        "text": m.content
-                    })];
-                    for img in images {
-                        content_arr.push(serde_json::json!({
-                            "type": "image_url",
-                            "image_url": {
-                                "url": img
-                            }
-                        }));
-                    }
-                    serde_json::Value::Array(content_arr)
-                } else {
-                    serde_json::Value::String(m.content.clone())
-                };
-
-                OpenAiMessage {
-                    role: match m.role {
-                        ChatRole::User => "user".to_string(),
-                        ChatRole::Assistant => "assistant".to_string(),
-                        ChatRole::System => "system".to_string(),
-                    },
-                    content,
-                }
-            })
-            .collect();
-
-        let request = OpenAiRequest {
-            model: model.to_string(),
-            messages: kimi_messages,
-            temperature,
-            max_tokens: if max_tokens == 0 {
-                None
-            } else {
-                Some(max_tokens)
-            },
-            frequency_penalty: None,
-            presence_penalty: None,
-            stream: true,
-        };
-
-        let response = client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(WeaveError::AiApiError(format!(
-                "Kimi streaming error: {}",
-                error_text
-            )));
-        }
-
-        let mut stream = response.bytes_stream();
-        use futures::StreamExt;
-
-        let mut buffer = Vec::new();
-        let mut last_usage: Option<OpenAiUsage> = None;
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result?;
-            buffer.extend_from_slice(&chunk);
-
-            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
-                let text = String::from_utf8_lossy(&line_bytes);
-                let line = text.trim();
-
-                if line.is_empty() || line == "data: [DONE]" {
-                    continue;
-                }
-
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(json) = serde_json::from_str::<OpenAiStreamResponse>(data) {
-                        if let Some(usage) = json.usage {
-                            last_usage = Some(usage);
-                        }
-                        if let Some(content) =
-                            json.choices.get(0).and_then(|c| c.delta.content.clone())
-                        {
-                            let _ = tx.send(content).await;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Record usage when the stream exposes it (best-effort).
-        if let Some(usage) = last_usage {
-            let total = usage.total();
-            if total > 0 {
-                observability.record_tokens(total);
-            }
-        }
-
+        let _ = tx.send(AgentStreamEvent::Finish { tool_calls: saw_tool_call }).await;
         Ok(())
     }
 

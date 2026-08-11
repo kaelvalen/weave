@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useChatStore } from '@/stores/useChatStore';
+import type { ToolCallDetected } from '@/types/chat';
 
 interface StreamChunk {
   chunk: string;
@@ -26,7 +27,7 @@ export function useChatStream() {
 
     const setupListener = async () => {
       try {
-        const unlisten = await listen<StreamChunk>('chat-stream-chunk', (event) => {
+        const unlistenChunks = await listen<StreamChunk>('chat-stream-chunk', (event) => {
           if (!mounted) return;
           const { chunk, message_id, done } = event.payload;
 
@@ -36,11 +37,25 @@ export function useChatStream() {
           }
           if (done) {
             flush();
-            useChatStore.getState().finalizeMessage(message_id);
+            useChatStore.getState().finalizeMessage();
           }
         });
 
-        unlistenRef.current = unlisten;
+        // Backend agent-loop tool-call lifecycle (native tool-calling).
+        // The backend owns execution + the approval gate; the store only
+        // mirrors events for rendering.
+        const unlistenTools = await listen<ToolCallDetected>(
+          'chat-tool-call-detected',
+          (event) => {
+            if (!mounted) return;
+            useChatStore.getState().handleToolCallEvent(event.payload);
+          }
+        );
+
+        unlistenRef.current = () => {
+          unlistenChunks();
+          unlistenTools();
+        };
 
         // Flush buffer every 35ms (~30fps) for silky smooth typing animations
         flushInterval = setInterval(flush, 35);

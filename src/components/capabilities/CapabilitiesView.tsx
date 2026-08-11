@@ -18,7 +18,7 @@ import { Boxes, Search, ShieldAlert, X } from 'lucide-react';
 interface CapabilityRow {
   name: string;
   description: string;
-  schema: string | undefined;
+  schema: unknown;
   plugin: Plugin;
 }
 
@@ -35,14 +35,10 @@ function ReliabilityLine({ metrics }: { metrics: ToolMetrics | undefined }) {
   );
 }
 
-function SchemaBlock({ label, schema }: { label: string; schema: string | undefined }) {
+function SchemaBlock({ label, schema }: { label: string; schema: unknown }) {
   const pretty = useMemo(() => {
-    if (!schema) return null;
-    try {
-      return JSON.stringify(JSON.parse(schema), null, 2);
-    } catch {
-      return schema;
-    }
+    if (schema === undefined || schema === null) return null;
+    return JSON.stringify(schema, null, 2);
   }, [schema]);
 
   return (

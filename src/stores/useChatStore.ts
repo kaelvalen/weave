@@ -2,12 +2,10 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import type { ChatMessage } from '@/types/chat';
+import type { ChatMessage, PluginCall, ToolCallDetected } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
 import { useAppStore } from './useAppStore';
 import { extractError } from '@/lib/errors';
-import { requiresApproval } from '@/lib/capabilities';
-import { useApprovalModeStore } from './useApprovalModeStore';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -25,8 +23,10 @@ interface ChatState {
   regenerateResponse: (messageId: string) => Promise<void>;
   stopStreaming: () => void;
   appendChunk: (chunk: string, messageId: string) => void;
-  finalizeMessage: (messageId: string) => void;
+  finalizeMessage: () => void;
   executeToolCall: (messageId: string, capName: string, isApproved: boolean) => Promise<void>;
+  /** Backend-driven tool-call lifecycle events (chat-tool-call-detected). */
+  handleToolCallEvent: (payload: ToolCallDetected) => void;
   clearChat: () => void;
   setModel: (model: string, provider?: string) => Promise<void>;
   setError: (error: string | null) => void;
@@ -54,216 +54,10 @@ const getUiContext = () => {
   return uiContext;
 };
 
-interface ParsedToolCall {
-  capName: string;
-  params: Record<string, unknown>;
-  raw: string;
-}
-
-interface ToolParseFailure {
-  raw: string;
-  reason: string;
-}
-
-/** Find JSON objects by matching balanced braces so we don't greedily
- *  swallow unrelated text. Handles multi-line JSON and escaped quotes.
- *  Only used to extract the parameter payload of explicit `<call>` tags. */
-function findBalancedJson(content: string): string[] {
-  const results: string[] = [];
-  for (let i = 0; i < content.length; i++) {
-    if (content[i] !== '{') continue;
-
-    let depth = 0;
-    let inString = false;
-    let escape = false;
-    let j = i;
-
-    for (; j < content.length; j++) {
-      const c = content[j];
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (c === '\\') {
-        escape = true;
-        continue;
-      }
-      if (c === '"') {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-
-      if (c === '{') depth++;
-      else if (c === '}') {
-        depth--;
-        if (depth === 0) {
-          results.push(content.slice(i, j + 1));
-          i = j;
-          break;
-        }
-      }
-    }
-  }
-  return results;
-}
-
-/** Parse the parameter payload for a tool call, tolerating fenced code blocks and unclosed tags. */
-function parseToolParams(
-  paramsStr: string,
-  capName: string,
-  isStreaming = false
-): Record<string, unknown> | null {
-  try {
-    let clean = (paramsStr || '{}').trim();
-    if (clean.startsWith('```json')) {
-      clean = clean
-        .replace(/^```json\s*/, '')
-        .replace(/\s*```$/, '')
-        .trim();
-    } else if (clean.startsWith('```')) {
-      clean = clean
-        .replace(/^```\s*/, '')
-        .replace(/\s*```$/, '')
-        .trim();
-    }
-    if (!clean) return {};
-    try {
-      return JSON.parse(clean);
-    } catch {
-      // Fallback: if JSON.parse fails, find balanced JSON
-      const balanced = findBalancedJson(clean);
-      if (balanced.length > 0) {
-        return JSON.parse(balanced[0]);
-      }
-
-      // If streaming, attempt partial repair
-      if (isStreaming) {
-        const completions = ['"', '"}', '}', '"]}', '"}]}', '}}'];
-        for (const end of completions) {
-          try {
-            return JSON.parse(clean + end);
-          } catch {
-            // continue
-          }
-        }
-        const obj: Record<string, unknown> = {};
-        const kvRegex = /"([^"]+)"\s*:\s*(?:"([^"]*)"|(\d+)|(true|false)|null)/g;
-        let match: RegExpExecArray | null;
-        while ((match = kvRegex.exec(clean)) !== null) {
-          const key = match[1];
-          if (match[2] !== undefined) obj[key] = match[2];
-          else if (match[3] !== undefined) obj[key] = Number(match[3]);
-          else if (match[4] !== undefined) obj[key] = match[4] === 'true';
-        }
-        return obj;
-      }
-
-      throw new Error('No balanced JSON found');
-    }
-  } catch (e) {
-    if (!isStreaming) {
-      console.warn(`Failed to parse tool params for ${capName}:`, e, paramsStr);
-    }
-    return isStreaming ? {} : null;
-  }
-}
-
-/** Extract tool calls from an assistant message.
- *  Supports `<call plugin="...">...</call>` (with or without a closing tag).
- *  Malformed calls are returned as failures so callers can log them.
- *
- *  Deliberately NO raw-JSON fallback: scanning the whole message for JSON
- *  objects with `path`/`url` keys lets prompt-injected content (fetched web
- *  pages, file contents echoed by the model, docs) trigger tool calls by
- *  accident. The XML `<call>` tag is the only accepted intent marker.
- */
-function parseToolCalls(
-  content: string,
-  isStreaming = false
-): {
-  calls: ParsedToolCall[];
-  failures: ToolParseFailure[];
-} {
-  const calls: ParsedToolCall[] = [];
-  const failures: ToolParseFailure[] = [];
-
-  // Parse XML-style <call plugin="...">...</call> tags. Also tolerates a missing
-  // closing tag by stopping at the next opening tag or end of string, and allows unquoted attributes.
-  const openRegex = /<\s*call\s+plugin\s*=\s*(?:["']([^"']+)["']|([^\s>]+))[^>]*>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = openRegex.exec(content)) !== null) {
-    const tagStart = match.index;
-    const tagEnd = match.index + match[0].length;
-    const capName = match[1] || match[2];
-    const rest = content.slice(tagEnd);
-
-    const closeIdx = rest.search(/<\/\s*call\s*>/i);
-    const nextOpenIdx = rest.search(/<\s*call\s+plugin\s*=/i);
-
-    let endIdx: number;
-    let rawEnd: number;
-
-    if (closeIdx !== -1 && (nextOpenIdx === -1 || closeIdx < nextOpenIdx)) {
-      const matchClose = rest.match(/<\/\s*call\s*>/i);
-      const closeTagLen = matchClose ? matchClose[0].length : 7;
-      endIdx = closeIdx;
-      rawEnd = tagEnd + closeIdx + closeTagLen;
-    } else if (nextOpenIdx !== -1) {
-      endIdx = nextOpenIdx;
-      rawEnd = tagEnd + nextOpenIdx;
-    } else {
-      endIdx = rest.length;
-      rawEnd = tagEnd + rest.length;
-    }
-
-    const paramsStr = rest.slice(0, endIdx);
-    const raw = content.slice(tagStart, rawEnd);
-    const params = parseToolParams(paramsStr, capName, isStreaming);
-
-    if (params === null) {
-      failures.push({ raw, reason: `Failed to parse parameters for ${capName}` });
-    } else {
-      calls.push({ capName, params, raw });
-    }
-
-    openRegex.lastIndex = rawEnd;
-  }
-
-  return { calls, failures };
-}
-
 function hydrateMessageMetadata(messages: ChatMessage[]): ChatMessage[] {
-  if (!messages) return [];
-  return messages.map((msg) => {
-    if (msg.role === 'assistant' && msg.content && msg.content.includes('<call')) {
-      const parsed = parseToolCalls(msg.content);
-      if (parsed.calls.length > 0) {
-        const existingCalls = msg.metadata?.plugin_calls || [];
-        const reconstructed = parsed.calls.map((c) => {
-          const matched = existingCalls.find((ec) => ec.capability === c.capName);
-          return (
-            matched || {
-              plugin_id: c.capName,
-              capability: c.capName,
-              params: c.params,
-              status: 'success' as const,
-              result: c.params,
-            }
-          );
-        });
-        return {
-          ...msg,
-          metadata: {
-            ...msg.metadata,
-            plugin_calls: reconstructed,
-          },
-        };
-      }
-    }
-    return msg;
-  });
+  // Tool calls are now native and persisted as metadata by the backend —
+  // nothing to reconstruct from free text.
+  return messages || [];
 }
 
 export const useChatStore = create<ChatState>()(
@@ -562,55 +356,21 @@ export const useChatStore = create<ChatState>()(
 
     appendChunk: (chunk: string, messageId: string) => {
       set((state) => {
-        let targetMsg = state.messages.find((m) => m.id === messageId);
+        const targetMsg = state.messages.find((m) => m.id === messageId);
         if (targetMsg) {
           targetMsg.content += chunk;
         } else {
-          targetMsg = {
+          state.messages.push({
             id: messageId,
             role: 'assistant',
             content: chunk,
             timestamp: Date.now(),
-          };
-          state.messages.push(targetMsg);
-        }
-
-        // Real-time instant tool call extraction during streaming
-        if (targetMsg.role === 'assistant' && targetMsg.content.includes('<call')) {
-          const { calls } = parseToolCalls(targetMsg.content, true);
-          if (calls.length > 0) {
-            if (!targetMsg.metadata) targetMsg.metadata = { plugin_calls: [] };
-            const existingCalls = targetMsg.metadata.plugin_calls || [];
-            const pluginStore = usePluginStore.getState();
-
-            const updatedCalls = calls.map((c) => {
-              const pluginId = pluginStore.getPluginIdForCapability(c.capName) || c.capName;
-              const matched = existingCalls.find((ec) => ec.capability === c.capName);
-              return (
-                matched || {
-                  plugin_id: pluginId,
-                  capability: c.capName,
-                  params: c.params,
-                  status: 'pending' as const,
-                }
-              );
-            });
-
-            // Keep parameters updated live as they stream in
-            for (const c of calls) {
-              const matched = updatedCalls.find((ec) => ec.capability === c.capName);
-              if (matched && Object.keys(c.params).length > 0) {
-                matched.params = { ...matched.params, ...c.params };
-              }
-            }
-
-            targetMsg.metadata.plugin_calls = updatedCalls;
-          }
+          });
         }
       });
     },
 
-    finalizeMessage: async (messageId: string) => {
+    finalizeMessage: async () => {
       const saveSession = () => {
         const store = get();
         if (store.messages.length > 0) {
@@ -623,416 +383,79 @@ export const useChatStore = create<ChatState>()(
         }
       };
 
-      // AI Function Calling Interception
-      const msg = get().messages.find((m) => m.id === messageId);
-      if (!msg || msg.role !== 'assistant') {
-        set((state) => {
-          state.isStreaming = false;
-        });
-        saveSession();
-        return;
-      }
-
-      const { calls, failures } = parseToolCalls(msg.content);
-
-      // Keep a log of raw text that failed to parse for debugging.
-      for (const failure of failures) {
-        console.warn('Malformed tool call skipped:', failure.reason, failure.raw);
-        set((state) => {
-          state.messages.push({
-            id: generateId(),
-            role: 'system',
-            content: `Malformed tool call skipped: ${failure.reason}`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true },
-          });
-        });
-      }
-
-      if (calls.length === 0) {
-        // No tool call, just stop streaming and save the final message
-        set((state) => {
-          state.isStreaming = false;
-        });
-        saveSession();
-        return;
-      }
-
-      const pluginStore = usePluginStore.getState();
-      const validCalls: {
-        capName: string;
-        params: Record<string, unknown>;
-        raw: string;
-        pluginId: string;
-      }[] = [];
-
-      for (const call of calls) {
-        const pluginId = pluginStore.getPluginIdForCapability(call.capName);
-        if (!pluginId) {
-          toast.error(`No plugin found providing capability: ${call.capName}`);
-          set((state) => {
-            state.messages.push({
-              id: generateId(),
-              role: 'system',
-              content: `Tool ${call.capName} not found.`,
-              timestamp: Date.now(),
-              metadata: { plugin_calls: [], isHidden: true },
-            });
-          });
-        } else {
-          validCalls.push({ ...call, pluginId });
-        }
-      }
-
-      if (validCalls.length === 0) {
-        set((state) => {
-          state.isStreaming = false;
-        });
-        get().sendMessage(
-          `System error: Requested tools are not available. Please tell the user you cannot perform this action.`
-        );
-        saveSession();
-        return;
-      }
-
-      // Remove all matched tool calls from the assistant's message so they don't show in UI as raw text
+      // Phase 2: the backend agent loop owns the turn end-to-end (native
+      // tool-calling, approval gate, execution, completion rule). The
+      // frontend only stops streaming and persists the session here.
       set((state) => {
-        const assistantMsg = state.messages.find((m) => m.id === messageId);
-        if (assistantMsg) {
-          for (const call of validCalls) {
-            assistantMsg.content = assistantMsg.content.replace(call.raw, '').trim();
-          }
-        }
+        state.isStreaming = false;
       });
-
-      // File/system-modifying capabilities AND sensitive read/network
-      // capabilities (file.read, web.fetch, db.query, ...) require explicit
-      // user approval before running. Sensitive reads are gated because a
-      // prompt-injected call could otherwise ship local files or internal
-      // endpoints to the cloud model without the user noticing.
-      // In `accept-edits` mode the user has pre-approved these calls for the
-      // whole session, so we skip the per-call prompt.
-      const hasSensitiveOrDestructive = validCalls.some((c) => requiresApproval(c.capName));
-      const approvalMode = useApprovalModeStore.getState().mode;
-      const needsApproval = hasSensitiveOrDestructive && approvalMode === 'ask';
-
-      // Attach tool calls to assistant message
-      set((state) => {
-        const assistantMsg = state.messages.find((m) => m.id === messageId);
-        if (assistantMsg) {
-          if (!assistantMsg.metadata) assistantMsg.metadata = { plugin_calls: [] };
-          for (const call of validCalls) {
-            assistantMsg.metadata.plugin_calls.push({
-              plugin_id: call.pluginId,
-              capability: call.capName,
-              params: call.params,
-              status: needsApproval ? 'pending_approval' : 'pending',
-            });
-          }
-        }
-      });
-
       saveSession();
+    },
 
-      // Record the execution plan so the runtime emits a `plan_started` event.
-      // goal_id = this assistant message id — the same traceId passed to
-      // plugin_execute below, so plan/step runtime events join under one goal.
-      // Fire-and-forget: must never break or delay tool execution.
-      try {
-        const history = get().messages;
-        const msgIndex = history.findIndex((m) => m.id === messageId);
-        let goalText = '';
-        for (let i = msgIndex - 1; i >= 0; i--) {
-          if (history[i].role === 'user' && !history[i].metadata?.isHidden) {
-            goalText = history[i].content;
-            break;
-          }
+    /** Backend-driven tool-call lifecycle (chat-tool-call-detected). */
+    handleToolCallEvent: (payload: ToolCallDetected) => {
+      const call: PluginCall = {
+        call_id: payload.call_id,
+        plugin_id: payload.plugin_id,
+        capability: payload.capability,
+        params: (payload.params as Record<string, unknown>) || {},
+        result: payload.result as PluginCall['result'],
+        status: payload.status as PluginCall['status'],
+      };
+      set((state) => {
+        const msg = state.messages.find((m) => m.id === payload.message_id);
+        if (!msg) return;
+        if (!msg.metadata) msg.metadata = { plugin_calls: [] };
+        const calls = msg.metadata.plugin_calls;
+        const existing = calls.find((c) => c.capability === payload.capability);
+        if (existing) {
+          existing.call_id = payload.call_id;
+          existing.params = { ...existing.params, ...call.params };
+          existing.status = call.status;
+          if (call.result !== undefined) existing.result = call.result;
+        } else {
+          calls.push(call);
         }
-        invoke('runtime_note_plan', {
-          traceId: messageId,
-          title: (goalText || 'Untitled goal').slice(0, 80),
-          steps: validCalls.map((c) => ({ plugin_id: c.pluginId, capability: c.capName })),
-        }).catch((err) => console.warn('runtime_note_plan failed:', err));
-      } catch (err) {
-        console.warn('runtime_note_plan failed:', err);
-      }
-
-      if (needsApproval) {
-        set((state) => {
-          state.isStreaming = false;
-        });
-        return; // Stop execution, wait for user to call executeToolCall
-      }
-
-      // Execute all valid tools in parallel (isStreaming stays true for continuous execution and continuation)
-      Promise.all(
-        validCalls.map(async (call) => {
-          try {
-            const res = await usePluginStore
-              .getState()
-              .executeCapability(call.pluginId, call.capName, call.params, messageId);
-            const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
-            set((state) => {
-              const assistantMsg = state.messages.find((m) => m.id === messageId);
-              if (assistantMsg && assistantMsg.metadata) {
-                const c = assistantMsg.metadata.plugin_calls.find(
-                  (pc) => pc.capability === call.capName && pc.status === 'pending'
-                );
-                if (c) {
-                  c.status = 'success';
-                  c.result =
-                    typeof res === 'object' ? (res as Record<string, unknown>) : { value: res };
-                }
-              }
-            });
-            if (
-              [
-                'coder.write_file',
-                'coder.apply_diff',
-                'coder.apply_patch',
-                'coder.revert_file',
-                'file.write',
-              ].includes(call.capName) &&
-              call.params &&
-              typeof call.params.path === 'string'
-            ) {
-              window.dispatchEvent(
-                new CustomEvent('weave:file-modified', {
-                  detail: { path: call.params.path, capability: call.capName },
-                })
-              );
-              window.dispatchEvent(new Event('weave-fs-refresh'));
-            }
-            return `Tool ${call.capName} returned:\n${resultStr}`;
-          } catch (err) {
-            const errorStr = extractError(err);
-            toast.error(`Tool ${call.capName} failed: ${errorStr}`);
-            set((state) => {
-              const assistantMsg = state.messages.find((m) => m.id === messageId);
-              if (assistantMsg && assistantMsg.metadata) {
-                const c = assistantMsg.metadata.plugin_calls.find(
-                  (pc) => pc.capability === call.capName && pc.status === 'pending'
-                );
-                if (c) {
-                  c.status = 'error';
-                  c.result = { error: errorStr };
-                }
-              }
-            });
-            return `Tool ${call.capName} failed with error:\n${errorStr}`;
-          }
-        })
-      ).then((results) => {
-        saveSession();
-
-        const combinedResults = results.join('\n\n');
-        const quietUserMsg: ChatMessage = {
-          id: generateId(),
-          role: 'user',
-          content: `${combinedResults}\n\nPlease continue your answer based on these results.`,
-          timestamp: Date.now(),
-          metadata: { plugin_calls: [], isHidden: true },
-        };
-
-        set((state) => {
-          state.messages.push(quietUserMsg);
-          state.isStreaming = true;
-        });
-
-        invoke('chat_send_message', {
-          message: quietUserMsg.content,
-          model: get().selectedModel,
-          provider: get().selectedProvider,
-          ui_context: getUiContext(),
-          images: [],
-        }).catch((err) => {
-          const errorStr = extractError(err);
-          toast.error(errorStr);
-          set((state) => {
-            state.isStreaming = false;
-            state.error = errorStr;
-          });
-        });
       });
     },
 
     executeToolCall: async (messageId: string, capName: string, isApproved: boolean) => {
+      // Phase 2: approval decisions are relayed to the backend agent loop,
+      // which halts its turn until every pending call is resolved.
       const state = get();
       const assistantMsg = state.messages.find((m) => m.id === messageId);
-      if (!assistantMsg || !assistantMsg.metadata) return;
-
-      const call = assistantMsg.metadata.plugin_calls.find((c) => c.capability === capName);
-      if (!call || call.status !== 'pending_approval') return;
-
-      const saveSession = () => {
-        const store = get();
-        if (store.messages.length > 0) {
-          invoke('chat_save_session', {
-            id: store.conversationId,
-            title: store.conversationTitle,
-            messages: store.messages,
-          }).catch((err) => toast.error(extractError(err)));
-        }
-      };
-
-      if (!isApproved) {
-        set((s) => {
-          const msg = s.messages.find((m) => m.id === messageId);
-          if (msg && msg.metadata) {
-            const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
-            if (c) {
-              c.status = 'error';
-              c.result = { error: 'User rejected the operation.' };
-            }
-          }
-        });
-        saveSession();
-
-        const quietUserMsg: ChatMessage = {
-          id: generateId(),
-          role: 'user',
-          content: `Tool ${capName} was rejected by the user. Please reconsider your approach or ask the user for clarification.`,
-          timestamp: Date.now(),
-          metadata: { plugin_calls: [], isHidden: true },
-        };
-        set((s) => {
-          s.messages.push(quietUserMsg);
-          s.isStreaming = true;
-        });
-
-        invoke('chat_send_message', {
-          message: quietUserMsg.content,
-          model: get().selectedModel,
-          provider: get().selectedProvider,
-          ui_context: getUiContext(),
-          images: [],
-        }).catch((err) => {
-          const errorStr = extractError(err);
-          toast.error(errorStr);
-          set((s) => {
-            s.isStreaming = false;
-            s.error = errorStr;
-          });
-        });
+      const call = assistantMsg?.metadata?.plugin_calls.find(
+        (c) => c.capability === capName && c.status === 'pending_approval'
+      );
+      if (!call?.call_id) {
+        toast.error(`No pending approval found for ${capName}`);
         return;
       }
 
-      // Approved! Set to pending and execute
+      // Optimistic status flip; the backend emits the definitive result via
+      // chat-tool-call-detected once the call executes.
       set((s) => {
         const msg = s.messages.find((m) => m.id === messageId);
-        if (msg && msg.metadata) {
-          const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
-          if (c) c.status = 'pending';
+        const c = msg?.metadata?.plugin_calls.find((pc) => pc.capability === capName);
+        if (c) {
+          c.status = isApproved ? 'pending' : 'error';
+          if (!isApproved) {
+            c.result = { error: 'User rejected the operation.' };
+          }
         }
       });
-      saveSession();
 
-      usePluginStore
-        .getState()
-        .executeCapability(call.plugin_id, capName, call.params, messageId)
-        .then((res) => {
-          const resultStr = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
-
-          set((s) => {
-            const msg = s.messages.find((m) => m.id === messageId);
-            if (msg && msg.metadata) {
-              const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
-              if (c) {
-                c.status = 'success';
-                c.result =
-                  typeof res === 'object' ? (res as Record<string, unknown>) : { value: res };
-              }
-            }
-          });
-          saveSession();
-          if (
-            [
-              'coder.write_file',
-              'coder.apply_diff',
-              'coder.apply_patch',
-              'coder.revert_file',
-              'file.write',
-            ].includes(capName) &&
-            call.params &&
-            typeof call.params.path === 'string'
-          ) {
-            window.dispatchEvent(
-              new CustomEvent('weave:file-modified', {
-                detail: { path: call.params.path, capability: capName },
-              })
-            );
-            window.dispatchEvent(new Event('weave-fs-refresh'));
-          }
-
-          const quietUserMsg: ChatMessage = {
-            id: generateId(),
-            role: 'user',
-            content: `Tool ${capName} returned:\n${resultStr}\n\nPlease continue your answer based on this result.`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true },
-          };
-          set((s) => {
-            s.messages.push(quietUserMsg);
-            s.isStreaming = true;
-          });
-
-          invoke('chat_send_message', {
-            message: quietUserMsg.content,
-            model: get().selectedModel,
-            provider: get().selectedProvider,
-            ui_context: getUiContext(),
-            images: [],
-          }).catch((err) => {
-            const errorStr = extractError(err);
-            toast.error(errorStr);
-            set((s) => {
-              s.isStreaming = false;
-              s.error = errorStr;
-            });
-          });
-        })
-        .catch((err) => {
-          const errorStr = extractError(err);
-          toast.error(errorStr);
-          set((s) => {
-            const msg = s.messages.find((m) => m.id === messageId);
-            if (msg && msg.metadata) {
-              const c = msg.metadata.plugin_calls.find((pc) => pc.capability === capName);
-              if (c) {
-                c.status = 'error';
-                c.result = { error: errorStr };
-              }
-            }
-          });
-          saveSession();
-
-          const quietUserMsg: ChatMessage = {
-            id: generateId(),
-            role: 'user',
-            content: `Tool ${capName} failed with error:\n${errorStr}\n\nPlease apologize and continue.`,
-            timestamp: Date.now(),
-            metadata: { plugin_calls: [], isHidden: true },
-          };
-          set((s) => {
-            s.messages.push(quietUserMsg);
-            s.isStreaming = true;
-          });
-
-          invoke('chat_send_message', {
-            message: quietUserMsg.content,
-            model: get().selectedModel,
-            provider: get().selectedProvider,
-            ui_context: getUiContext(),
-            images: [],
-          }).catch((err) => {
-            const errorStr = extractError(err);
-            toast.error(errorStr);
-            set((s) => {
-              s.isStreaming = false;
-              s.error = errorStr;
-            });
-          });
+      try {
+        await invoke('chat_approve_tool_call', { callId: call.call_id, approved: isApproved });
+      } catch (err) {
+        const errorStr = extractError(err);
+        toast.error(`Approval failed: ${errorStr}`);
+        set((s) => {
+          const msg = s.messages.find((m) => m.id === messageId);
+          const c = msg?.metadata?.plugin_calls.find((pc) => pc.capability === capName);
+          if (c) c.status = 'pending_approval';
         });
+      }
     },
 
     clearChat: async () => {

@@ -1,8 +1,10 @@
 /**
- * Capabilities that mutate files or system state and therefore require
- * explicit user approval before execution. This set is the single source of
- * truth for the approval gate in `useChatStore` and for the "requires
- * approval" badges in the Capabilities view.
+ * READ-ONLY MIRROR of the backend approval policy.
+ *
+ * The single source of truth is `src-tauri/src/utils/capability_policy.rs`
+ * (phase1-spine-spec.md §3): the backend agent loop makes the actual gating
+ * decision. This copy exists only for UI badges and the "requires approval"
+ * filter in CapabilitiesView — it must never gate execution.
  */
 export const DESTRUCTIVE_CAPS: ReadonlySet<string> = new Set([
   'file.write',

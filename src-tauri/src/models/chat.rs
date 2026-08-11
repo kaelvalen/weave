@@ -36,6 +36,9 @@ pub struct MessageMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginCall {
+    /// Provider-side tool-call id (backend agent loop pairs results by this).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
     pub plugin_id: String,
     pub capability: String,
     pub params: serde_json::Value,

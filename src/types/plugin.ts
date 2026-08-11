@@ -12,7 +12,8 @@ export interface Capabilities {
   read: string[];
   write: string[];
   provide: string[];
-  schemas: Record<string, string>;
+  /** JSON Schema document per capability (from backend Capabilities.schemas). */
+  schemas: Record<string, unknown>;
   descriptions: Record<string, string>;
 }
 
