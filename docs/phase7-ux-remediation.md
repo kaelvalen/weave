@@ -14,24 +14,9 @@ reviewable commits; each fix should carry a regression test where testable.
 | 4 | Plugin modal "Runtime" empty | `d662412` — wire contract: backend serializes `runtime_type` as `type` (`models/plugin.rs` `#[serde(rename = "type")]`); `types/plugin.ts` + `PluginCard.tsx:256` now read `runtime.type` |
 | 5 | Anthropic Model field without placeholder | `d662412` — `SettingsPanel.tsx` placeholder `claude-sonnet-4-20250514` |
 | 7 | Empty "Trace / No execution steps yet" box on plain-chat turns | `d662412` — `ChatMessage.tsx:487` wrapped in `hasPluginCalls \|\| hasRuntimeExecution` |
+| 9 | Approval mode lacks a security-adjacent visual distinction | `(this commit)` — amber active state + inline "gate off" note in `ChatCommandCenter.tsx`; ConfirmDialog before enabling Auto-Approve; persisted-mode startup reminder (`lib/approvalReminder.ts`, once-per-runtime, non-dismissable, "Switch to Ask" action) + vitest regression |
 
 ## Backlog (prioritized)
-
-### P1 — #9 Approval mode needs a security-adjacent visual distinction
-
-- **Bulgu:** "Ask | Auto-Approve" pill shows both options with identical visual
-  weight; Auto-Approve (which bypasses the Phase-1 approval gate) looks like a
-  normal default.
-- **Kanıt:** `src/components/chat/ChatCommandCenter.tsx:216-235` — both buttons
-  share the same class template; active state is `bg-surface-3
-  text-foreground font-semibold` for both, no destructive/amber treatment for
-  `accept-edits`. Persisted in `useApprovalModeStore.ts` (`persist`), so the
-  mode survives restarts without any reminder that the gate is off.
-- **Öneri:** when `accept-edits` is active, render the pill with an amber/red
-  tint + a short inline note ("approval gate bypassed — sensitive and
-  destructive calls run without confirmation"), mirroring the confirmation
-  language in `capability_policy.rs`. Add a small confirm before switching to
-  Auto-Approve. Regression test: vitest for the store + component state.
 
 ### P2 — #8 Files view breaks the single-nav pattern
 

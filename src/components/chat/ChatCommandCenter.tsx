@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Activity,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -77,6 +78,7 @@ export function ChatCommandCenter() {
   const setApprovalMode = useApprovalModeStore((s) => s.setMode);
 
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [confirmAutoApprove, setConfirmAutoApprove] = useState(false);
   const [isExecutionPanelOpen, setIsExecutionPanelOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -210,29 +212,43 @@ export function ChatCommandCenter() {
             </Button>
 
             {/* Approval Mode Switcher */}
-            <div className="flex items-center bg-surface-2 rounded-lg p-0.5 border border-border/40 font-mono">
-              <button
-                type="button"
-                onClick={() => setApprovalMode('ask')}
-                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                  approvalMode === 'ask'
-                    ? 'bg-surface-3 text-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Ask
-              </button>
-              <button
-                type="button"
-                onClick={() => setApprovalMode('accept-edits')}
-                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                  approvalMode === 'accept-edits'
-                    ? 'bg-surface-3 text-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Auto-Approve
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-surface-2 rounded-lg p-0.5 border border-border/40 font-mono">
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode('ask')}
+                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                    approvalMode === 'ask'
+                      ? 'bg-surface-3 text-foreground font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Ask
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (approvalMode === 'accept-edits') return;
+                    setConfirmAutoApprove(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                    approvalMode === 'accept-edits'
+                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Auto-Approve
+                </button>
+              </div>
+              {approvalMode === 'accept-edits' && (
+                <span
+                  className="flex items-center gap-1 text-[10px] font-mono text-amber-600 dark:text-amber-400 whitespace-nowrap"
+                  title="The approval gate is bypassed: sensitive reads, network requests, and destructive operations run without confirmation until you switch back to Ask."
+                >
+                  <ShieldAlert className="w-3 h-3" />
+                  gate off — runs without confirmation
+                </span>
+              )}
             </div>
 
             <Button
@@ -391,6 +407,17 @@ export function ChatCommandCenter() {
         destructive
         onConfirm={() => {
           if (sessionToDelete) deleteSession(sessionToDelete);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmAutoApprove}
+        onOpenChange={setConfirmAutoApprove}
+        title="Bypass the approval gate?"
+        description="In Auto-Approve mode, sensitive reads, network requests, and destructive operations run without confirmation. The mode persists across restarts — a startup notice will remind you each session. Switch back to Ask anytime."
+        confirmLabel="Enable Auto-Approve"
+        onConfirm={() => {
+          setApprovalMode('accept-edits');
         }}
       />
     </div>
