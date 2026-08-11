@@ -282,3 +282,77 @@ async fn shell_exec_rejected_never_runs() {
         "rejected command must never execute"
     );
 }
+
+// ---------------------------------------------------------------------------
+// note / memory / workflow — persist under ~/.weave; tests isolate HOME into
+// a temp dir. None are sensitive/destructive, so no approval is expected.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn storage_plugins_round_trip_with_isolated_home() {
+    let home = std::env::temp_dir().join(format!("weave_phase5_home_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&home).unwrap();
+    std::env::set_var("HOME", &home);
+
+    for (cap, args, needle, gated) in [
+        ("note.create", r#"{"title":"phase5 note","content":"hello"}"#, "success", false),
+        // memory.store and workflow.create mutate persistent state →
+        // destructive, gated.
+        ("memory.store", r#"{"key":"phase5_key","content":"phase5 value"}"#, "created", true),
+        ("workflow.create", r#"{"name":"phase5 workflow"}"#, "success", true),
+    ] {
+        let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
+        assert_eq!(saw_approval(&rt.events, cap), gated, "{} gating mismatch", cap);
+        assert!(
+            second_request_body(&rt).contains(needle),
+            "{} result should contain {}",
+            cap,
+            needle
+        );
+    }
+
+    // The isolated home must actually hold the persisted data.
+    assert!(
+        std::fs::read_dir(home.join(".weave").join("notes")).map(|mut d| d.next().is_some()).unwrap_or(false),
+        "note must be persisted under the isolated HOME"
+    );
+    assert!(
+        std::fs::read_to_string(home.join(".weave").join("memory.json"))
+            .map(|c| c.contains("phase5_key"))
+            .unwrap_or(false),
+        "memory must be persisted under the isolated HOME"
+    );
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+// ---------------------------------------------------------------------------
+// canvas_plugin / sys_plugin — no storage, no approval.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn canvas_and_sys_round_trip_with_gate() {
+    // canvas.add_node mutates the shared board → destructive, gated.
+    let rt = round_trip(
+        "canvas.add_node",
+        r#"{"type":"shapeNode","data":{"label":"n1"}}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "canvas.add_node"), "canvas.add_node is destructive");
+    assert!(second_request_body(&rt).contains("success"));
+
+    for (cap, args, needle) in [
+        ("sys.time", r#"{}"#, "iso_8601"),
+        ("sys.info", r#"{}"#, "hostname"),
+    ] {
+        let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
+        assert!(!saw_approval(&rt.events, cap), "{} must not require approval", cap);
+        assert!(
+            second_request_body(&rt).contains(needle),
+            "{} result should contain {}",
+            cap,
+            needle
+        );
+    }
+}
