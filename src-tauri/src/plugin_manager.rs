@@ -127,7 +127,7 @@ impl PluginManager {
             PluginBuilder::builtin("com.weave.builtin.shell", "Terminal & Shell")
                 .description("Execute shell commands with timeout and safety blocklist")
                 .category(PluginCategory::System)
-                .capability("shell.exec", r#"{"command":"...","cwd":null,"timeout":30}"#, "Run a shell command (sh -c). Has 30s default timeout and blocks dangerous commands")
+                .capability("shell.exec", r#"{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"},"timeout":{"type":"integer"}},"required":["command"]}"#, "Run a shell command (sh -c). Has 30s default timeout and blocks dangerous commands")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.web", "Web Fetcher")

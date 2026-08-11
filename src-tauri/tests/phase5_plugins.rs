@@ -239,3 +239,46 @@ async fn http_request_loopback_is_blocked_and_paired() {
         second
     );
 }
+
+// ---------------------------------------------------------------------------
+// shell_plugin — destructive; the approval gate MUST fire before execution
+// under the spine, and the command only runs after approval.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn shell_exec_gate_fires_before_enabling() {
+    let rt = round_trip(
+        "shell.exec",
+        r#"{"command":"echo weave-shell-ok"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(
+        saw_approval(&rt.events, "shell.exec"),
+        "shell.exec is destructive — the gate must fire before enabling"
+    );
+    let second = second_request_body(&rt);
+    assert!(
+        second.contains("weave-shell-ok"),
+        "approved shell command must execute and its output must be paired"
+    );
+}
+
+#[tokio::test]
+async fn shell_exec_rejected_never_runs() {
+    let rt = round_trip(
+        "shell.exec",
+        r#"{"command":"touch target/phase5_should_not_exist.txt"}"#,
+        ApprovalDecision::Rejected,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "shell.exec"));
+    assert!(
+        second_request_body(&rt).contains("User denied this action."),
+        "rejection must still pair a result"
+    );
+    assert!(
+        !std::path::Path::new("target/phase5_should_not_exist.txt").exists(),
+        "rejected command must never execute"
+    );
+}
