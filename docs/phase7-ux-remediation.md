@@ -15,6 +15,7 @@ reviewable commits; each fix should carry a regression test where testable.
 | 5 | Anthropic Model field without placeholder | `d662412` — `SettingsPanel.tsx` placeholder `claude-sonnet-4-20250514` |
 | 7 | Empty "Trace / No execution steps yet" box on plain-chat turns | `d662412` — `ChatMessage.tsx:487` wrapped in `hasPluginCalls \|\| hasRuntimeExecution` |
 | 9 | Approval mode lacks a security-adjacent visual distinction | `(this commit)` — amber active state + inline "gate off" note in `ChatCommandCenter.tsx`; ConfirmDialog before enabling Auto-Approve; persisted-mode startup reminder (`lib/approvalReminder.ts`, once-per-runtime, non-dismissable, "Switch to Ask" action) + vitest regression |
+| 10 | Theme delete sits flush next to Clone without confirmation | `(this commit)` — `SettingsPanel.tsx` delete now gated by ConfirmDialog ("Delete theme?" with active-theme fallback note), separated from "Clone to Custom" by a divider, with `aria-label`/`title`; store regression tests prove `deleteTheme` falls back to defaults when the active theme is removed |
 
 ## Backlog (prioritized)
 
@@ -29,17 +30,6 @@ reviewable commits; each fix should carry a regression test where testable.
 - **Öneri:** either label the rail (add tooltips + aria-labels at minimum,
   which are missing today) or fold explorer/git/search into the existing main
   navigation as tabs; decide in a design pass, not incrementally.
-
-### P2 — #10 Theme delete sits flush next to Clone without grouping
-
-- **Bulgu:** destructive filled delete button sits immediately beside "Clone to
-  Custom" with no gap or grouping; no confirmation dialog visible.
-- **Kanıt:** `src/components/settings/SettingsPanel.tsx:491-502` — outline
-  "Clone to Custom" followed directly by `variant="destructive"` icon button;
-  `deleteTheme(activeThemeId)` called with no confirm.
-- **Öneri:** group clone/delete with spacing (e.g. `gap-2` + divider) and wrap
-  delete in the existing `ConfirmDialog` pattern used by `FileManager`; only
-  destructive styling may remain after confirmation.
 
 ### P3 — #6 Files cursor/scroll mismatch (needs reproduction)
 

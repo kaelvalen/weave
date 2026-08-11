@@ -5,6 +5,7 @@ import type { AppConfig } from '@/types/app';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
@@ -22,6 +23,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 export function SettingsPanel() {
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [confirmThemeDelete, setConfirmThemeDelete] = useState(false);
   const { refreshConfig } = useAppStore();
   const {
     mode,
@@ -491,15 +493,29 @@ export function SettingsPanel() {
                         Clone to Custom
                       </Button>
                       {activeThemeId.startsWith('custom-') && (
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => deleteTheme(activeThemeId)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <>
+                          <span className="w-px self-stretch bg-border/60" aria-hidden="true" />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => setConfirmThemeDelete(true)}
+                            aria-label="Delete theme"
+                            title="Delete this custom theme"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
                       )}
                     </div>
+                    <ConfirmDialog
+                      open={confirmThemeDelete}
+                      onOpenChange={setConfirmThemeDelete}
+                      title="Delete theme?"
+                      description={`"${activeTheme.name}" will be permanently removed. The active theme falls back to a default.`}
+                      confirmLabel="Delete"
+                      destructive
+                      onConfirm={() => deleteTheme(activeThemeId)}
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10 border-t pt-8">
