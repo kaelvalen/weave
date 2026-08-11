@@ -202,6 +202,7 @@ export function SettingsPanel() {
                       <FieldLabel label="Model">
                         <Input
                           value={config.ai.anthropic.model}
+                          placeholder="claude-sonnet-4-20250514"
                           onChange={(e) =>
                             setConfig({
                               ...config,

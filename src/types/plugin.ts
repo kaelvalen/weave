@@ -18,7 +18,8 @@ export interface Capabilities {
 }
 
 export interface RuntimeConfig {
-  runtime_type: RuntimeType;
+  /** Serialized as `type` by the backend (`#[serde(rename = "type")]`). */
+  type: RuntimeType;
   entry: string;
   sandbox: SandboxLevel;
 }

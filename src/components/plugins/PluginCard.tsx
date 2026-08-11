@@ -253,7 +253,7 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2.5 rounded-md bg-muted/50 border">
                   <span className="text-muted-foreground block mb-1">Runtime</span>
-                  <code className="font-mono font-medium">{plugin.runtime.runtime_type}</code>
+                  <code className="font-mono font-medium">{plugin.runtime.type}</code>
                 </div>
                 <div className="p-2.5 rounded-md bg-muted/50 border">
                   <span className="text-muted-foreground block mb-1">Sandbox</span>

@@ -43,7 +43,11 @@ interface ChatMessageProps {
 }
 
 function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // ChatMessage timestamps are UNIX seconds; Date expects milliseconds.
+  return new Date(ts * 1000).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
@@ -478,10 +482,14 @@ export const ChatMessage = React.memo(function ChatMessage({
         </div>
       )}
 
-      {/* Execution section — live plan + step timeline sourced from runtime events */}
-      <div className="my-3">
-        <GoalTrace goalId={message.id} defaultOpen={isStreaming || !hasRuntimeExecution} />
-      </div>
+      {/* Execution section — live plan + step timeline sourced from runtime events.
+          Only rendered when the message actually executed tools; plain-chat
+          turns must not show an empty "No execution steps yet" trace box. */}
+      {(hasPluginCalls || hasRuntimeExecution) && (
+        <div className="my-3">
+          <GoalTrace goalId={message.id} defaultOpen={isStreaming} />
+        </div>
+      )}
 
       {/* Fallback: metadata-driven activity for history without runtime events */}
       {hasPluginCalls && !hasRuntimeExecution && (

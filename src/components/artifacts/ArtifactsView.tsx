@@ -90,7 +90,8 @@ function extractFromCalls(calls: PluginCall[], messageTs: number): ArtifactItem[
     const cap = call.capability;
     const params = (call.params || {}) as Record<string, unknown>;
     const result = (call.result || {}) as Record<string, unknown>;
-    const timestamp = new Date(messageTs).toISOString();
+    // ChatMessage timestamps are UNIX seconds; Date expects milliseconds.
+    const timestamp = new Date(messageTs * 1000).toISOString();
 
     if (cap.includes('note.create') || cap.includes('note.update') || cap.includes('note.get')) {
       const title = (params.title as string) || (result.title as string) || 'Note';

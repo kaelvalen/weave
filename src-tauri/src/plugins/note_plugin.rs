@@ -82,6 +82,25 @@ impl NotePlugin {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // Idempotency: an identical note (same title AND content) already
+        // existing means this create was requested twice (agent double
+        // invocation / retry) — return the existing note instead of
+        // duplicating it in the store.
+        if let Some(existing) = Self::load_all_notes()?
+            .into_iter()
+            .find(|n| n.title == title && n.content == content)
+        {
+            info!(
+                "note.create deduplicated to existing note: {} ({})",
+                existing.title, existing.id
+            );
+            return Ok(json!({
+                "note": Self::note_to_json(&existing),
+                "success": true,
+                "duplicate": true
+            }));
+        }
+
         let notes_dir = AppConfig::notes_dir()?;
         std::fs::create_dir_all(&notes_dir)?;
         let id = uuid::Uuid::new_v4().to_string();
@@ -255,5 +274,53 @@ impl NotePlugin {
             _ => b.updated_at.cmp(&a.updated_at),
         });
         Ok(notes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parking_lot::RwLock;
+    use std::sync::Arc;
+    use runtime_kernel::event_bus::EventBus;
+
+    fn test_ctx() -> runtime_kernel::execution_context::ExecutionContext {
+        runtime_kernel::execution_context::ExecutionContext::new(
+            "test".to_string(),
+            std::env::current_dir().unwrap(),
+            Arc::new(RwLock::new(json!({}))),
+            Arc::new(EventBus::new(16)),
+        )
+    }
+
+    /// UX-audit regression (finding #1): identical note.create invocations
+    /// (agent double-invocation / retry) must not duplicate notes.
+    #[test]
+    fn create_is_idempotent_for_identical_notes() {
+        let home = std::env::temp_dir().join(format!("weave_note_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        std::env::set_var("HOME", &home);
+        let ctx = test_ctx();
+
+        let params = json!({"title":"PyTorch Notes","content":"# PyTorch Basics","tags":[]});
+        let first = NotePlugin::execute("note.create", params.clone(), &ctx).unwrap();
+        let second = NotePlugin::execute("note.create", params.clone(), &ctx).unwrap();
+
+        assert_eq!(
+            first["note"]["id"], second["note"]["id"],
+            "identical note.create must return the existing note"
+        );
+        assert_eq!(second["duplicate"], true);
+
+        // Different content is a genuinely new note.
+        let third = NotePlugin::execute(
+            "note.create",
+            json!({"title":"PyTorch Notes","content":"# Different body","tags":[]}),
+            &ctx,
+        )
+        .unwrap();
+        assert_ne!(first["note"]["id"], third["note"]["id"]);
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

@@ -298,16 +298,23 @@ export function RuntimeView() {
   const activeLoaded = activeModelName
     ? modelStats?.loaded_models.find((lm) => lm.name === activeModelName)
     : undefined;
+  // The last-used model may be a cloud provider (telemetry records it for
+  // every request); only GGUF-matched names are provably local. The local
+  // server being down must not claim inference is "offline" while a remote
+  // model is clearly generating.
+  const activeModelIsLocal =
+    activeModelName != null && loadedContextLength(activeModelName) != null;
   const inferenceDetail = !modelStats
     ? 'probing…'
-    : !modelStats.ollama_running
-      ? 'offline — server not running'
-      : activeModelName
-        ? activeModelName +
-          (activeLoaded?.vram_bytes != null ? ` · VRAM ${formatVram(activeLoaded.vram_bytes)}` : '') +
-          (loadedContextLength(activeModelName) != null
-            ? ` · Ctx ${formatContextLength(loadedContextLength(activeModelName)!)}`
-            : '')
+    : activeModelName
+      ? activeModelName +
+        (activeLoaded?.vram_bytes != null ? ` · VRAM ${formatVram(activeLoaded.vram_bytes)}` : '') +
+        (loadedContextLength(activeModelName) != null
+          ? ` · Ctx ${formatContextLength(loadedContextLength(activeModelName)!)}`
+          : '') +
+        (modelStats.ollama_running || activeModelIsLocal ? '' : ' · remote')
+      : !modelStats.ollama_running
+        ? 'offline — server not running'
         : 'no model loaded';
 
   const toolFailures = observability
@@ -386,7 +393,7 @@ export function RuntimeView() {
             value={observability ? `${observability.total_planner_runs} runs` : undefined}
           />
           <ProcessRow
-            live={!!modelStats?.ollama_running && !!activeModelName}
+            live={!!activeModelName}
             name="Inference"
             detail={inferenceDetail}
             value={
@@ -419,7 +426,7 @@ export function RuntimeView() {
           />
           <ProcessRow
             live={!!serverStatus?.running}
-            name="Server"
+            name="Local Server"
             detail={
               serverStatus?.running
                 ? `${serverStatus.url}${serverStatus.pid ? ` · pid ${serverStatus.pid}` : ''}`
