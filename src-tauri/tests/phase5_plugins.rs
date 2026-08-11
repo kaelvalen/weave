@@ -116,3 +116,42 @@ async fn file_path_outside_workspace_is_denied_and_still_paired() {
         second
     );
 }
+
+// ---------------------------------------------------------------------------
+// git_plugin — hardened in Phase 1 (fs_security), migrated schemas here.
+// reads are sensitive → approval gate must fire.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn git_status_and_log_round_trip_with_gate() {
+    for (cap, args, needle) in [
+        ("git.status", r#"{"directory":"."}"#, "is_repo"),
+        // "limit" only appears in git.log's result payload ({"log":..,"limit":5,..}).
+        ("git.log", r#"{"directory":"."}"#, "limit"),
+    ] {
+        let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
+        assert!(saw_approval(&rt.events, cap), "{} is sensitive", cap);
+        assert!(
+            second_request_body(&rt).contains(needle),
+            "{} result should contain {}",
+            cap,
+            needle
+        );
+    }
+}
+
+#[tokio::test]
+async fn git_directory_outside_workspace_is_denied_and_still_paired() {
+    let rt = round_trip(
+        "git.status",
+        r#"{"directory":"/tmp"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    let second = second_request_body(&rt);
+    assert!(
+        second.contains("[Error]") && second.contains("workspace"),
+        "git confinement must reject /tmp (got: {})",
+        second
+    );
+}
