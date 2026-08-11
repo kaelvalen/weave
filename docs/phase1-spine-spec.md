@@ -1,6 +1,6 @@
 # Weave Spine Spec (Phase 1)
 
-Status: **REVIEWED — amendments folded, decisions locked. Phase 2 not started; awaits explicit kickoff approval.**
+Status: **APPROVED (2026-08-11) — Phase 2 may begin.**
 Supersedes: `src/stores/useChatStore.ts` tool-call parsing (XML/JSON regex), the current
 `ai_bridge.rs` request shape, and the current `PluginBuilder::capability()` schema
 format.
@@ -111,6 +111,12 @@ Backend owns turn state end-to-end. Sequence:
    Anthropic) — not as a synthetic hidden user message re-injected into `sendMessage`,
    which is the current mechanism (`quietUserMsg` in `useChatStore.ts`) and works only
    because there is no native format to use yet.
+   **Completion rule (mandatory):** every `call_id` MUST receive a matching result —
+   success → the real tool result; plugin execution error → `tool_result` with
+   `is_error: true` + error text (Anthropic) / `tool`-role message containing the error
+   text (OpenAI); user rejection → fixed text such as "User denied this action". No
+   `tool_use`/`tool_call` ID may be left without a result: both APIs reject the next
+   request with 400 if any assistant tool-call ID lacks a corresponding result block.
 6. Backend automatically continues the conversation with the provider using the updated
    history, looping back to step 2, until a turn produces no further tool calls.
 
@@ -197,6 +203,7 @@ Amendments folded into the draft:
 | 3 | Delta accumulation keyed by `index` / `content_block_index`; `call_id` from first delta | §2 |
 | 4 | Mixed-turn behavior: safe calls run first, turn halts only for pending approvals, resumes when all resolve | §3 step 4 |
 | 5 | Backend populates `MessageMetadata.plugin_calls`; `chat-tool-call-detected` events carry it; `hydrateMessageMetadata` removed | §3 step 2 |
+| 6 | Tool-result completion rule: every `call_id` must get a result (success / `is_error`+text / "User denied this action" on rejection); missing results cause a 400 on the next provider request — the loop must never leave an ID unpaired | §3 step 5 |
 
 Locked decisions:
 
