@@ -199,3 +199,43 @@ async fn db_execute_and_tables_round_trip() {
         "db.tables must list the created table"
     );
 }
+
+// ---------------------------------------------------------------------------
+// http_plugin / web_plugin — hardened in Phase 1 (ssrf.rs), migrated schemas
+// here. The SSRF guard rejects loopback targets; that rejection must flow
+// through the spine as a paired error result (never a dangling call_id).
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn web_fetch_loopback_is_blocked_and_paired() {
+    let rt = round_trip(
+        "web.fetch",
+        r#"{"url":"http://127.0.0.1:9/secret"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "web.fetch"), "web.fetch is sensitive");
+    let second = second_request_body(&rt);
+    assert!(
+        second.contains("[Error]") && second.contains("private or reserved"),
+        "SSRF guard must reject loopback fetch (got: {})",
+        second
+    );
+}
+
+#[tokio::test]
+async fn http_request_loopback_is_blocked_and_paired() {
+    let rt = round_trip(
+        "http.request",
+        r#"{"url":"http://127.0.0.1:9/api","method":"GET"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "http.request"), "http.request is sensitive");
+    let second = second_request_body(&rt);
+    assert!(
+        second.contains("[Error]") && second.contains("private or reserved"),
+        "SSRF guard must reject loopback request (got: {})",
+        second
+    );
+}

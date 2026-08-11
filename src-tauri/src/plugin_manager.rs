@@ -134,7 +134,7 @@ impl PluginManager {
                 .description("Fetch web pages and extract text content")
                 .category(PluginCategory::System)
                 .read_access(&["http://*", "https://*"])
-                .capability("web.fetch", r#"{"url":"..."}"#, "Fetch a URL and return content (HTML is auto-stripped to text)")
+                .capability("web.fetch", r#"{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}"#, "Fetch a URL and return content (HTML is auto-stripped to text)")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.db", "Database (SQLite)")
@@ -166,7 +166,7 @@ impl PluginManager {
                 .category(PluginCategory::Development)
                 .read_access(&["http://*", "https://*"])
                 .write_access(&["http://*", "https://*"])
-                .capability("http.request", r#"{"url":"...","method":"GET","headers":{},"body":null,"timeout":30}"#, "Send an HTTP request and return status, headers, and body")
+                .capability("http.request", r#"{"type":"object","properties":{"url":{"type":"string"},"method":{"type":"string"},"headers":{"type":"object"},"body":{"type":"string"},"timeout":{"type":"integer"}},"required":["url"]}"#, "Send an HTTP request and return status, headers, and body")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.memory", "AI Memory")
