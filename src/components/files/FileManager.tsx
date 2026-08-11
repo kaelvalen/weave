@@ -430,48 +430,50 @@ export function FileManager() {
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden select-none">
-      {/* ── IDE Activity Bar ── */}
-      <div className="w-12 border-r border-border/80 bg-card flex flex-col items-center py-3 gap-3 shrink-0 z-10">
-        <button
-          type="button"
-          onClick={() => setSidebarTab('explorer')}
-          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-            sidebarTab === 'explorer'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-          }`}
-          title="File Explorer"
-        >
-          <FilesIcon className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setSidebarTab('git')}
-          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-            sidebarTab === 'git'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-          }`}
-          title="Source Control (Git)"
-        >
-          <GitBranch className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setSidebarTab('search')}
-          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-            sidebarTab === 'search'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-          }`}
-          title="Workspace Search"
-        >
-          <Search className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* ── Column 1: Active Sidebar Tab Content ── */}
+      {/* ── Column 1: Files-scoped Sidebar (single panel, icon + label tabs) ── */}
       <div className="w-[260px] flex-shrink-0 flex flex-col h-full border-r border-border/80 bg-card">
+        {/* Tab switcher — follows the app-wide icon + visible label convention
+            (Explorer / Git / Search are Files-scoped sub-concepts, so they stay
+            inside this panel instead of the main navigation). */}
+        <div className="h-11 px-2 flex items-center gap-1 border-b border-border/60 flex-shrink-0 bg-muted/20">
+          <button
+            type="button"
+            onClick={() => setSidebarTab('explorer')}
+            className={`flex-1 h-8 px-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              sidebarTab === 'explorer'
+                ? 'bg-surface-3 text-foreground font-semibold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            }`}
+          >
+            <FilesIcon className="w-3.5 h-3.5" />
+            Explorer
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidebarTab('git')}
+            className={`flex-1 h-8 px-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              sidebarTab === 'git'
+                ? 'bg-surface-3 text-foreground font-semibold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            }`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            Git
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidebarTab('search')}
+            className={`flex-1 h-8 px-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              sidebarTab === 'search'
+                ? 'bg-surface-3 text-foreground font-semibold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            Search
+          </button>
+        </div>
+
         {sidebarTab === 'explorer' && (
           <div className="flex flex-col h-full">
             <div className="h-14 px-4 flex items-center justify-between border-b border-border/60 flex-shrink-0 bg-muted/20">

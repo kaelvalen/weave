@@ -16,20 +16,9 @@ reviewable commits; each fix should carry a regression test where testable.
 | 7 | Empty "Trace / No execution steps yet" box on plain-chat turns | `d662412` — `ChatMessage.tsx:487` wrapped in `hasPluginCalls \|\| hasRuntimeExecution` |
 | 9 | Approval mode lacks a security-adjacent visual distinction | `(this commit)` — amber active state + inline "gate off" note in `ChatCommandCenter.tsx`; ConfirmDialog before enabling Auto-Approve; persisted-mode startup reminder (`lib/approvalReminder.ts`, once-per-runtime, non-dismissable, "Switch to Ask" action) + vitest regression |
 | 10 | Theme delete sits flush next to Clone without confirmation | `(this commit)` — `SettingsPanel.tsx` delete now gated by ConfirmDialog ("Delete theme?" with active-theme fallback note), separated from "Clone to Custom" by a divider, with `aria-label`/`title`; store regression tests prove `deleteTheme` falls back to defaults when the active theme is removed |
+| 8 | Files view breaks the single-nav pattern | `(this commit)` — the standalone 48px icon-only rail was removed; Explorer/Git/Search are now icon + visible-label tabs inside the 260px sidebar panel header. Follows the app-wide "every nav item has a visible label" convention without promoting Files-scoped concepts to the main navigation |
 
 ## Backlog (prioritized)
-
-### P2 — #8 Files view breaks the single-nav pattern
-
-- **Bulgu:** Files view adds a second, unlabeled icon rail (explorer/git/search
-  icons with no tooltips) plus the file tree panel on top of the main sidebar —
-  three nested chrome levels, unlike every other view.
-- **Kanıt:** `src/components/files/FileManager.tsx:181` (`sidebarTab` state),
-  `433-475` (activity bar `<button>`s with `title` attributes only, no visible
-  labels), then `475+` the explorer panel inside a 260px sidebar column.
-- **Öneri:** either label the rail (add tooltips + aria-labels at minimum,
-  which are missing today) or fold explorer/git/search into the existing main
-  navigation as tabs; decide in a design pass, not incrementally.
 
 ### P3 — #6 Files cursor/scroll mismatch (needs reproduction)
 
