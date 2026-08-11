@@ -177,10 +177,13 @@ All components below are reachable from the mount graph (App.tsx → TopNav/Work
 1. **Phase 2 (native tool-calling):** ai_bridge.rs gains per-provider `tools`; commands/chat.rs persists `plugin_calls` metadata; useChatStore.ts keeps only UI-state slice (streaming, messages, approval rendering) — the XML parser and approval state machine move behind the IPC boundary. Approval gate (capabilities.ts + executeToolCall) stays in the frontend until backend gating lands.
 2. **Phase 3 (crate pruning):** delete DISCARD crates from `crates/` + root Cargo.toml members; delete runtime/plugin_runtime.rs + runtime/execution_runtime.rs and their module decls; delete the 4 dead frontend files (usePlugins.ts, useTauriCommand.ts) and the 3 stale scripts (refactor_imports.py, update_ai_bridge.py, setup_crates.py) + stray artifacts (code_artifact_*.py, src-tauri/Cargo.lock). Keep `capabilities` + `runtime-kernel`.
 3. **Phase 5 (regression tests):** cover the Phase-1 security surface — approval-gate behavior (sensitive caps require approval in `ask` mode), XML-only tool-call parsing (no JSON fallback), fs_security canonicalization/confinement, ssrf IP-block tests (5 already exist).
-4. **TRACKED — runtime-kernel `Kernel` struct is fully dead (audit note, Phase 4):** `submit_goal`'s warning fix in Phase 4 was cosmetic — the function is an empty stub carrying an unresolved design comment ("how does it submit? it could fire an event via EventBus"), and the entire `Kernel` struct (new/with_subsystem/boot/spawn_agent/submit_goal/shutdown) has **zero references** from src-tauri (verified 2026-08-11). The `submit_goal` fix only silenced the warning (rename to `_goal`/`_ctx`); the stub itself remains — the same "skeleton without filling" pattern this audit chases. Resolution deferred by design: when runtime-kernel's actually-used surface is clarified (only `ExecutionContext`/`EventBus`/`Observability`/`EventSourcingStore` are consumed today), the struct gets either implemented or deleted — not kept as confessional dead code.
-5. **USER-OWNED — `perplexity-notu.md`:** personal note, excluded from all delete lists; do not touch.
 
-## 6. Acceptance criteria — checklist
+## 6. Post-Phase-4 Follow-Ups
+
+- `crates/runtime-kernel/src/kernel.rs::Kernel::submit_goal` remains an uncalled stub (0 external references). Its unresolved execution-runtime delegation comment should be addressed during a future runtime-kernel surface audit; it was not removed because `runtime-kernel` is a KEEP crate.
+- Phase 4 deletion scope is approved. `perplexity-notu.md` is intentionally retained as personal user content and is not a discard candidate.
+
+## 7. Acceptance criteria — checklist
 
 - [x] Every unresolved module read and classified (10/10 open items have decisions, no TBD)
 - [x] Every file in the repo has a recorded decision: backend (3.1, 3.2), frontend (3.3, 3.4), crates (3.5), root/config/assets (3.6)

@@ -10,7 +10,7 @@ mod common;
 
 use common::{
     assert_completion_rule, plain_text_script, round_trip, saw_approval, second_request_body,
-    ApprovalDecision, Harness,
+    ApprovalDecision, Harness, PluginManager,
 };
 use weave::agent::AgentEvent;
 
@@ -35,7 +35,11 @@ async fn approved_sensitive_call_round_trips_with_paired_result() {
 
     // 2. The first request carried native tools with the file.read schema.
     assert!(rt.bodies[0].contains("\"tools\""), "request 1 must include tools");
-    assert!(rt.bodies[0].contains("\"file.read\""), "tools must advertise file.read");
+    let safe_name = PluginManager::provider_tool_name("file.read");
+    assert!(
+        rt.bodies[0].contains(&format!("\"name\":\"{}\"", safe_name)),
+        "tools must advertise file.read with a provider-safe name"
+    );
 
     // 3. Completion rule: the second request pairs a tool result with call_p.
     let second = second_request_body(&rt);

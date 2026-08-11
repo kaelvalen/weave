@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use weave::agent::{AgentEvent, AgentLoop, ApprovalRegistry};
 use weave::ai_bridge::{AiBridge, ModelTelemetry};
 use weave::models::chat::{ChatMessage, ChatRole, ModelConfig, Provider};
-use weave::plugin_manager::PluginManager;
+pub use weave::plugin_manager::PluginManager;
 use weave::utils::config::AppConfig;
 use weave::utils::errors::WeaveError;
 
@@ -145,9 +145,10 @@ pub fn tool_call_script(capability: &str, args_json: &str, final_text: &str) -> 
         r#"data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"Running..."},"finish_reason":null}]}"#.to_string(),
     ];
     let arguments_json = Value::String(args_json.to_string());
+    let provider_name = PluginManager::provider_tool_name(capability);
     lines.push(format!(
         r#"data: {{"id":"1","object":"chat.completion.chunk","choices":[{{"index":0,"delta":{{"tool_calls":[{{"index":0,"id":"call_p","type":"function","function":{{"name":{},"arguments":{}}}}}]}},"finish_reason":null}}]}}"#,
-        Value::String(capability.to_string()),
+        Value::String(provider_name),
         arguments_json
     ));
     lines.push(

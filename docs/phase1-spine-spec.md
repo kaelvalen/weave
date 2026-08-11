@@ -215,3 +215,8 @@ Locked decisions:
 
 Phase 2 entry criteria: this spec approved at review status; `use_native_tools`
 empirical probe executed against the user's local setup; kickoff approval given.
+
+Probe result (2026-08-11): Qwen3.5-9B-Q4_K_M returned streamed native
+`tool_calls` through both `llama-server` and Ollama 0.32.6 `/api/chat`;
+qwen2.5-coder-7b returned XML text instead. `use_native_tools` remains `true`
+by default for native-capable models and is a static per-model decision.

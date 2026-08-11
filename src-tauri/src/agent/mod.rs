@@ -82,7 +82,10 @@ impl ApprovalRegistry {
 #[derive(Debug, Clone)]
 pub struct AgentToolCall {
     pub call_id: String,
+    /// Provider-safe function name, preserved in the native assistant message.
     pub name: String,
+    /// Canonical Weave capability id used for policy and execution.
+    pub capability: String,
     pub args: Value,
 }
 
@@ -292,28 +295,36 @@ impl AgentLoop {
             // ---- Resolve tool calls against the plugin registry ----
             let calls: Vec<AgentToolCall> = pending
                 .into_iter()
-                .map(|p| AgentToolCall {
-                    call_id: if p.call_id.is_empty() {
-                        format!("call_{}", p.index)
-                    } else {
-                        p.call_id
-                    },
-                    name: p.name,
-                    args: serde_json::from_str(&p.fragments)
-                        .unwrap_or_else(|_| json!({})),
+                .map(|p| {
+                    let name = p.name;
+                    let capability = self
+                        .plugin_manager
+                        .resolve_provider_tool_name(&name)
+                        .unwrap_or_else(|| name.clone());
+                    AgentToolCall {
+                        call_id: if p.call_id.is_empty() {
+                            format!("call_{}", p.index)
+                        } else {
+                            p.call_id
+                        },
+                        name,
+                        capability,
+                        args: serde_json::from_str(&p.fragments)
+                            .unwrap_or_else(|_| json!({})),
+                    }
                 })
                 .collect();
 
             let mut outcomes: Vec<CallOutcome> = Vec::with_capacity(calls.len());
 
             for call in &calls {
-                let plugin_id = match self.plugin_manager.resolve_capability(&call.name) {
+                let plugin_id = match self.plugin_manager.resolve_capability(&call.capability) {
                     Some(id) => id,
                     None => {
-                        warn!("No plugin provides capability: {}", call.name);
+                        warn!("No plugin provides capability: {}", call.capability);
                         let outcome = CallOutcome::Error(format!(
                             "No plugin provides capability '{}'",
-                            call.name
+                            call.capability
                         ));
                         self.record_call(
                             &assistant_id,
@@ -325,7 +336,7 @@ impl AgentLoop {
                             .send(AgentEvent::ToolCall {
                                 call_id: call.call_id.clone(),
                                 plugin_id: "unknown".to_string(),
-                                capability: call.name.clone(),
+                                capability: call.capability.clone(),
                                 params: call.args.clone(),
                                 status: "error".to_string(),
                                 result: outcome_to_result(&outcome),
@@ -337,18 +348,18 @@ impl AgentLoop {
                 };
 
                 // ---- Approval gate (spec §3 step 4) ----
-                if capability_policy::requires_approval(&call.name) {
+                if capability_policy::requires_approval(&call.capability) {
                     let receiver = self.approvals.register(call.call_id.clone());
                     let _ = event_tx
                         .send(AgentEvent::PendingApproval {
                             call_id: call.call_id.clone(),
                             plugin_id: plugin_id.clone(),
-                            capability: call.name.clone(),
+                            capability: call.capability.clone(),
                             params: call.args.clone(),
                         })
                         .await;
 
-                    info!("Awaiting approval for {} ({})", call.name, call.call_id);
+                    info!("Awaiting approval for {} ({})", call.capability, call.call_id);
                     let decision = match receiver.await {
                         Ok(decision) => decision,
                         Err(_) => {
@@ -372,7 +383,7 @@ impl AgentLoop {
                         .send(AgentEvent::ToolCall {
                             call_id: call.call_id.clone(),
                             plugin_id: plugin_id.clone(),
-                            capability: call.name.clone(),
+                            capability: call.capability.clone(),
                             params: call.args.clone(),
                             status: match &outcome {
                                 CallOutcome::Success(_) => "success",
@@ -390,7 +401,7 @@ impl AgentLoop {
                         .send(AgentEvent::ToolCall {
                             call_id: call.call_id.clone(),
                             plugin_id: plugin_id.clone(),
-                            capability: call.name.clone(),
+                            capability: call.capability.clone(),
                             params: call.args.clone(),
                             status: match &outcome {
                                 CallOutcome::Success(_) => "success",
@@ -433,11 +444,11 @@ impl AgentLoop {
         let ctx = self.create_execution_context(session_id);
         match self
             .plugin_manager
-            .execute_capability(&plugin_id, &call.name, call.args.clone(), &ctx)
+            .execute_capability(&plugin_id, &call.capability, call.args.clone(), &ctx)
         {
             Ok(result) => CallOutcome::Success(result),
             Err(e) => {
-                warn!("Tool call {} ({}) failed: {}", call.call_id, call.name, e);
+                warn!("Tool call {} ({}) failed: {}", call.call_id, call.capability, e);
                 CallOutcome::Error(e.to_string())
             }
         }
@@ -464,7 +475,7 @@ impl AgentLoop {
             metadata.plugin_calls.push(PluginCall {
                 call_id: Some(call.call_id.clone()),
                 plugin_id,
-                capability: call.name.clone(),
+                capability: call.capability.clone(),
                 params: call.args.clone(),
                 result: outcome_to_result(outcome),
                 status: match outcome {

@@ -54,11 +54,12 @@ pub struct LocalConfig {
     pub api_url: Option<String>,
     /// Whether the local endpoint receives native `tools` in requests.
     ///
-    /// Static flag, NOT a runtime auto-fallback: it is fixed once by an
-    /// empirical probe (send a `tools`-bearing request, check whether
-    /// `tool_calls` come back) — phase1-spine-spec.md §2 decision Q2.
-    /// Defaults to true; the 2026-08-11 probe was inconclusive (no local
-    /// server was running), so re-probe when the local setup is up.
+    /// Static flag, NOT a runtime auto-fallback: it is fixed per local
+    /// endpoint/model after an empirical probe — phase1-spine-spec.md §2
+    /// decision Q2. The 2026-08-11 probe confirmed streamed native tool calls
+    /// for Qwen3.5-9B-Q4_K_M through both llama-server and Ollama 0.32.6;
+    /// qwen2.5-coder-7b returned XML text instead, so models/templates without
+    /// native support must set this to false.
     #[serde(default = "default_use_native_tools")]
     pub use_native_tools: bool,
 }
