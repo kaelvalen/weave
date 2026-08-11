@@ -9,7 +9,8 @@
 mod common;
 
 use common::{
-    plain_text_script, round_trip, saw_approval, second_request_body, ApprovalDecision, Harness,
+    assert_completion_rule, plain_text_script, round_trip, saw_approval, second_request_body,
+    ApprovalDecision, Harness,
 };
 use weave::agent::AgentEvent;
 
@@ -48,6 +49,9 @@ async fn approved_sensitive_call_round_trips_with_paired_result() {
         "loop must continue after tool execution, got: {}",
         rt.final_text
     );
+
+    // 5. Protocol-level completion-rule proof for the success path too.
+    assert_completion_rule(second);
 }
 
 // ---------------------------------------------------------------------------

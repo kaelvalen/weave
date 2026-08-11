@@ -12,7 +12,9 @@
     "tauri:build": "tauri build",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
@@ -77,6 +79,7 @@
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.28.0",
-    "vite": "^8.1.3"
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10"
   }
 }

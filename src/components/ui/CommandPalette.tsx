@@ -82,12 +82,14 @@ function exampleFromSchema(schema: unknown): Record<string, unknown> {
     if (prop && typeof prop === 'object') {
       const type = (prop as Record<string, unknown>).type;
       if (type === 'boolean') example[key] = false;
-      else if (type === 'number') example[key] = 0;
+      else if (type === 'number' || type === 'integer') example[key] = 0;
       else example[key] = '';
     }
   }
   return example;
 }
+
+export { schemaNeedsParams, exampleFromSchema };
 
 function runCapability(
   execute: (pluginId: string, capability: string, params: Record<string, unknown>) => Promise<unknown>,

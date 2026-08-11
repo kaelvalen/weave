@@ -112,4 +112,55 @@ mod tests {
     fn unknown_caps_are_not_gated() {
         assert!(!requires_approval("totally.made_up"));
     }
+
+    /// CI check: the frontend mirror (src/lib/capabilities.ts) must stay in
+    /// exact lockstep with this backend source of truth. A drift in either
+    /// direction fails the build — the mirror is display-only, but a
+    /// frontend entry the backend does not gate (or a gate the UI does not
+    /// show) is the same class of bug the original security fix closed.
+    #[test]
+    fn frontend_mirror_matches_backend_policy() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR");
+        let mirror_path = std::path::Path::new(&manifest_dir)
+            .join("..")
+            .join("src")
+            .join("lib")
+            .join("capabilities.ts");
+        let content = std::fs::read_to_string(&mirror_path)
+            .unwrap_or_else(|e| panic!("cannot read frontend mirror {}: {}", mirror_path.display(), e));
+
+        fn extract_set(content: &str, name: &str) -> Vec<String> {
+            let start = content
+                .find(&format!("{}: ReadonlySet<string> = new Set([", name))
+                .unwrap_or_else(|| panic!("cannot find {} in mirror", name));
+            let rest = &content[start..];
+            let end = rest.find("]);").unwrap_or_else(|| panic!("cannot find end of {}", name));
+            let mut caps: Vec<String> = rest[..end]
+                .split('\'')
+                .filter(|t| t.contains('.'))
+                .map(|t| t.to_string())
+                .collect();
+            caps.sort();
+            caps
+        }
+
+        let mut expected_destructive: Vec<String> =
+            DESTRUCTIVE_CAPS.iter().map(|s| s.to_string()).collect();
+        expected_destructive.sort();
+        let mut expected_sensitive: Vec<String> =
+            SENSITIVE_CAPS.iter().map(|s| s.to_string()).collect();
+        expected_sensitive.sort();
+
+        assert_eq!(
+            extract_set(&content, "DESTRUCTIVE_CAPS"),
+            expected_destructive,
+            "frontend DESTRUCTIVE_CAPS mirror drifted from capability_policy.rs"
+        );
+        assert_eq!(
+            extract_set(&content, "SENSITIVE_CAPS"),
+            expected_sensitive,
+            "frontend SENSITIVE_CAPS mirror drifted from capability_policy.rs"
+        );
+    }
 }

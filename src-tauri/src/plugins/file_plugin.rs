@@ -313,3 +313,140 @@ impl FilePlugin {
         fs_security::ensure_within_roots(path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use parking_lot::RwLock;
+    use runtime_kernel::event_bus::EventBus;
+
+    fn test_ctx() -> runtime_kernel::execution_context::ExecutionContext {
+        runtime_kernel::execution_context::ExecutionContext::new(
+            "test".to_string(),
+            std::env::current_dir().unwrap(),
+            Arc::new(RwLock::new(json!({}))),
+            Arc::new(EventBus::new(16)),
+        )
+    }
+
+    /// Build a sandbox under the repo's `target/` (inside the workspace root
+    /// so confinement permits legitimate paths) plus an escape target under
+    /// `/tmp` (outside every allowed root).
+    fn sandbox() -> (std::path::PathBuf, std::path::PathBuf) {
+        let id = uuid::Uuid::new_v4().to_string();
+        let ws = std::env::current_dir()
+            .expect("cargo test runs from the workspace root")
+            .join("target")
+            .join(format!("phase5_fs_{}", id))
+            .join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        let outside = std::env::temp_dir().join(format!("weave_escape_{}", id));
+        std::fs::create_dir_all(&outside).unwrap();
+        (ws, outside)
+    }
+
+    fn cleanup(ws: &std::path::Path, outside: &std::path::Path) {
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+        let _ = std::fs::remove_dir_all(outside);
+    }
+
+    #[cfg(unix)]
+    fn symlink_dir(target: &std::path::Path, link: &std::path::Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn symlink_dir(_target: &std::path::Path, _link: &std::path::Path) {
+        unimplemented!("symlink tests are unix-only")
+    }
+
+    /// Adversarial #1: symlink escape via an EXISTING leaf on read.
+    /// `ws/evil -> <outside>` (existing dir symlink); reading
+    /// `ws/evil/secret.txt` must be denied even though the literal string
+    /// starts inside the workspace.
+    #[test]
+    #[cfg(unix)]
+    fn symlink_escape_existing_leaf_read_is_denied() {
+        let (ws, outside) = sandbox();
+        std::fs::write(outside.join("secret.txt"), "top secret").unwrap();
+        symlink_dir(&outside, &ws.join("evil"));
+
+        let path = ws.join("evil").join("secret.txt");
+        let result = FilePlugin::execute(
+            "file.read",
+            json!({"path": path.to_string_lossy()}),
+            &test_ctx(),
+        );
+
+        assert!(
+            matches!(result, Err(WeaveError::PermissionDenied(_))),
+            "symlink escape on read must be denied, got: {:?}",
+            result.map_err(|e| e.to_string())
+        );
+        cleanup(&ws, &outside);
+    }
+
+    /// Adversarial #2: symlink escape via a NON-EXISTENT leaf on write.
+    /// `ws/evil -> <outside>` (existing dir symlink); writing
+    /// `ws/evil/newfile.txt` (leaf does not exist) must be denied — the
+    /// canonicalizer must resolve the symlinked parent, not the literal path.
+    #[test]
+    #[cfg(unix)]
+    fn symlink_escape_non_existent_leaf_write_is_denied() {
+        let (ws, outside) = sandbox();
+        symlink_dir(&outside, &ws.join("evil"));
+
+        let path = ws.join("evil").join("newfile.txt");
+        let result = FilePlugin::execute(
+            "file.write",
+            json!({"path": path.to_string_lossy(), "content": "pwned"}),
+            &test_ctx(),
+        );
+
+        assert!(
+            matches!(result, Err(WeaveError::PermissionDenied(_))),
+            "symlink escape on write must be denied, got: {:?}",
+            result.map_err(|e| e.to_string())
+        );
+        assert!(
+            !outside.join("newfile.txt").exists(),
+            "escaped file must never be created"
+        );
+        cleanup(&ws, &outside);
+    }
+
+    /// Adversarial #3: `..` traversal on write. A literal path that starts
+    /// inside the workspace but resolves (via `..`) to a file outside every
+    /// allowed root must be denied — the check runs on the canonical path.
+    #[test]
+    #[cfg(unix)]
+    fn dotdot_traversal_write_is_denied() {
+        let (ws, outside) = sandbox();
+
+        // Walk up from <repo>/target/.../ws to `/` (one `..` per component),
+        // then descend into /tmp for the escape target.
+        let up = ws.components().count();
+        let mut escaped = ws.clone();
+        for _ in 0..up {
+            escaped.push("..");
+        }
+        escaped.push("tmp");
+        let victim = escaped.join(format!("{}_victim.txt", outside.file_name().unwrap().to_string_lossy().as_ref()));
+        std::fs::File::create(&victim).unwrap();
+
+        let result = FilePlugin::execute(
+            "file.write",
+            json!({"path": victim.to_string_lossy(), "content": "pwned"}),
+            &test_ctx(),
+        );
+
+        assert!(
+            matches!(result, Err(WeaveError::PermissionDenied(_))),
+            "dotdot traversal on write must be denied, got: {:?}",
+            result.map_err(|e| e.to_string())
+        );
+        let _ = std::fs::remove_file(&victim);
+        cleanup(&ws, &outside);
+    }
+}

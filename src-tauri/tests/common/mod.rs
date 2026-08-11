@@ -365,4 +365,55 @@ pub fn second_request_body(rt: &RoundTrip) -> &str {
         .expect("loop must re-request after tool execution")
 }
 
+/// Completion-rule proof at the protocol level (phase1-spine-spec.md §3
+/// amendment #6): parse the second request body's JSON and assert that the
+/// set of assistant `tool_calls` ids EXACTLY equals the set of `tool`-role
+/// result `tool_call_id`s — a dangling id would make the provider reject the
+/// request with 400, so this is the "next request is not malformed" proof.
+pub fn assert_completion_rule(body: &str) {
+    let json_start = body
+        .find('{')
+        .expect("request body must contain JSON");
+    let json: Value = serde_json::from_str(&body[json_start..])
+        .expect("second request must be valid JSON");
+    let messages = json["messages"]
+        .as_array()
+        .expect("second request must carry messages");
+
+    let mut call_ids: Vec<String> = Vec::new();
+    let mut result_ids: Vec<String> = Vec::new();
+
+    for msg in messages {
+        let role = msg["role"].as_str().unwrap_or("");
+        if role == "assistant" {
+            if let Some(calls) = msg["tool_calls"].as_array() {
+                for call in calls {
+                    if let Some(id) = call["id"].as_str() {
+                        call_ids.push(id.to_string());
+                    }
+                }
+            }
+        } else if role == "tool" {
+            if let Some(id) = msg["tool_call_id"].as_str() {
+                result_ids.push(id.to_string());
+            }
+        }
+    }
+
+    assert!(
+        !call_ids.is_empty(),
+        "completion rule: assistant message must carry tool_calls"
+    );
+    let mut sorted_calls = call_ids.clone();
+    let mut sorted_results = result_ids.clone();
+    sorted_calls.sort();
+    sorted_results.sort();
+    assert_eq!(
+        sorted_calls, sorted_results,
+        "completion rule: every tool_call id must have exactly one paired tool result \
+         (assistant ids: {:?}, tool results: {:?})",
+        call_ids, result_ids
+    );
+}
+
 pub use weave::agent::ApprovalDecision;
