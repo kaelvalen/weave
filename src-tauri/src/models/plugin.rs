@@ -226,9 +226,14 @@ impl PluginBuilder {
 /// Convert an example parameter object (or an explicit JSON Schema object)
 /// into a provider-usable JSON Schema document.
 ///
-/// Examples are wrapped into an object schema by inferring a `type` per
-/// property (string/number/boolean/array/object). Documents that already
-/// look like a schema (`type` present) pass through unchanged.
+/// Inference rules (adversarially reviewed — see schema_from_value):
+/// - string/number/boolean/array examples map to their JSON Schema type;
+/// - a `null` example value means "optional and nullable" — typed as
+///   `["string", "null"]`, NEVER object;
+/// - every non-null key in the example is marked `required`; null-valued
+///   keys are the only way an example marks a parameter optional;
+/// - documents that already look like a schema (`type` present) pass
+///   through unchanged.
 pub fn schema_from_example(example: &str) -> serde_json::Value {
     let parsed: serde_json::Value =
         serde_json::from_str(example.trim()).unwrap_or(serde_json::Value::Object(Default::default()));
@@ -242,13 +247,24 @@ fn schema_from_value(value: &serde_json::Value) -> serde_json::Value {
             return value.clone();
         }
         let mut properties = serde_json::Map::new();
+        let mut required: Vec<String> = Vec::new();
         for (key, v) in obj {
             properties.insert(key.clone(), schema_from_value(v));
+            // Null example values are explicitly optional/nullable; every
+            // other key present in the example is part of the contract.
+            if !v.is_null() {
+                required.push(key.clone());
+            }
         }
-        serde_json::json!({
+        required.sort();
+        let mut schema = serde_json::json!({
             "type": "object",
             "properties": properties,
-        })
+        });
+        if !required.is_empty() {
+            schema["required"] = serde_json::json!(required);
+        }
+        schema
     } else if value.is_string() {
         serde_json::json!({"type": "string"})
     } else if value.is_number() {
@@ -257,7 +273,95 @@ fn schema_from_value(value: &serde_json::Value) -> serde_json::Value {
         serde_json::json!({"type": "boolean"})
     } else if value.is_array() {
         serde_json::json!({"type": "array"})
+    } else if value.is_null() {
+        // A null example is an explicit "optional/nullable" marker — never
+        // guess `object` (that actively misleads the model into sending an
+        // object where a scalar is expected).
+        serde_json::json!({"type": ["string", "null"]})
     } else {
         serde_json::json!({"type": "object"})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infers_types_and_required_from_example() {
+        let schema = schema_from_example(r#"{"path":"...","content":"..."}"#);
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"]["path"]["type"], "string");
+        assert_eq!(schema["properties"]["content"]["type"], "string");
+        assert_eq!(schema["required"], serde_json::json!(["content", "path"]));
+    }
+
+    #[test]
+    fn null_example_values_are_optional_nullable_strings() {
+        // The adversarial case: shell.exec's `cwd` must never be typed object.
+        let schema = schema_from_example(r#"{"command":"...","cwd":null,"timeout":30}"#);
+        assert_eq!(
+            schema["properties"]["cwd"]["type"],
+            serde_json::json!(["string", "null"]),
+            "cwd: null must not infer object"
+        );
+        assert_eq!(schema["required"], serde_json::json!(["command", "timeout"]));
+    }
+
+    #[test]
+    fn null_range_params_are_optional() {
+        let schema = schema_from_example(r#"{"path":"...","start":null,"end":null}"#);
+        assert_eq!(schema["required"], serde_json::json!(["path"]));
+        assert_eq!(
+            schema["properties"]["start"]["type"],
+            serde_json::json!(["string", "null"])
+        );
+        assert_eq!(
+            schema["properties"]["end"]["type"],
+            serde_json::json!(["string", "null"])
+        );
+    }
+
+    #[test]
+    fn explicit_schema_passes_through_unchanged() {
+        let schema = schema_from_example(
+            r#"{"type":"object","properties":{"a":{"type":"integer"}},"required":["a"]}"#,
+        );
+        assert_eq!(schema["properties"]["a"]["type"], "integer");
+        assert_eq!(schema["required"], serde_json::json!(["a"]));
+    }
+
+    #[test]
+    fn empty_example_is_an_open_object() {
+        let schema = schema_from_example("{}");
+        assert_eq!(schema["type"], "object");
+        assert!(schema.get("required").is_none());
+    }
+
+    #[test]
+    fn builtin_schemas_never_infer_object_from_null() {
+        // The exact example strings from create_builtin_plugins().
+        let cases = [
+            (r#"{"command":"...","cwd":null,"timeout":30}"#, "cwd"),
+            (r#"{"path":"...","start":null,"end":null}"#, "start"),
+            (r#"{"directory":".","staged":false,"file":null}"#, "file"),
+            (r#"{"directory":".","filter":null}"#, "filter"),
+        ];
+        for (example, key) in cases {
+            let schema = schema_from_example(example);
+            let t = &schema["properties"][key]["type"];
+            assert!(
+                t != "object",
+                "{} must not infer object (got {:?})",
+                key,
+                t
+            );
+            let required = schema["required"].as_array().unwrap();
+            assert!(
+                !required.iter().any(|r| r == key),
+                "null-example key {} must not be required",
+                key
+            );
+        }
     }
 }
