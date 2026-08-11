@@ -1,6 +1,5 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlackboardFact {

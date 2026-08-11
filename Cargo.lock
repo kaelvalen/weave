@@ -551,23 +551,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cognitive-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "parking_lot",
- "plugin-runtime",
- "reqwest 0.12.28",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,23 +1258,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "execution-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "capabilities",
- "parking_lot",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -2524,20 +2490,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "knowledge"
-version = "0.1.0"
-dependencies = [
- "capabilities",
- "memory",
- "parking_lot",
- "runtime-kernel",
- "serde",
- "serde_json",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2727,22 +2679,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "memory"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "capabilities",
- "parking_lot",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "uuid",
 ]
 
 [[package]]
@@ -3362,23 +3298,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
-name = "planning"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "knowledge",
- "memory",
- "parking_lot",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
 name = "plist"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3389,23 +3308,6 @@ dependencies = [
  "quick-xml",
  "serde",
  "time",
-]
-
-[[package]]
-name = "plugin-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "capabilities",
- "parking_lot",
- "reqwest 0.12.28",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "uuid",
 ]
 
 [[package]]
@@ -6305,18 +6207,13 @@ dependencies = [
  "async-trait",
  "capabilities",
  "chrono",
- "cognitive-runtime",
  "diffy",
  "dirs 5.0.1",
- "execution-runtime",
  "fend-core",
  "futures",
  "ignore",
- "memory",
  "memory-stats",
  "parking_lot",
- "planning",
- "plugin-runtime",
  "pyo3",
  "regex",
  "reqwest 0.12.28",
@@ -6343,7 +6240,6 @@ dependencies = [
  "wait-timeout",
  "wasmtime",
  "wasmtime-wasi",
- "workflow-runtime",
  "zip",
 ]
 
@@ -7138,23 +7034,6 @@ dependencies = [
  "log",
  "thiserror 1.0.69",
  "wast 35.0.2",
-]
-
-[[package]]
-name = "workflow-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "execution-runtime",
- "parking_lot",
- "runtime-kernel",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
 ]
 
 [[package]]

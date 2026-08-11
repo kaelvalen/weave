@@ -29,7 +29,7 @@ impl Kernel {
         // Spawn agent lifecycle
     }
 
-    pub async fn submit_goal(&self, goal: &str, ctx: &ExecutionContext) -> Result<(), String> {
+    pub async fn submit_goal(&self, _goal: &str, _ctx: &ExecutionContext) -> Result<(), String> {
         // Here we just delegate to the execution-runtime without knowing its internals.
         // Wait, if Kernel doesn't hold Executor, how does it submit?
         // It could fire an event via EventBus.

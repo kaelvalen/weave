@@ -8,13 +8,6 @@ import sys
 ALLOWED_DEPENDENCIES = {
     "runtime-kernel": [],
     "capabilities": ["runtime-kernel"],
-    "plugin-runtime": ["runtime-kernel", "capabilities"],
-    "knowledge": ["runtime-kernel"],
-    "memory": ["runtime-kernel", "capabilities"],
-    "planning": ["runtime-kernel", "memory", "knowledge", "capabilities"],
-    "execution-runtime": ["runtime-kernel", "capabilities", "plugin-runtime"],
-    "cognitive-runtime": ["runtime-kernel", "plugin-runtime", "capabilities", "knowledge", "planning"],
-    "workflow-runtime": ["runtime-kernel", "execution-runtime"],
 }
 
 def parse_cargo_toml_dependencies(toml_path):

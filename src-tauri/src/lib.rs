@@ -9,7 +9,6 @@ pub mod ai_bridge;
 pub mod commands;
 pub mod github_plugin;
 pub mod models;
-pub mod plugin_loader;
 pub mod plugin_manager;
 pub mod plugins;
 pub mod runtime;
