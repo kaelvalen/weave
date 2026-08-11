@@ -356,3 +356,39 @@ async fn canvas_and_sys_round_trip_with_gate() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// coder_plugin — most complex plugin, migrated last. Reads are sensitive.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn coder_read_file_and_list_dir_round_trip_with_gate() {
+    for (cap, args, needle) in [
+        ("coder.read_file", r#"{"path":"src/main.rs"}"#, "fn main"),
+        ("coder.list_dir", r#"{"path":"."}"#, "src-tauri"),
+    ] {
+        let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
+        assert!(saw_approval(&rt.events, cap), "{} is sensitive", cap);
+        assert!(
+            second_request_body(&rt).contains(needle),
+            "{} result should contain {}",
+            cap,
+            needle
+        );
+    }
+}
+
+#[tokio::test]
+async fn coder_symbols_and_search_round_trip() {
+    let rt = round_trip(
+        "coder.symbols",
+        r#"{"path":"src-tauri/src/main.rs"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(saw_approval(&rt.events, "coder.symbols"), "coder.symbols is sensitive");
+    assert!(
+        second_request_body(&rt).contains("main"),
+        "symbols of main.rs must mention main"
+    );
+}
