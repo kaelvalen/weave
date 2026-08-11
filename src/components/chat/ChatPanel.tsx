@@ -396,7 +396,7 @@ export function ChatPanel({
                   {pendingApprovals.length > 1 ? 's' : ''}.
                 </span>
                 <span className="text-muted-foreground text-xs ml-1 hidden sm:inline">
-                  (Files will be changed)
+                  (File, network, or system changes)
                 </span>
               </div>
               <div className="flex gap-2 flex-shrink-0">

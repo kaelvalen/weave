@@ -4,6 +4,7 @@ use tracing::info;
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
+use crate::utils::ssrf;
 
 pub struct HttpPlugin;
 
@@ -56,18 +57,28 @@ impl HttpPlugin {
                 .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
             rt.block_on(async {
+                // SSRF guard: scheme/host policy + private-IP resolution check,
+                // re-validated on every redirect hop.
+                let parsed = ssrf::ensure_safe_url(&url).await?;
+
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(timeout_secs))
+                    .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                        match ssrf::ensure_safe_url_sync(attempt.url()) {
+                            Ok(()) => attempt.follow(),
+                            Err(e) => attempt.error(e.to_string()),
+                        }
+                    }))
                     .build()
                     .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
                 let mut req_builder = match method.as_str() {
-                    "GET" => client.get(&url),
-                    "POST" => client.post(&url),
-                    "PUT" => client.put(&url),
-                    "DELETE" => client.delete(&url),
-                    "PATCH" => client.patch(&url),
-                    "HEAD" => client.head(&url),
+                    "GET" => client.get(parsed),
+                    "POST" => client.post(parsed),
+                    "PUT" => client.put(parsed),
+                    "DELETE" => client.delete(parsed),
+                    "PATCH" => client.patch(parsed),
+                    "HEAD" => client.head(parsed),
                     _ => {
                         return Err(WeaveError::PluginError(format!(
                             "Unsupported HTTP method: {}",

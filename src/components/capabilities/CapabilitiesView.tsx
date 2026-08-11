@@ -3,7 +3,7 @@ import { usePluginStore } from '@/stores/usePluginStore';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import type { Plugin } from '@/types/plugin';
 import type { ToolMetrics } from '@/types/runtime';
-import { isDestructiveCapability } from '@/lib/capabilities';
+import { requiresApproval } from '@/lib/capabilities';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -82,7 +82,7 @@ export function CapabilitiesView() {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
       if (pluginFilter !== 'all' && row.plugin.id !== pluginFilter) return false;
-      if (approvalOnly && !isDestructiveCapability(row.name)) return false;
+      if (approvalOnly && !requiresApproval(row.name)) return false;
       if (!q) return true;
       return (
         row.name.toLowerCase().includes(q) ||
@@ -207,7 +207,7 @@ export function CapabilitiesView() {
                         }`}
                       >
                         <span className="text-foreground font-semibold truncate">{row.name}</span>
-                        {isDestructiveCapability(row.name) && (
+                        {requiresApproval(row.name) && (
                           <ShieldAlert className="w-3 h-3 text-destructive flex-shrink-0" />
                         )}
                         <span className="text-muted-foreground truncate text-[11px]">
@@ -258,7 +258,7 @@ export function CapabilitiesView() {
                     builtin
                   </span>
                 )}
-                {isDestructiveCapability(selectedRow.name) && (
+                {requiresApproval(selectedRow.name) && (
                   <span className="px-1.5 py-0.5 rounded border border-destructive/50 font-mono text-[10px] text-destructive flex items-center gap-1">
                     <ShieldAlert className="w-3 h-3" />
                     requires approval

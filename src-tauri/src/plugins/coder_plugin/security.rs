@@ -1,5 +1,6 @@
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
+use crate::utils::fs_security;
 use std::path::{Path, PathBuf};
 
 const BLOCKED_PREFIXES: &[&str] = &[
@@ -8,63 +9,21 @@ const BLOCKED_PREFIXES: &[&str] = &[
 
 pub fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
     let path = path.trim();
-    if path.starts_with("~/") {
-        let home = dirs::home_dir().ok_or_else(|| {
-            WeaveError::PluginError("Cannot determine home directory".to_string())
-        })?;
-        Ok(home.join(&path[2..]))
-    } else if Path::new(path).is_absolute() {
-        Ok(PathBuf::from(path))
-    } else if path.starts_with("artifacts/") || path.starts_with("artifacts\\") {
+    // App-managed artifacts live under ~/.weave/artifacts, which is one of
+    // the allowed roots, so resolution can fall through to the shared
+    // canonicalizer after expanding the prefix.
+    if path.starts_with("artifacts/") || path.starts_with("artifacts\\") {
         let app_dir = AppConfig::app_data_dir()?;
-        Ok(app_dir.join(path))
-    } else {
-        Ok(std::env::current_dir()
-            .map_err(|e| WeaveError::Io(e.to_string()))?
-            .join(path))
+        return fs_security::canonicalize_checked(&app_dir.join(path));
     }
+    fs_security::canonicalize_path(path)
 }
 
 pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
-    // 1. Resolve absolute path
-    let abs_path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|e| WeaveError::Io(e.to_string()))?
-            .join(path)
-    };
-
-    // 2. Canonicalize path (or parent if file doesn't exist yet)
-    let resolved = if abs_path.exists() {
-        abs_path
-            .canonicalize()
-            .map_err(|e| WeaveError::Io(e.to_string()))?
-    } else {
-        let mut parent = abs_path.as_path();
-        let mut components = Vec::new();
-        while !parent.exists() {
-            if let Some(name) = parent.file_name() {
-                components.push(name);
-            }
-            if let Some(p) = parent.parent() {
-                parent = p;
-            } else {
-                break;
-            }
-        }
-        let mut parent_canonical = parent
-            .canonicalize()
-            .map_err(|e| WeaveError::Io(e.to_string()))?;
-        for comp in components.iter().rev() {
-            parent_canonical.push(comp);
-        }
-        parent_canonical
-    };
-
+    let resolved = fs_security::canonicalize_checked(path)?;
     let path_str = resolved.to_string_lossy();
 
-    // 3. Deny access to sensitive system paths
+    // 1. Deny access to sensitive system paths
     for prefix in BLOCKED_PREFIXES {
         if path_str == *prefix || path_str.starts_with(&format!("{}/", prefix)) {
             return Err(WeaveError::PermissionDenied(format!(
@@ -74,13 +33,19 @@ pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
         }
     }
 
-    // 4. Deny access to sensitive SSH key folders
-    if path_str.contains("/.ssh/") || path_str.ends_with("/.ssh") {
+    // 2. Deny access to sensitive SSH key folders
+    if resolved
+        .components()
+        .any(|c| c.as_os_str() == ".ssh")
+    {
         return Err(WeaveError::PermissionDenied(format!(
             "Access denied: SSH key folder is protected: {}",
             resolved.display()
         )));
     }
+
+    // 3. Confine to the workspace / app-data roots (canonical paths only)
+    fs_security::ensure_within_roots(&resolved)?;
 
     Ok(resolved)
 }

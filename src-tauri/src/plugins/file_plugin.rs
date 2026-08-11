@@ -1,11 +1,21 @@
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tracing::{info, warn};
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
+use crate::utils::fs_security;
 
-const BLOCKED_READ_PATHS: &[&str] = &["/etc/shadow", "/etc/gshadow", "/etc/sudoers"];
+const BLOCKED_READ_PATHS: &[&str] = &[
+    "/etc/shadow",
+    "/etc/gshadow",
+    "/etc/sudoers",
+    "/etc/passwd",
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".config",
+];
 const BLOCKED_WRITE_PATHS: &[&str] = &[
     "/etc/", "/boot/", "/usr/", "/bin/", "/sbin/", "/proc/", "/sys/", "/dev/",
 ];
@@ -197,9 +207,17 @@ impl FilePlugin {
         results: &mut Vec<Value>,
     ) -> Result<(), WeaveError> {
         let pattern_lower = pattern.to_lowercase();
+        let roots = fs_security::allowed_roots();
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
+            // Do not descend into symlinked directories that point outside
+            // the workspace, and never surface paths outside the workspace.
+            if let Ok(canonical) = path.canonicalize() {
+                if !fs_security::is_within_any(&canonical, &roots) {
+                    continue;
+                }
+            }
             let name = entry.file_name().to_string_lossy().to_string();
             if name.to_lowercase().contains(&pattern_lower) {
                 let metadata = entry.metadata()?;
@@ -248,32 +266,30 @@ impl FilePlugin {
         Ok(json!({"path": resolved_path.to_string_lossy().to_string(), "success": true}))
     }
 
-    fn resolve_path(path: &str) -> Result<PathBuf, WeaveError> {
-        if path.starts_with("~/") {
-            let home = dirs::home_dir().ok_or_else(|| {
-                WeaveError::PluginError("Cannot determine home directory".to_string())
-            })?;
-            Ok(home.join(&path[2..]))
-        } else if Path::new(path).is_absolute() {
-            Ok(PathBuf::from(path))
-        } else {
-            Ok(std::env::current_dir()
-                .map_err(|e| WeaveError::Io(e.to_string()))?
-                .join(path))
-        }
+    fn resolve_path(path: &str) -> Result<std::path::PathBuf, WeaveError> {
+        fs_security::canonicalize_path(path)
     }
 
+    /// Read validation: canonicalized path, deny list, then workspace
+    /// confinement. All checks run on the canonical path so `..`/symlink
+    /// tricks cannot bypass them.
     fn validate_read_access(path: &Path) -> Result<(), WeaveError> {
         let path_str = path.to_string_lossy();
         for blocked in BLOCKED_READ_PATHS {
-            if path_str.contains(blocked) {
+            let blocked_is_absolute = blocked.starts_with('/');
+            let denied = if blocked_is_absolute {
+                path_str == *blocked || path_str.starts_with(&format!("{}/", blocked))
+            } else {
+                path.components().any(|c| c.as_os_str() == Path::new(blocked).as_os_str())
+            };
+            if denied {
                 return Err(WeaveError::PermissionDenied(format!(
                     "Read access denied: {}",
                     path.display()
                 )));
             }
         }
-        Ok(())
+        fs_security::ensure_within_roots(path)
     }
 
     fn validate_write_access(path: &Path) -> Result<(), WeaveError> {
@@ -294,6 +310,6 @@ impl FilePlugin {
                 )));
             }
         }
-        Ok(())
+        fs_security::ensure_within_roots(path)
     }
 }

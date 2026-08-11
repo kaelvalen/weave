@@ -4,6 +4,7 @@ use tracing::{info, warn};
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
+use crate::utils::fs_security;
 
 pub struct SqlitePlugin;
 
@@ -32,11 +33,20 @@ impl SqlitePlugin {
         }
     }
 
+    /// Resolve a `db_path` parameter against the workspace and confirm it
+    /// stays inside the allowed roots before opening it with sqlite3.
+    fn resolve_db_path(db_path: &str) -> Result<std::path::PathBuf, WeaveError> {
+        let canonical = fs_security::canonicalize_path(db_path)?;
+        fs_security::ensure_within_roots(&canonical)?;
+        Ok(canonical)
+    }
+
     fn query(params: Value) -> Result<Value, WeaveError> {
         let db_path = params
             .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
+        let resolved_db = Self::resolve_db_path(db_path)?;
 
         // Accept both "query" and "sql" parameter names
         let query = params
@@ -49,7 +59,7 @@ impl SqlitePlugin {
 
         let output = Command::new("sqlite3")
             .arg("-json")
-            .arg(db_path)
+            .arg(&resolved_db)
             .arg(query)
             .output()
             .map_err(|e| {
@@ -90,6 +100,7 @@ impl SqlitePlugin {
             .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
+        let resolved_db = Self::resolve_db_path(db_path)?;
 
         // Accept "statement", "query", or "sql"
         let statement = params
@@ -104,7 +115,7 @@ impl SqlitePlugin {
         info!("Executing SQL Statement on {}: {}", db_path, statement);
 
         let output = Command::new("sqlite3")
-            .arg(db_path)
+            .arg(&resolved_db)
             .arg(statement)
             .output()
             .map_err(|e| {
@@ -132,12 +143,13 @@ impl SqlitePlugin {
             .get("db_path")
             .and_then(|v| v.as_str())
             .unwrap_or("weave.db");
+        let resolved_db = Self::resolve_db_path(db_path)?;
 
         info!("Listing tables in {}", db_path);
 
         let output = Command::new("sqlite3")
             .arg("-json")
-            .arg(db_path)
+            .arg(&resolved_db)
             .arg("SELECT name, type FROM sqlite_master WHERE type IN ('table','view') ORDER BY name;")
             .output()
             .map_err(|e| WeaveError::PluginError(format!("Failed to execute sqlite3 CLI: {}", e)))?;

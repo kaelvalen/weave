@@ -6,7 +6,7 @@ import type { ChatMessage } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
 import { useAppStore } from './useAppStore';
 import { extractError } from '@/lib/errors';
-import { isDestructiveCapability } from '@/lib/capabilities';
+import { requiresApproval } from '@/lib/capabilities';
 import { useApprovalModeStore } from './useApprovalModeStore';
 
 interface ChatState {
@@ -66,7 +66,8 @@ interface ToolParseFailure {
 }
 
 /** Find JSON objects by matching balanced braces so we don't greedily
- *  swallow unrelated text. Handles multi-line JSON and escaped quotes. */
+ *  swallow unrelated text. Handles multi-line JSON and escaped quotes.
+ *  Only used to extract the parameter payload of explicit `<call>` tags. */
 function findBalancedJson(content: string): string[] {
   const results: string[] = [];
   for (let i = 0; i < content.length; i++) {
@@ -105,27 +106,6 @@ function findBalancedJson(content: string): string[] {
     }
   }
   return results;
-}
-
-/** Best-effort heuristic that maps a JSON object to a capability name. */
-function inferCapabilityFromJson(json: string): string | null {
-  try {
-    const parsed = JSON.parse(json);
-    if (typeof parsed.url === 'string') return 'web.fetch';
-    if (typeof parsed.title === 'string' && typeof parsed.content === 'string')
-      return 'note.create';
-    if (typeof parsed.expression === 'string') return 'calc.eval';
-    if (typeof parsed.command === 'string') return 'shell.exec';
-    if (typeof parsed.query === 'string' && parsed.query.toLowerCase().startsWith('select'))
-      return 'db.query';
-    if (typeof parsed.directory === 'string' && typeof parsed.pattern === 'string')
-      return 'file.search';
-    if (typeof parsed.directory === 'string') return 'file.list';
-    if (typeof parsed.path === 'string') return parsed.content ? 'file.write' : 'file.read';
-  } catch {
-    // ignore
-  }
-  return null;
 }
 
 /** Parse the parameter payload for a tool call, tolerating fenced code blocks and unclosed tags. */
@@ -190,9 +170,14 @@ function parseToolParams(
 }
 
 /** Extract tool calls from an assistant message.
- *  Supports `<call plugin="...">...</call>` (with or without a closing tag)
- *  and raw JSON fallback for models that don't use XML tags.
- *  Malformed calls are returned as failures so callers can log them. */
+ *  Supports `<call plugin="...">...</call>` (with or without a closing tag).
+ *  Malformed calls are returned as failures so callers can log them.
+ *
+ *  Deliberately NO raw-JSON fallback: scanning the whole message for JSON
+ *  objects with `path`/`url` keys lets prompt-injected content (fetched web
+ *  pages, file contents echoed by the model, docs) trigger tool calls by
+ *  accident. The XML `<call>` tag is the only accepted intent marker.
+ */
 function parseToolCalls(
   content: string,
   isStreaming = false
@@ -244,21 +229,6 @@ function parseToolCalls(
     }
 
     openRegex.lastIndex = rawEnd;
-  }
-
-  // Fallback: if no XML calls found, look for raw JSON objects.
-  if (calls.length === 0) {
-    for (const json of findBalancedJson(content)) {
-      const capName = inferCapabilityFromJson(json);
-      if (!capName) continue;
-
-      const params = parseToolParams(json, capName, isStreaming);
-      if (params === null) {
-        failures.push({ raw: json, reason: `Failed to parse inferred JSON params for ${capName}` });
-      } else {
-        calls.push({ capName, params, raw: json });
-      }
-    }
   }
 
   return { calls, failures };
@@ -735,13 +705,16 @@ export const useChatStore = create<ChatState>()(
         }
       });
 
-      // File/system-modifying capabilities require explicit user approval before running.
-      // Non-destructive tools (read, list, calc, search, etc.) execute autonomously.
-      // In `accept-edits` mode the user has pre-approved all destructive calls for the session,
-      // so we skip the per-call prompt (behaves like other coders' "Accept Edits").
-      const hasDestructive = validCalls.some((c) => isDestructiveCapability(c.capName));
+      // File/system-modifying capabilities AND sensitive read/network
+      // capabilities (file.read, web.fetch, db.query, ...) require explicit
+      // user approval before running. Sensitive reads are gated because a
+      // prompt-injected call could otherwise ship local files or internal
+      // endpoints to the cloud model without the user noticing.
+      // In `accept-edits` mode the user has pre-approved these calls for the
+      // whole session, so we skip the per-call prompt.
+      const hasSensitiveOrDestructive = validCalls.some((c) => requiresApproval(c.capName));
       const approvalMode = useApprovalModeStore.getState().mode;
-      const requiresApproval = hasDestructive && approvalMode === 'ask';
+      const needsApproval = hasSensitiveOrDestructive && approvalMode === 'ask';
 
       // Attach tool calls to assistant message
       set((state) => {
@@ -753,7 +726,7 @@ export const useChatStore = create<ChatState>()(
               plugin_id: call.pluginId,
               capability: call.capName,
               params: call.params,
-              status: requiresApproval ? 'pending_approval' : 'pending',
+              status: needsApproval ? 'pending_approval' : 'pending',
             });
           }
         }
@@ -784,7 +757,7 @@ export const useChatStore = create<ChatState>()(
         console.warn('runtime_note_plan failed:', err);
       }
 
-      if (requiresApproval) {
+      if (needsApproval) {
         set((state) => {
           state.isStreaming = false;
         });

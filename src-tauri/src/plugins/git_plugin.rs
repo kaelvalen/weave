@@ -4,6 +4,7 @@ use tracing::info;
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
+use crate::utils::fs_security;
 
 pub struct GitPlugin;
 
@@ -36,11 +37,20 @@ impl GitPlugin {
         }
     }
 
+    /// Resolve a `directory` parameter against the workspace and confirm it
+    /// stays inside the allowed roots before handing it to a git subprocess.
+    fn resolve_work_dir(directory: Option<&str>) -> Result<std::path::PathBuf, WeaveError> {
+        let dir = directory.unwrap_or(".");
+        let canonical = fs_security::canonicalize_path(dir)?;
+        fs_security::ensure_within_roots(&canonical)?;
+        Ok(canonical)
+    }
+
     fn run_git_command(args: &[&str], cwd: Option<&str>) -> Result<String, WeaveError> {
         let mut cmd = Command::new("git");
         cmd.args(args);
         if let Some(dir) = cwd {
-            cmd.current_dir(dir);
+            cmd.current_dir(Self::resolve_work_dir(Some(dir))?);
         }
         let output = cmd
             .output()
@@ -68,7 +78,7 @@ impl GitPlugin {
         let mut cmd = Command::new("git");
         cmd.args(&["status", "-s"]);
         if let Some(dir) = cwd {
-            cmd.current_dir(dir);
+            cmd.current_dir(Self::resolve_work_dir(Some(dir))?);
         }
         let output = cmd
             .output()

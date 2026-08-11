@@ -3,6 +3,7 @@ use tracing::info;
 
 use crate::models::plugin::PluginExecutor;
 use crate::utils::errors::WeaveError;
+use crate::utils::ssrf;
 
 pub struct WebPlugin;
 
@@ -46,16 +47,26 @@ impl WebPlugin {
                 .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
             rt.block_on(async {
+                // SSRF guard: scheme/host policy + private-IP resolution check,
+                // re-validated on every redirect hop.
+                let parsed = ssrf::ensure_safe_url(&url).await?;
+
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(30))
-                    .redirect(reqwest::redirect::Policy::limited(10))
+                    .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                        match ssrf::ensure_safe_url_sync(attempt.url()) {
+                            Ok(()) => attempt.follow(),
+                            Err(e) => attempt.error(e.to_string()),
+                        }
+                    }))
                     .build()
                     .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
-                let response =
-                    client.get(&url).send().await.map_err(|e| {
-                        WeaveError::PluginError(format!("Failed to fetch URL: {}", e))
-                    })?;
+                let response = client
+                    .get(parsed)
+                    .send()
+                    .await
+                    .map_err(|e| WeaveError::PluginError(format!("Failed to fetch URL: {}", e)))?;
 
                 let status = response.status().as_u16();
                 let content_type = response

@@ -15,7 +15,6 @@ ALLOWED_DEPENDENCIES = {
     "execution-runtime": ["runtime-kernel", "capabilities", "plugin-runtime"],
     "cognitive-runtime": ["runtime-kernel", "plugin-runtime", "capabilities", "knowledge", "planning"],
     "workflow-runtime": ["runtime-kernel", "execution-runtime"],
-    "github-plugin": ["runtime-kernel", "plugin-runtime"]
 }
 
 def parse_cargo_toml_dependencies(toml_path):
