@@ -240,10 +240,28 @@ pub fn schema_from_example(example: &str) -> serde_json::Value {
     schema_from_value(&parsed)
 }
 
+fn is_schema_type_name(value: &serde_json::Value) -> bool {
+    let is_name = |s: &str| {
+        matches!(
+            s,
+            "object" | "string" | "number" | "integer" | "boolean" | "array" | "null"
+        )
+    };
+    match value {
+        serde_json::Value::String(s) => is_name(s),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .all(|v| v.as_str().map(is_name).unwrap_or(false)),
+        _ => false,
+    }
+}
+
 fn schema_from_value(value: &serde_json::Value) -> serde_json::Value {
     if let Some(obj) = value.as_object() {
-        // Already an explicit JSON Schema document.
-        if obj.contains_key("type") {
+        // Already an explicit JSON Schema document — only when the `type`
+        // key names a real schema type. Examples like
+        // `{"type":"shapeNode",...}` must NOT pass through as schemas.
+        if obj.get("type").map(is_schema_type_name).unwrap_or(false) {
             return value.clone();
         }
         let mut properties = serde_json::Map::new();
@@ -336,6 +354,25 @@ mod tests {
         let schema = schema_from_example("{}");
         assert_eq!(schema["type"], "object");
         assert!(schema.get("required").is_none());
+    }
+
+    #[test]
+    fn example_with_non_schema_type_key_is_inferred_not_passed_through() {
+        // canvas.add_node's example literally contains a top-level `type`
+        // key ("shapeNode") — it must be inferred as an object schema, not
+        // passed through raw as a schema document.
+        let schema = schema_from_example(r#"{"type":"shapeNode","data":{},"position":null}"#);
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"]["type"]["type"], "string");
+        assert_eq!(schema["required"], serde_json::json!(["data", "type"]));
+        assert_eq!(schema["properties"]["position"]["type"], serde_json::json!(["string", "null"]));
+    }
+
+    #[test]
+    fn example_with_real_schema_type_key_passes_through() {
+        let schema = schema_from_example(r#"{"type":"object","properties":{}}"#);
+        assert_eq!(schema["type"], "object");
+        assert!(schema.get("properties").is_some());
     }
 
     #[test]

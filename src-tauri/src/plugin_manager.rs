@@ -86,12 +86,12 @@ impl PluginManager {
                 .category(PluginCategory::System)
                 .read_access(&["file://*"])
                 .write_access(&["file://*"])
-                .capability("file.read", r#"{"path":"..."}"#, "Read file contents at the given path")
-                .capability("file.write", r#"{"path":"...","content":"..."}"#, "Write content to a file (creates parent dirs)")
-                .capability("file.list", r#"{"directory":"."}"#, "List directory entries with type and size")
-                .capability("file.search", r#"{"directory":".","pattern":"..."}"#, "Recursively search for files by name pattern")
-                .capability("file.delete", r#"{"path":"..."}"#, "Delete a file or directory")
-                .capability("file.mkdir", r#"{"path":"..."}"#, "Create a directory (including parents)")
+                .capability("file.read", r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#, "Read file contents at the given path")
+                .capability("file.write", r#"{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}"#, "Write content to a file (creates parent dirs)")
+                .capability("file.list", r#"{"type":"object","properties":{"directory":{"type":"string"}}}"#, "List directory entries with type and size")
+                .capability("file.search", r#"{"type":"object","properties":{"directory":{"type":"string"},"pattern":{"type":"string"}},"required":["pattern"]}"#, "Recursively search for files by name pattern")
+                .capability("file.delete", r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#, "Delete a file or directory")
+                .capability("file.mkdir", r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#, "Create a directory (including parents)")
                 .build(),
 
             PluginBuilder::builtin("com.weave.builtin.calc", "Calculator")
