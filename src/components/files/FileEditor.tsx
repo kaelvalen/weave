@@ -12,6 +12,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { ViewUpdate } from '@codemirror/view';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { getWeaveTheme } from '@/lib/editorTheme';
+import { cursorReadout } from '@/lib/cursorReadout';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { rust } from '@codemirror/lang-rust';
@@ -95,6 +96,7 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
   const { executeCapability } = usePluginStore();
   const { mode } = useThemeStore();
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
+  const [viewport, setViewport] = useState({ from: 1, to: 1 });
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
 
@@ -246,11 +248,18 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
   };
 
   const handleEditorUpdate = useCallback((vu: ViewUpdate) => {
+    // The cursor tracks the real selection and typing only — scrolling must
+    // never move it (Phase-7 #6). viewportChanged only updates the visible
+    // line range so the status bar can reflect where the user actually is.
     if (vu.selectionSet || vu.docChanged) {
       const state = vu.state;
       const pos = state.selection.main.head;
       const line = state.doc.lineAt(pos);
       setCursor({ line: line.number, col: pos - line.from + 1 });
+    }
+    if (vu.viewportChanged) {
+      const vp = vu.view.viewport;
+      setViewport({ from: vp.from + 1, to: vp.to + 1 });
     }
   }, []);
 
@@ -428,9 +437,9 @@ export function FileEditor({ path, onDirtyChange }: FileEditorProps) {
         <div className="flex items-center gap-4">
           <span
             className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
-            title="Cursor Position"
+            title="Cursor position; shows the first visible line while the cursor is scrolled out of view"
           >
-            Ln {cursor.line}, Col {cursor.col}
+            {cursorReadout(cursor, viewport)}
           </span>
           <span className="opacity-40">|</span>
           <span

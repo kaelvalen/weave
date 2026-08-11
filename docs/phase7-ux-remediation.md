@@ -17,19 +17,11 @@ reviewable commits; each fix should carry a regression test where testable.
 | 9 | Approval mode lacks a security-adjacent visual distinction | `(this commit)` — amber active state + inline "gate off" note in `ChatCommandCenter.tsx`; ConfirmDialog before enabling Auto-Approve; persisted-mode startup reminder (`lib/approvalReminder.ts`, once-per-runtime, non-dismissable, "Switch to Ask" action) + vitest regression |
 | 10 | Theme delete sits flush next to Clone without confirmation | `(this commit)` — `SettingsPanel.tsx` delete now gated by ConfirmDialog ("Delete theme?" with active-theme fallback note), separated from "Clone to Custom" by a divider, with `aria-label`/`title`; store regression tests prove `deleteTheme` falls back to defaults when the active theme is removed |
 | 8 | Files view breaks the single-nav pattern | `(this commit)` — the standalone 48px icon-only rail was removed; Explorer/Git/Search are now icon + visible-label tabs inside the 260px sidebar panel header. Follows the app-wide "every nav item has a visible label" convention without promoting Files-scoped concepts to the main navigation |
+| 6 | Files status bar cursor/scroll mismatch | `(this commit)` — `FileEditor.tsx` now listens to `viewportChanged` (it was never handled, so the readout froze at "Ln 1, Col 1" on open). The cursor still tracks the real selection only; scrolling updates the visible range, and `lib/cursorReadout.ts` shows the first visible line (`Ln N · view`) while the cursor is scrolled out of view. Pure readout logic extracted and unit-tested (3 vitest cases) |
 
-## Backlog (prioritized)
+## Backlog
 
-### P3 — #6 Files cursor/scroll mismatch (needs reproduction)
-
-- **Bulgu:** status bar reads "Ln 1, Col 1" while the viewport shows content
-  around line 64. Low confidence — the user may have scrolled.
-- **Kanıt:** `src/components/files/FileEditor.tsx:97` cursor initialized to
-  `{line:1, col:1}`; updated on `vu.selectionSet || vu.docChanged` (`:249-253`),
-  rendered at `:433`. Scroll position is not synced to the cursor.
-- **Öneri:** reproduce in a live session first. If the cursor does not update
-  after initial load, the update predicate needs a `vu.viewportChanged` case or
-  the status bar should reflect the last visible line instead of the cursor.
+Phase 7 backlog is empty — all findings from the screenshot audit are closed.
 
 ## Dispositions (verified, not bugs — no action planned)
 
