@@ -347,8 +347,17 @@ impl AgentLoop {
                     }
                 };
 
-                // ---- Approval gate (spec §3 step 4) ----
-                if capability_policy::requires_approval(&call.capability) {
+                // ---- Approval gate (spec §3 step 4; MCP default per
+                //      phase8-mcp-spec.md Part 2 §2) ----
+                let gated = match self.plugin_manager.get_plugin(&plugin_id) {
+                    Some(plugin) => capability_policy::requires_approval_for_call(
+                        &call.capability,
+                        &plugin,
+                        &self.config.read(),
+                    ),
+                    None => capability_policy::requires_approval(&call.capability),
+                };
+                if gated {
                     let receiver = self.approvals.register(call.call_id.clone());
                     let _ = event_tx
                         .send(AgentEvent::PendingApproval {

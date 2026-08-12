@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 use sha2::{Digest, Sha256};
 
+use crate::mcp_client::{self, McpExecutor, McpTool, McpToolCache};
 use crate::models::manifest::Manifest;
 use crate::models::plugin::*;
 use crate::plugins::calc_plugin::CalcPlugin;
@@ -27,6 +28,8 @@ pub struct PluginManager {
     executors: Arc<RwLock<HashMap<String, Box<dyn PluginExecutor>>>>,
     builtin: Vec<Plugin>,
     plugin_dir: PathBuf,
+    /// `tools/list` cache for MCP servers (docs/phase8-mcp-spec.md Part 2 §3).
+    mcp_tool_cache: Arc<McpToolCache>,
 }
 
 impl PluginManager {
@@ -73,7 +76,97 @@ impl PluginManager {
             executors: Arc::new(RwLock::new(executors)),
             builtin,
             plugin_dir,
+            mcp_tool_cache: Arc::new(McpToolCache::new()),
         }
+    }
+
+    /// Register an MCP server's discovered tools into the same registry
+    /// `create_builtin_plugins()` populates — same shape, different source
+    /// (docs/phase8-mcp-spec.md Part 2 §1). Builds a `Plugin` whose
+    /// capability schemas are the server's own `inputSchema` documents
+    /// verbatim (Part 1 Q3: no transformation needed), registers a single
+    /// `McpExecutor` for the whole server, and caches the tool list.
+    pub fn add_mcp_server(
+        &self,
+        server_id: &str,
+        server_name: &str,
+        base_url: &str,
+        access_token: Option<String>,
+        tools: Vec<McpTool>,
+    ) -> Plugin {
+        let id = mcp_client::plugin_id(server_id);
+
+        let mut provide = Vec::with_capacity(tools.len());
+        let mut schemas = HashMap::with_capacity(tools.len());
+        let mut descriptions = HashMap::with_capacity(tools.len());
+        for tool in &tools {
+            let capability = mcp_client::capability_id(server_id, &tool.name);
+            provide.push(capability.clone());
+            schemas.insert(capability.clone(), tool.input_schema.clone());
+            descriptions.insert(capability, tool.description.clone());
+        }
+
+        let plugin = Plugin {
+            id: id.clone(),
+            name: server_name.to_string(),
+            version: "mcp".to_string(),
+            author: "MCP server".to_string(),
+            description: format!("MCP (2026-07-28) server at {}", base_url),
+            capabilities: Capabilities {
+                read: Vec::new(),
+                write: Vec::new(),
+                provide,
+                schemas,
+                descriptions,
+            },
+            runtime: RuntimeConfig {
+                runtime_type: RuntimeType::Mcp,
+                entry: base_url.to_string(),
+                sandbox: SandboxLevel::Strict,
+            },
+            ui: PluginUiConfig {
+                ui_type: UiType::None,
+                entry: String::new(),
+            },
+            state: PluginState::Active,
+            path: None,
+            is_builtin: false,
+            category: PluginCategory::Ai,
+        };
+
+        self.plugins.write().insert(id.clone(), plugin.clone());
+        self.executors.write().insert(
+            id.clone(),
+            Box::new(McpExecutor {
+                server_id: server_id.to_string(),
+                base_url: base_url.to_string(),
+                access_token,
+            }),
+        );
+
+        info!(
+            "Registered MCP server: {} ({}), {} tool(s)",
+            server_name,
+            id,
+            tools.len()
+        );
+        plugin
+    }
+
+    /// Remove a previously-registered MCP server and its capabilities.
+    pub fn remove_mcp_server(&self, server_id: &str) -> Result<(), WeaveError> {
+        let id = mcp_client::plugin_id(server_id);
+        self.mcp_tool_cache.invalidate(server_id);
+        self.executors.write().remove(&id);
+        self.plugins
+            .write()
+            .remove(&id)
+            .ok_or_else(|| WeaveError::PluginNotFound(id))?;
+        Ok(())
+    }
+
+    pub fn mcp_tool_cache(&self) -> Arc<McpToolCache> {
+        self.mcp_tool_cache.clone()
     }
 
     pub fn plugin_dir(&self) -> PathBuf {

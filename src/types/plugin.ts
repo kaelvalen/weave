@@ -1,4 +1,4 @@
-export type RuntimeType = 'builtin' | 'wasm' | 'python' | 'nodejs';
+export type RuntimeType = 'builtin' | 'wasm' | 'python' | 'nodejs' | 'mcp';
 
 export type SandboxLevel = 'strict' | 'relaxed';
 
@@ -42,6 +42,16 @@ export interface Plugin {
   path?: string;
   is_builtin: boolean;
   category: PluginCategory;
+}
+
+/** Frontend-facing view of a configured MCP server (backend McpServerSummary) — never carries tokens. */
+export interface McpServerSummary {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  allowlisted_tools: string[];
+  has_token: boolean;
 }
 
 export interface GithubRepo {

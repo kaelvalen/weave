@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import type { GithubRepo, Plugin, PluginCategory } from '@/types/plugin';
+import type { GithubRepo, McpServerSummary, Plugin, PluginCategory } from '@/types/plugin';
 import { extractError } from '@/lib/errors';
 
 interface PluginState {
@@ -17,6 +17,7 @@ interface PluginState {
   selectedCategory: string | null;
   githubRepos: GithubRepo[];
   githubOrg: string;
+  mcpServers: McpServerSummary[];
 
   discoverPlugins: () => Promise<void>;
   installFromFile: (sourcePath: string) => Promise<void>;
@@ -37,6 +38,9 @@ interface PluginState {
   fetchGithubPlugins: (org?: string) => Promise<void>;
   installFromGithubRepo: (repoUrl: string) => Promise<void>;
   installFromGithubRelease: (repoUrl: string, tag?: string, asset?: string) => Promise<void>;
+  fetchMcpServers: () => Promise<void>;
+  addMcpServer: (url: string, name: string) => Promise<boolean>;
+  removeMcpServer: (serverId: string) => Promise<void>;
 }
 
 export const usePluginStore = create<PluginState>()(
@@ -52,6 +56,7 @@ export const usePluginStore = create<PluginState>()(
       selectedCategory: null,
       githubRepos: [],
       githubOrg: 'weave-plugins',
+      mcpServers: [],
 
       discoverPlugins: async () => {
         set((state) => {
@@ -289,6 +294,66 @@ export const usePluginStore = create<PluginState>()(
             state.isLoading = false;
             state.error = `GitHub release install failed: ${msg}`;
           });
+        }
+      },
+
+      fetchMcpServers: async () => {
+        try {
+          const servers: McpServerSummary[] = await invoke('mcp_list_servers');
+          set((state) => {
+            state.mcpServers = servers;
+          });
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Failed to list MCP servers: ${msg}`);
+        }
+      },
+
+      // MCP-sourced capabilities default to approval-gated on the backend
+      // (docs/phase8-mcp-spec.md Part 2 §2) — no client-side gating logic
+      // here, this only adds the server as a capability source.
+      addMcpServer: async (url: string, name: string) => {
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const plugin: Plugin = await invoke('mcp_add_server', { url, name });
+          set((state) => {
+            const idx = state.plugins.findIndex((p) => p.id === plugin.id);
+            if (idx >= 0) {
+              state.plugins[idx] = plugin;
+            } else {
+              state.plugins.push(plugin);
+            }
+            state.loadedPlugins.push(plugin.id);
+            state.isLoading = false;
+          });
+          await get().fetchMcpServers();
+          toast.success(`Added MCP server "${plugin.name}"`);
+          return true;
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Failed to add MCP server: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `Failed to add MCP server: ${msg}`;
+          });
+          return false;
+        }
+      },
+
+      removeMcpServer: async (serverId: string) => {
+        try {
+          await invoke('mcp_remove_server', { serverId });
+          set((state) => {
+            state.plugins = state.plugins.filter((p) => p.id !== `com.weave.mcp.${serverId}`);
+            state.mcpServers = state.mcpServers.filter((s) => s.id !== serverId);
+          });
+          toast.success('MCP server removed');
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Failed to remove MCP server: ${msg}`);
         }
       },
     })),
