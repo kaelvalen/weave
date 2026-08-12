@@ -220,3 +220,52 @@ Probe result (2026-08-11): Qwen3.5-9B-Q4_K_M returned streamed native
 `tool_calls` through both `llama-server` and Ollama 0.32.6 `/api/chat`;
 qwen2.5-coder-7b returned XML text instead. `use_native_tools` remains `true`
 by default for native-capable models and is a static per-model decision.
+
+---
+
+## 7. Phase 8.0 addendum (2026-08-12) — probe re-verification
+
+Phase 8's kickoff plan treats the 2026-08-11 probe result above as unconfirmed
+("has never been run for real") and requires closing that gap with a live
+local server before Phase 8.1 begins. Re-investigated:
+
+**What backs the 2026-08-11 result today:** only prose. Commit `4037b22`
+("provider-safe tool names + native prompt; README rewrite; Ollama probe
+evidence") added the `Probe result` paragraph above, the equivalent README
+section (`README.md` "Native Tool Calling"), and the doc comment on
+`LocalConfig::use_native_tools` (`src-tauri/src/utils/config.rs:55-62`) in
+the same commit as unrelated code changes (provider-safe tool-name hashing).
+No script, captured request/response transcript, or log file was committed
+alongside it. The one test touched in that commit
+(`src-tauri/tests/agent_loop_test.rs`, `src-tauri/tests/common/mod.rs`)
+exercises the provider-safe function-name format against a **mocked** HTTP
+SSE stream (`common::tool_call_script`) — it does not talk to a real
+`llama-server` or Ollama process. There is no reproducible artifact in this
+repository that independently substantiates "llama-server and Ollama 0.32.6
+both returned native `tool_calls` for Qwen3.5" beyond the commit
+author's word.
+
+**This session's environment check (2026-08-12):** `which ollama
+llama-server` found neither binary; `curl` to `localhost:11434/api/tags`
+(Ollama's default) and `localhost:8080/health` (a typical `llama-server`
+default) both returned nothing — no local inference server is reachable
+from this sandboxed session. This is expected: the remote/cloud execution
+environment this session runs in has no GPU, no model weights, and no
+local server process — running a real local-model probe requires the
+user's own machine, which Phase 8.0 as literally scoped ("with the actual
+local server running") cannot be satisfied from inside this session.
+
+**Disposition:** `use_native_tools` default (`true`,
+`default_use_native_tools()` in `config.rs:67-69`) is left unchanged — there
+is no evidence it is wrong, only that the existing "confirmed" framing
+overstates what is actually verifiable from the repository. The doc comment
+on `LocalConfig::use_native_tools` and the README section should be read as
+**developer-asserted, not independently reproduced**. Recommendation carried
+into Phase 8.1: this is a pre-existing gap in the spine, not a new one MCP
+introduces, and does not block Phase 8.1 inventory (which concerns the
+plugin-registry/schema/auth surfaces, not the native-tool-calling probe
+itself) — but it should be closed by the user running the probe on their
+own machine (a `tools`-bearing request to their local endpoint, checking for
+`tool_calls` in the response) before relying on `use_native_tools: true` as
+a verified default in a production setting, and ideally with the transcript
+committed this time so the claim is checkable.
