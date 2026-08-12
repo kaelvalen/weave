@@ -13,6 +13,43 @@ pub fn requires_approval(capability: &str) -> bool {
     is_destructive(capability) || is_sensitive(capability)
 }
 
+/// Runtime-aware gate used at the actual agent-loop call site
+/// (`agent/mod.rs`). Wraps `requires_approval` for everything except
+/// MCP-sourced capabilities, which the static `DESTRUCTIVE_CAPS`/
+/// `SENSITIVE_CAPS` allowlists structurally cannot cover — those are a
+/// compile-time list of hand-classified builtin capability ids, while MCP
+/// tools are discovered at runtime from a third-party, opaque server whose
+/// internals can change without Weave's knowledge.
+///
+/// Locked default (docs/phase8-mcp-spec.md Part 2 §2): an MCP-sourced
+/// capability is gated (approval required) unless the specific
+/// `(server, tool)` pair — i.e. the exact capability id, since ids are
+/// already namespaced `mcp.<server_id>.<tool_name>` — is present in that
+/// server's `allowlisted_tools`. This mirrors the failure mode Phase 1
+/// closed for the frontend parser (an unclassified capability defaulting to
+/// *ungated*) and refuses to reopen it at the MCP entry point.
+pub fn requires_approval_for_call(
+    capability: &str,
+    plugin: &crate::models::plugin::Plugin,
+    config: &crate::utils::config::AppConfig,
+) -> bool {
+    if plugin.runtime.runtime_type == crate::models::plugin::RuntimeType::Mcp {
+        // plugin.id is "com.weave.mcp.<server_id>" (mcp_client::plugin_id);
+        // AppConfig.mcp_servers is keyed by the bare server_id.
+        let server_id = plugin
+            .id
+            .strip_prefix("com.weave.mcp.")
+            .unwrap_or(plugin.id.as_str());
+        let allowlisted = config
+            .mcp_servers
+            .get(server_id)
+            .map(|server| server.allowlisted_tools.contains(capability))
+            .unwrap_or(false);
+        return !allowlisted;
+    }
+    requires_approval(capability)
+}
+
 pub fn is_destructive(capability: &str) -> bool {
     DESTRUCTIVE_CAPS.contains(&capability)
 }
@@ -111,6 +148,128 @@ mod tests {
     #[test]
     fn unknown_caps_are_not_gated() {
         assert!(!requires_approval("totally.made_up"));
+    }
+
+    fn mcp_plugin_fixture(server_id: &str) -> crate::models::plugin::Plugin {
+        use crate::models::plugin::{
+            Capabilities, Plugin, PluginCategory, PluginState, PluginUiConfig, RuntimeConfig,
+            RuntimeType, SandboxLevel, UiType,
+        };
+        Plugin {
+            id: crate::mcp_client::plugin_id(server_id),
+            name: server_id.to_string(),
+            version: "0.0.0".to_string(),
+            author: "MCP".to_string(),
+            description: String::new(),
+            capabilities: Capabilities::default(),
+            runtime: RuntimeConfig {
+                runtime_type: RuntimeType::Mcp,
+                entry: String::new(),
+                sandbox: SandboxLevel::Strict,
+            },
+            ui: PluginUiConfig {
+                ui_type: UiType::None,
+                entry: String::new(),
+            },
+            state: PluginState::Active,
+            path: None,
+            is_builtin: false,
+            category: PluginCategory::System,
+        }
+    }
+
+    /// Phase 8.5 minimum coverage: an MCP-sourced capability with no
+    /// explicit allowlist entry must gate, by default, with no exceptions.
+    #[test]
+    fn mcp_capability_with_no_allowlist_entry_is_gated() {
+        let plugin = mcp_plugin_fixture("weather");
+        let config = crate::utils::config::AppConfig::default();
+        assert!(requires_approval_for_call("mcp.weather.get_forecast", &plugin, &config));
+    }
+
+    #[test]
+    fn mcp_capability_gated_even_if_it_would_look_benign_by_name() {
+        // Unlike builtin caps, MCP tool names carry no hand-audited
+        // classification at all — a name that reads as harmless must still
+        // gate, because the server's actual behavior is opaque.
+        let plugin = mcp_plugin_fixture("weather");
+        let config = crate::utils::config::AppConfig::default();
+        assert!(requires_approval_for_call("mcp.weather.get_time", &plugin, &config));
+    }
+
+    #[test]
+    fn mcp_capability_explicitly_allowlisted_is_not_gated() {
+        let plugin = mcp_plugin_fixture("weather");
+        let mut config = crate::utils::config::AppConfig::default();
+        let mut server = crate::utils::config::McpServerConfig::default();
+        server.id = "weather".to_string();
+        server
+            .allowlisted_tools
+            .insert("mcp.weather.get_forecast".to_string());
+        config.mcp_servers.insert("weather".to_string(), server);
+
+        assert!(!requires_approval_for_call(
+            "mcp.weather.get_forecast",
+            &plugin,
+            &config
+        ));
+        // Allowlisting one tool must not blanket-allow the rest of the server.
+        assert!(requires_approval_for_call(
+            "mcp.weather.delete_everything",
+            &plugin,
+            &config
+        ));
+    }
+
+    #[test]
+    fn mcp_allowlist_is_scoped_per_server() {
+        let plugin = mcp_plugin_fixture("weather");
+        let mut config = crate::utils::config::AppConfig::default();
+        let mut other_server = crate::utils::config::McpServerConfig::default();
+        other_server.id = "other".to_string();
+        other_server
+            .allowlisted_tools
+            .insert("mcp.weather.get_forecast".to_string());
+        // Allowlist entry lives under the wrong server id — must not apply.
+        config.mcp_servers.insert("other".to_string(), other_server);
+
+        assert!(requires_approval_for_call(
+            "mcp.weather.get_forecast",
+            &plugin,
+            &config
+        ));
+    }
+
+    #[test]
+    fn non_mcp_plugin_still_uses_static_classification() {
+        use crate::models::plugin::{
+            Capabilities, Plugin, PluginCategory, PluginState, PluginUiConfig, RuntimeConfig,
+            RuntimeType, SandboxLevel, UiType,
+        };
+        let plugin = Plugin {
+            id: "com.weave.builtin.file".to_string(),
+            name: "File Manager".to_string(),
+            version: "0.0.0".to_string(),
+            author: "Weave".to_string(),
+            description: String::new(),
+            capabilities: Capabilities::default(),
+            runtime: RuntimeConfig {
+                runtime_type: RuntimeType::Builtin,
+                entry: String::new(),
+                sandbox: SandboxLevel::Strict,
+            },
+            ui: PluginUiConfig {
+                ui_type: UiType::None,
+                entry: String::new(),
+            },
+            state: PluginState::Active,
+            path: None,
+            is_builtin: true,
+            category: PluginCategory::System,
+        };
+        let config = crate::utils::config::AppConfig::default();
+        assert!(requires_approval_for_call("file.read", &plugin, &config));
+        assert!(!requires_approval_for_call("calc.eval", &plugin, &config));
     }
 
     /// CI check: the frontend mirror (src/lib/capabilities.ts) must stay in

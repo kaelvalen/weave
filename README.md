@@ -78,6 +78,7 @@ Rust AgentLoop
         |-- Built-in Rust plugins
         |-- Python runtime
         |-- WASM runtime
+        |-- MCP client (2026-07-28, single-round-trip)
 ```
 
 `runtime-kernel` supplies `ExecutionContext`, events, observability, and event
@@ -214,9 +215,49 @@ type = "wasm"
 entry = "engine/main.wasm"
 ```
 
-Supported active runtime executors are `builtin`, `wasm`, and `python`. The
-manifest model recognizes `nodejs` for compatibility, but no Node.js executor
-is currently registered.
+Supported active runtime executors are `builtin`, `wasm`, `python`, and `mcp`
+(see below). The manifest model recognizes `nodejs` for compatibility, but
+no Node.js executor is currently registered.
+
+## MCP Servers
+
+Weave can add tools from an MCP server as a capability source, registered
+into the same plugin registry as builtins — from the Plugin Marketplace
+("Add MCP Server"), or via `mcp_add_server(url, name)`.
+
+**Scope: MCP specification revision `2026-07-28` only.** This is the
+stateless-core rewrite of MCP — no `initialize`/`Mcp-Session-Id` handshake,
+`MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` request headers, `resultType`
+on every result, and Multi Round-Trip Requests (MRTR) in place of
+server-initiated streams for mid-call input. **Older MCP revisions
+(2025-11-25 and earlier, session-based) are not supported** — Weave calls
+`server/discover` before trusting anything else from a server and rejects
+one that doesn't declare `2026-07-28` support, rather than silently falling
+back to a legacy transport.
+
+Within `2026-07-28`, Weave implements **single-round-trip `tools/call`
+only**. A server that responds with `resultType: "input_required"`
+(MRTR mid-call elicitation, e.g. asking the user "Delete 3 files?" before
+finishing) surfaces as a clear tool-execution error, not a hang — Weave
+does not yet drive the follow-up round trip that would answer it.
+
+**Every MCP-sourced capability requires approval by default**, the same as
+builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:
+those are hand-classified by reading each plugin's code; an MCP server's
+internals are third-party and opaque, and can change without Weave's
+knowledge. There is no equivalent hand-classification to fall back to, so
+the default is gated, full stop, until a specific server/tool is
+explicitly allowlisted.
+
+Server connection state — URL, discovered auth endpoints, tokens, and the
+allowlist — lives in `~/.weave/config.json` alongside the existing provider
+API keys: same plaintext-file storage this project already uses (no OS
+keychain integration), extended rather than duplicated into a second store.
+OAuth 2.1/Client ID Metadata Document (CIMD) authorization is scoped for a
+follow-up — Weave does not yet run the CIMD flow, so only MCP servers that
+require no authentication are connectable today.
+
+Full design record: `docs/phase8-mcp-spec.md`.
 
 ## Project Status
 
@@ -227,6 +268,9 @@ is currently registered.
 - [x] Dead crate/module removal
 - [x] Frontend Vitest scaffolding and security regression coverage
 - [ ] Phase 6 UX audit with live screens and reproduction evidence
+- [x] MCP (2026-07-28) integration: registry, default-gated approvals, single-round-trip tool calls
+- [ ] MCP real-server validation against a live 2026-07-28 server (Phase 8.4 — not yet run)
+- [ ] MCP OAuth 2.1/CIMD authorization flow (unauthenticated servers only today)
 
 ## Contributing
 

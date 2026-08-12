@@ -62,6 +62,10 @@ pub enum RuntimeType {
     Wasm,
     Python,
     Nodejs,
+    /// Tools discovered live from an MCP (2026-07-28) server, registered
+    /// into the plugin registry the same way builtins are — see
+    /// docs/phase8-mcp-spec.md Part 1 Q2.
+    Mcp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

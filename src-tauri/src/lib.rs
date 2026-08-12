@@ -8,6 +8,7 @@ pub mod agent;
 pub mod ai_bridge;
 pub mod commands;
 pub mod github_plugin;
+pub mod mcp_client;
 pub mod models;
 pub mod plugin_manager;
 pub mod plugins;

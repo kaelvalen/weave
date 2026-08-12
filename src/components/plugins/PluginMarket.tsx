@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { usePluginStore } from '@/stores/usePluginStore';
 import { PluginCard } from './PluginCard';
 import { GithubPluginPanel } from './GithubPluginPanel';
+import { AddMcpServerDialog } from './AddMcpServerDialog';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -129,6 +130,7 @@ export function PluginMarket() {
             <Github className="w-3.5 h-3.5" />
             {showGithub ? 'Marketplace' : 'GitHub'}
           </Button>
+          <AddMcpServerDialog />
           <Button
             onClick={handleInstall}
             disabled={installing || isLoading}

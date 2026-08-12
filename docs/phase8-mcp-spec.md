@@ -204,7 +204,7 @@ the same storage mechanism can hold it:**
   application**, not one per MCP server — Weave would host a single CIMD
   document (e.g. under a Weave-controlled or GitHub Pages URL) and reuse
   the same `client_id` URL across every MCP server it connects to,
-  analogous to how Claude.ai/Claude Code ship one CIMD document platform-wide.
+  analogous to how other OAuth-ecosystem clients ship one metadata document platform-wide.
   This is new *infrastructure* (someone must host that static JSON
   somewhere reachable over HTTPS) but not new *per-user local storage*.
 - **Per-server state that *does* need local storage**: for each configured

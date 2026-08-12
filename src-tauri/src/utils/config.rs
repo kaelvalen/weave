@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::errors::WeaveError;
@@ -11,6 +12,12 @@ pub struct AppConfig {
     pub plugins: PluginConfig,
     pub ui: UiConfig,
     pub version: String,
+    /// MCP (2026-07-28) servers the user has added, keyed by server id.
+    /// docs/phase8-mcp-spec.md Part 2 §5: extends this same plaintext
+    /// AppConfig store rather than a new one — same pattern as the
+    /// provider API keys above, same inherited caveat (no OS keychain).
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +73,36 @@ pub struct LocalConfig {
 
 fn default_use_native_tools() -> bool {
     true
+}
+
+/// Per-server MCP config: connection + CIMD/OAuth state
+/// (docs/phase8-mcp-spec.md Part 1 Q4 / Part 2 §5). `id`/`url`/`name` are
+/// set on add; the discovery/token fields are populated once the server's
+/// authorization flow completes (servers that don't require auth leave
+/// them `None`). `allowlisted_tools` holds full capability ids
+/// (`mcp.<server_id>.<tool_name>`) the user has explicitly opted out of
+/// the default approval gate for — see capability_policy.rs.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub allowlisted_tools: HashSet<String>,
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub authorization_endpoint: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+    #[serde(default)]
+    pub access_token: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default)]
+    pub token_expires_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +190,7 @@ impl Default for AppConfig {
                 sidebar_collapsed: false,
                 font_size: 14,
             },
+            mcp_servers: HashMap::new(),
         }
     }
 }
