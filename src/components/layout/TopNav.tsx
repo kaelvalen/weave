@@ -3,7 +3,7 @@ import { useChatStore } from '@/stores/useChatStore';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { useSystemPulse } from '@/hooks/useSystemPulse';
 import { effectiveTps, formatTps } from '@/lib/modelStats';
-import { Settings, User, Search, PanelLeft, PanelRight } from 'lucide-react';
+import { Settings, Search, PanelLeft, PanelRight } from 'lucide-react';
 
 /**
  * Ambient Runtime — a small living status readout in the top-right corner.
@@ -122,14 +122,6 @@ export function TopNav() {
             className={toggleClass(isRightPanelOpen)}
           >
             <PanelRight className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveView(activeView === 'profile' ? 'chat' : 'profile')}
-            title="Profile"
-            className={toggleClass(activeView === 'profile')}
-          >
-            <User className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"

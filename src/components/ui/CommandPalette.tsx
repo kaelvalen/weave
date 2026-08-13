@@ -9,9 +9,8 @@ import {
   Package,
   Settings as SettingsIcon,
   MessageCircle,
-  FileText,
+  BookOpen,
   Brain,
-  Boxes,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -128,22 +127,10 @@ export function CommandPalette() {
         onSelect: () => setActiveView('chat'),
       },
       {
-        id: 'artifacts',
-        label: 'Go to Artifacts',
-        icon: Package,
-        onSelect: () => setActiveView('artifacts'),
-      },
-      {
-        id: 'memory',
-        label: 'Go to Memory',
-        icon: Brain,
-        onSelect: () => setActiveView('memory'),
-      },
-      {
-        id: 'capabilities',
-        label: 'Go to Capabilities',
-        icon: Boxes,
-        onSelect: () => setActiveView('capabilities'),
+        id: 'knowledge',
+        label: 'Go to Knowledge',
+        icon: BookOpen,
+        onSelect: () => setActiveView('knowledge'),
       },
       {
         id: 'files',
@@ -151,14 +138,12 @@ export function CommandPalette() {
         icon: FolderOpen,
         onSelect: () => setActiveView('files'),
       },
-      { id: 'notes', label: 'Go to Notes', icon: FileText, onSelect: () => setActiveView('notes') },
       {
         id: 'plugins',
         label: 'Go to Plugins',
         icon: Package,
         onSelect: () => setActiveView('plugins'),
       },
-      { id: 'models', label: 'Go to Runtime', icon: Brain, onSelect: () => setActiveView('models') },
       {
         id: 'settings',
         label: 'Go to Settings',

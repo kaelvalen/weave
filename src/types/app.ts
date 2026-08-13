@@ -2,15 +2,10 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 export type View =
   | 'chat'
-  | 'artifacts'
-  | 'memory'
-  | 'capabilities'
+  | 'knowledge'
   | 'plugins'
   | 'files'
-  | 'settings'
-  | 'notes'
-  | 'models'
-  | 'profile';
+  | 'settings';
 
 export interface ProviderConfig {
   api_key: string;

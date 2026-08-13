@@ -4,13 +4,8 @@ import type { View } from '@/types/app';
 import {
   MessageSquare,
   FolderOpen,
-  Package,
-  Brain,
-  StickyNote,
-  Cpu,
-  Boxes,
+  BookOpen,
   Plug,
-  User,
   Settings,
   ChevronRight,
   type LucideIcon,
@@ -42,26 +37,15 @@ const SECTIONS: NavSection[] = [
   },
   {
     label: 'Knowledge',
-    items: [
-      { view: 'artifacts', label: 'Artifacts', icon: Package },
-      { view: 'memory', label: 'Memory', icon: Brain },
-      { view: 'notes', label: 'Notes', icon: StickyNote },
-    ],
+    items: [{ view: 'knowledge', label: 'Knowledge', icon: BookOpen }],
   },
   {
     label: 'Runtime',
-    items: [
-      { view: 'models', label: 'Monitor', icon: Cpu },
-      { view: 'capabilities', label: 'Capabilities', icon: Boxes },
-      { view: 'plugins', label: 'Plugins', icon: Plug },
-    ],
+    items: [{ view: 'plugins', label: 'Plugins', icon: Plug }],
   },
   {
     label: 'System',
-    items: [
-      { view: 'profile', label: 'Profile', icon: User },
-      { view: 'settings', label: 'Settings', icon: Settings },
-    ],
+    items: [{ view: 'settings', label: 'Settings', icon: Settings }],
   },
 ];
 

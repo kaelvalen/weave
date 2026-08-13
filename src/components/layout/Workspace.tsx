@@ -2,15 +2,9 @@ import { useAppStore } from '@/stores/useAppStore';
 import { ChatCommandCenter } from '@/components/chat/ChatCommandCenter';
 import { PluginMarket } from '@/components/plugins/PluginMarket';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
-import { NotesManager } from '@/components/notes/NotesManager';
 import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
-import { RuntimeView } from '@/components/models/RuntimeView';
-import { ProfilePanel } from '@/components/profile/ProfilePanel';
-
-import { CapabilitiesView } from '@/components/capabilities/CapabilitiesView';
-import { ArtifactsView } from '@/components/artifacts/ArtifactsView';
-import { MemoryView } from '@/components/memory/MemoryView';
+import { KnowledgeView } from '@/components/workspace/KnowledgeView';
 import { useEffect } from 'react';
 
 export function Workspace() {
@@ -20,24 +14,14 @@ export function Workspace() {
     switch (activeView) {
       case 'chat':
         return <ChatCommandCenter />;
-      case 'artifacts':
-        return <ArtifactsView />;
-      case 'memory':
-        return <MemoryView />;
-      case 'capabilities':
-        return <CapabilitiesView />;
+      case 'knowledge':
+        return <KnowledgeView />;
       case 'plugins':
         return <PluginMarket />;
       case 'settings':
         return <SettingsPanel />;
-      case 'profile':
-        return <ProfilePanel />;
       case 'files':
         return <FileManager />;
-      case 'notes':
-        return <NotesManager />;
-      case 'models':
-        return <RuntimeView />;
       default:
         return <FileManager />;
     }

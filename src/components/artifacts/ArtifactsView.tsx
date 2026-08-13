@@ -4,7 +4,6 @@ import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { useAppStore } from '@/stores/useAppStore';
 import type { PluginCall } from '@/types/chat';
 import { extractArtifactsFromCalls } from '@/lib/extractArtifacts';
-import { ViewHeader } from '@/components/ui/ViewHeader';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import ReactMarkdown from 'react-markdown';
@@ -206,8 +205,6 @@ export function ArtifactsView() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      <ViewHeader title="Artifacts" count={`${items.length} items`} />
-
       {/* ── Artifact list and preview split ── */}
       <div className="flex flex-1 min-h-0 w-full overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0 h-full border-r border-border/40">
