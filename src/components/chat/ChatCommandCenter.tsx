@@ -13,7 +13,6 @@ import {
   FileText,
   Workflow,
   ArrowDown,
-  MessageSquare,
   Trash2,
   ChevronDown,
 } from 'lucide-react';
@@ -122,26 +121,19 @@ export function ChatCommandCenter() {
     <div className="flex h-full w-full bg-background overflow-hidden">
       {/* ── Main Conversation Stream Canvas ── */}
       <div className="flex-1 flex flex-col min-w-0 bg-background relative">
-        {/* ── Unified View Header ── */}
-        <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-          <div className="flex items-center gap-3">
+        {/* ── Minimal header: thread switcher + actions, no bar chrome ── */}
+        <header className="flex items-center justify-between gap-4 px-6 pt-5 pb-3 shrink-0">
+          <div className="flex items-center min-w-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-surface-2 hover:bg-surface-3 transition-colors text-left border border-border/40 group">
-                  <div className="p-1.5 rounded-lg bg-surface-3 text-brand">
-                    <MessageSquare className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h1 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-1.5">
-                      <span className="truncate max-w-[220px] sm:max-w-[340px]">
-                        {activeSessionObj?.title || 'Conversations'}
-                      </span>
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-transform" />
-                    </h1>
-                    <p className="text-[11px] text-muted-foreground font-mono">
-                      {sessions.length} thread{sessions.length === 1 ? '' : 's'}
-                    </p>
-                  </div>
+                <button className="flex items-baseline gap-2 text-left group min-w-0">
+                  <h1 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground truncate group-hover:text-foreground transition-colors">
+                    {activeSessionObj?.title || 'Conversations'}
+                  </h1>
+                  <span className="text-[11px] font-mono text-muted-foreground/60 whitespace-nowrap">
+                    {sessions.length} thread{sessions.length === 1 ? '' : 's'}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground/60 group-hover:text-foreground transition-transform shrink-0" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-80 bg-surface-1 border-border/40 p-1.5 shadow-xl">
