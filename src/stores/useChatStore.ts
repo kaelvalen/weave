@@ -403,8 +403,20 @@ export const useChatStore = create<ChatState>()(
         status: payload.status as PluginCall['status'],
       };
       set((state) => {
-        const msg = state.messages.find((m) => m.id === payload.message_id);
-        if (!msg) return;
+        let msg = state.messages.find((m) => m.id === payload.message_id);
+        if (!msg) {
+          // A pure tool-call turn (e.g. MCP get_me) streams no text chunk,
+          // so appendChunk never created the assistant message. Create it
+          // here or the pending approval is silently dropped and the
+          // backend loop waits forever — the "frozen chat" bug.
+          msg = {
+            id: payload.message_id,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+          };
+          state.messages.push(msg);
+        }
         if (!msg.metadata) msg.metadata = { plugin_calls: [] };
         const calls = msg.metadata.plugin_calls;
         const existing = calls.find((c) => c.capability === payload.capability);

@@ -81,11 +81,20 @@ describe('handleToolCallEvent (backend-driven approval flow)', () => {
     expect(calls[0].result).toEqual({ content: 'fn main() {}', success: true });
   });
 
-  it('ignores events for unknown messages', () => {
-    useChatStore.getState().handleToolCallEvent({
-      ...pendingApprovalEvent('assistant-1'),
-      message_id: 'no-such-message',
-    });
-    expect(useChatStore.getState().messages).toHaveLength(0);
+  it('creates the assistant message for pure tool-call turns', () => {
+    // A pure native tool-call turn (e.g. MCP get_me) streams no text chunk,
+    // so no assistant message exists when the pending approval arrives.
+    // Dropping the event here leaves the backend loop awaiting forever —
+    // the "frozen chat" bug. The message must be created.
+    const store = useChatStore.getState();
+    store.handleToolCallEvent(pendingApprovalEvent('assistant-1'));
+
+    const messages = useChatStore.getState().messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].id).toBe('assistant-1');
+    expect(messages[0].role).toBe('assistant');
+    expect(messages[0].metadata!.plugin_calls).toHaveLength(1);
+    expect(messages[0].metadata!.plugin_calls[0].status).toBe('pending_approval');
+    expect(messages[0].metadata!.plugin_calls[0].call_id).toBe('call_1');
   });
 });
