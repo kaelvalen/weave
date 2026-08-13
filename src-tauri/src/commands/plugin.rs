@@ -329,21 +329,3 @@ pub async fn plugin_execute(
 
     result
 }
-
-#[tauri::command]
-pub fn plugin_get_all(app_state: State<'_, AppState>) -> Result<Vec<Plugin>, WeaveError> {
-    Ok(app_state.plugin_manager.get_all())
-}
-
-#[tauri::command]
-pub fn plugin_get_loaded(app_state: State<'_, AppState>) -> Result<Vec<Plugin>, WeaveError> {
-    Ok(app_state.plugin_manager.get_loaded())
-}
-
-#[tauri::command]
-pub fn plugin_get_by_id(
-    plugin_id: String,
-    app_state: State<'_, AppState>,
-) -> Result<Option<Plugin>, WeaveError> {
-    Ok(app_state.plugin_manager.get_plugin(&plugin_id))
-}

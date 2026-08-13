@@ -242,29 +242,6 @@ pub fn mcp_list_servers(app_state: State<'_, AppState>) -> Result<Vec<McpServerS
     Ok(servers)
 }
 
-/// Add or remove a single capability id from a server's approval allowlist
-/// (docs/phase8-mcp-spec.md Part 2 §2 — the only way an MCP-sourced call
-/// stops being gated).
-#[tauri::command]
-pub fn mcp_set_tool_allowlisted(
-    server_id: String,
-    capability: String,
-    allowlisted: bool,
-    app_state: State<'_, AppState>,
-) -> Result<(), WeaveError> {
-    let mut config = app_state.config.write();
-    let server = config
-        .mcp_servers
-        .get_mut(&server_id)
-        .ok_or_else(|| WeaveError::ConfigError(format!("Unknown MCP server: {}", server_id)))?;
-    if allowlisted {
-        server.allowlisted_tools.insert(capability);
-    } else {
-        server.allowlisted_tools.remove(&capability);
-    }
-    config.save()
-}
-
 /// Outcome of the authorization round trip, for the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OauthResult {
@@ -372,7 +349,7 @@ pub async fn mcp_oauth_authorize(
     app: tauri::AppHandle,
     app_state: State<'_, AppState>,
 ) -> Result<OauthResult, WeaveError> {
-    use tauri_plugin_shell::ShellExt;
+    use tauri_plugin_opener::OpenerExt;
 
     let cfg = app_state
         .config
@@ -452,9 +429,11 @@ pub async fn mcp_oauth_authorize(
         mcp_client::oauth_client_id(&md)?,
         authorization_url
     );
-    app.shell().open(&authorization_url, None).map_err(|e| {
-        WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e))
-    })?;
+    app.opener()
+        .open_url(&authorization_url, None::<&str>)
+        .map_err(|e| {
+            WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e))
+        })?;
 
     let (code, state_back) = tokio::time::timeout(
         std::time::Duration::from_secs(120),

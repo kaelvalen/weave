@@ -1,7 +1,6 @@
 use parking_lot::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use tokio::process::Child;
 use tracing::info;
 
 pub mod agent;
@@ -42,7 +41,6 @@ pub struct AppState {
     /// (set by `chat_set_approval_mode`; frontend "Auto-Approve" toggle).
     pub approval_auto: Arc<AtomicBool>,
     pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
-    pub local_server: Arc<tokio::sync::Mutex<Option<Child>>>,
     pub model_telemetry: Arc<parking_lot::Mutex<ModelTelemetry>>,
 }
 
@@ -117,7 +115,6 @@ impl AppState {
             abort_generation,
             approval_auto,
             canvas_tx,
-            local_server: Arc::new(tokio::sync::Mutex::new(None)),
             model_telemetry,
         })
     }

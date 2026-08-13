@@ -2,7 +2,9 @@
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "identifier": "default",
   "description": "Default permissions for the Weave application",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -18,11 +20,19 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-dir",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     "fs:allow-write-file",
     "fs:allow-create",
@@ -31,17 +41,6 @@
     "fs:allow-app-meta",
     "fs:allow-home-read",
     "fs:allow-home-write",
-    "fs:allow-home-meta",
-    "os:default",
-    "os:allow-platform",
-    "os:allow-version",
-    "os:allow-os-type",
-    "os:allow-family",
-    "os:allow-arch",
-    "os:allow-exe-extension",
-    "os:allow-locale",
-    "os:allow-hostname",
-    "shell:default",
-    "shell:allow-open"
+    "fs:allow-home-meta"
   ]
 }

@@ -20,7 +20,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             use tauri::Manager;
             let app_handle = app.handle().clone();
@@ -44,7 +44,6 @@ fn main() {
             weave::commands::chat::chat_get_history,
             weave::commands::chat::chat_set_history,
             weave::commands::chat::chat_clear_history,
-            weave::commands::chat::chat_get_message,
             weave::commands::chat::chat_abort_generation,
             weave::commands::chat::chat_set_approval_mode,
             weave::commands::chat::chat_approve_tool_call,
@@ -57,9 +56,6 @@ fn main() {
             weave::commands::plugin::plugin_load,
             weave::commands::plugin::plugin_unload,
             weave::commands::plugin::plugin_execute,
-            weave::commands::plugin::plugin_get_all,
-            weave::commands::plugin::plugin_get_loaded,
-            weave::commands::plugin::plugin_get_by_id,
             weave::commands::plugin::plugin_install_from_file,
             weave::commands::plugin::plugin_list_github_repos,
             weave::commands::plugin::plugin_install_from_github_repo,
@@ -67,30 +63,19 @@ fn main() {
             weave::commands::mcp::mcp_add_server,
             weave::commands::mcp::mcp_remove_server,
             weave::commands::mcp::mcp_list_servers,
-            weave::commands::mcp::mcp_set_tool_allowlisted,
             weave::commands::mcp::mcp_oauth_authorize,
             weave::commands::mcp::mcp_oauth_refresh,
             weave::commands::system::system_get_config,
             weave::commands::system::system_set_config,
             weave::commands::system::list_provider_models,
-            weave::commands::system::system_get_plugin_dir,
             weave::commands::system::system_get_version,
-            weave::commands::system::system_open_plugin_dir,
             weave::commands::system::system_set_cwd,
             weave::commands::runtime::runtime_get_observability,
             weave::commands::runtime::trace_list,
             weave::commands::runtime::trace_get,
-            weave::commands::runtime::runtime_note_plan,
             weave::commands::runtime::runtime_get_model_stats,
-            weave::commands::models::list_local_models,
-            weave::commands::models::delete_local_model,
-            weave::commands::models::download_local_model,
             weave::commands::models::get_system_stats,
-            weave::commands::models::local_server_status,
-            weave::commands::models::local_server_start,
-            weave::commands::models::local_server_stop,
             weave::commands::models::local_model_switch,
-            weave::commands::models::local_model_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

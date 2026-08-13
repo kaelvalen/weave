@@ -49,7 +49,7 @@ export interface ExecutionStep {
   started_ts: string;
 }
 
-/** A single planned capability call, as reported by `runtime_note_plan`. */
+/** A single planned capability call. */
 export interface PlannedStep {
   plugin_id: string | null;
   capability: string;
@@ -77,7 +77,6 @@ export interface ModelStats {
   loaded_models: { name: string; vram_bytes: number | null }[];
 }
 
-/** serde output of the `local_model_info` command (best-effort GGUF header parse). */
 export interface LocalModelDetails {
   quant: string | null;
   context_length: number | null;

@@ -32,13 +32,6 @@ pub struct TraceSummary {
     pub status: String,
 }
 
-/// A single planned step announced via `runtime_note_plan`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlannedStep {
-    pub plugin_id: Option<String>,
-    pub capability: String,
-}
-
 /// A model currently loaded in the local inference server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoadedModel {
@@ -180,40 +173,20 @@ pub fn trace_get(app: AppHandle, goal_id: String) -> Result<Vec<RuntimeEvent>, W
         .collect())
 }
 
-/// Publish a `plan_started` runtime event announcing the steps the agent
-/// intends to take for a given trace.
-#[tauri::command]
-pub fn runtime_note_plan(
-    trace_id: String,
-    title: String,
-    steps: Vec<PlannedStep>,
-    app_state: State<'_, AppState>,
-) -> Result<(), WeaveError> {
-    let mut event = RuntimeEvent::new(
-        RuntimeEventKind::PlanStarted,
-        uuid::Uuid::new_v4().to_string(),
-        title,
-    );
-    event.goal_id = Some(trace_id);
-    event.params = Some(serde_json::json!({ "steps": steps }));
-    app_state.event_bus.publish_runtime(event);
-    Ok(())
-}
-
-/// Strip any API endpoint suffix from the configured Ollama URL so other
-/// endpoints on the same server can be addressed.
 fn ollama_base_url(raw_url: &str) -> String {
     let trimmed = raw_url.trim_end_matches('/');
-    for suffix in ["/api/chat", "/api/generate", "/api/tags", "/api/ps"] {
-        if let Some(base) = trimmed.strip_suffix(suffix) {
-            return base.trim_end_matches('/').to_string();
-        }
+    if trimmed.ends_with("/api/chat") {
+        return trimmed.trim_end_matches("/api/chat").to_string();
+    }
+    if trimmed.ends_with("/api/generate") {
+        return trimmed.trim_end_matches("/api/generate").to_string();
+    }
+    if trimmed.ends_with("/api") {
+        return trimmed.trim_end_matches("/api").to_string();
     }
     trimmed.to_string()
 }
 
-/// Model usage telemetry plus local server state for the frontend.
-/// Tolerates the local server being down (reports `ollama_running: false`).
 #[tauri::command]
 pub async fn runtime_get_model_stats(
     app_state: State<'_, AppState>,
@@ -241,7 +214,7 @@ pub async fn runtime_get_model_stats(
     let mut ollama_running = false;
     let mut loaded_models = Vec::new();
 
-    // Short-timeout probe, mirroring `local_server_status`; failure = down.
+    // Short-timeout probe; failure = down.
     if let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(800))
         .build()

@@ -340,16 +340,6 @@ pub fn chat_clear_history(app_state: State<'_, AppState>) -> Result<(), WeaveErr
 }
 
 #[tauri::command]
-pub fn chat_get_message(
-    message_id: String,
-    app_state: State<'_, AppState>,
-) -> Result<Option<ChatMessage>, WeaveError> {
-    let history = app_state.chat_history.read();
-    let msg = history.iter().find(|m| m.id == message_id).cloned();
-    Ok(msg)
-}
-
-#[tauri::command]
 pub fn chat_abort_generation(app_state: State<'_, AppState>) -> Result<(), WeaveError> {
     app_state.abort_generation.store(true, Ordering::SeqCst);
     info!("Generation aborted by user");
