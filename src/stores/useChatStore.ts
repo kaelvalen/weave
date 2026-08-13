@@ -60,6 +60,26 @@ function hydrateMessageMetadata(messages: ChatMessage[]): ChatMessage[] {
   return messages || [];
 }
 
+/**
+ * Save the current conversation to the session file — but only when the
+ * last message is an assistant reply, i.e. the turn actually completed in
+ * the store. If streamed events were lost (listener race, refresh mid-run)
+ * the store may hold only the user message; overwriting the session file
+ * with that snapshot would make the last response vanish permanently on
+ * the next reload. Skipping the save keeps the previous good state.
+ */
+async function maybeSaveSession() {
+  const store = useChatStore.getState();
+  const last = store.messages[store.messages.length - 1];
+  if (store.messages.length === 0 || last?.role !== 'assistant') return;
+  await invoke('chat_save_session', {
+    id: store.conversationId,
+    title: store.conversationTitle,
+    messages: store.messages,
+  }).catch((err) => toast.error(extractError(err)));
+  localStorage.setItem('weave_active_session_id', store.conversationId);
+}
+
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
     messages: [],
@@ -113,11 +133,7 @@ export const useChatStore = create<ChatState>()(
             s.conversationTitle = title;
           });
 
-          await invoke('chat_save_session', {
-            id: store.conversationId,
-            title,
-            messages: store.messages,
-          }).catch((err) => toast.error(extractError(err)));
+          await maybeSaveSession();
 
           store.listSessions();
         }
@@ -225,13 +241,7 @@ export const useChatStore = create<ChatState>()(
         });
 
         // Auto-save session
-        if (store.messages.length > 0) {
-          await invoke('chat_save_session', {
-            id: store.conversationId,
-            title: store.conversationTitle,
-            messages: store.messages,
-          }).catch((err) => toast.error(extractError(err)));
-        }
+        await maybeSaveSession();
       } catch (err) {
         const errorMsg = extractError(err);
         toast.error(errorMsg);
@@ -320,13 +330,7 @@ export const useChatStore = create<ChatState>()(
           images: lastUserMsg.images || [],
         });
 
-        if (store.messages.length > 0) {
-          await invoke('chat_save_session', {
-            id: store.conversationId,
-            title: store.conversationTitle,
-            messages: store.messages,
-          }).catch((err) => toast.error(extractError(err)));
-        }
+        await maybeSaveSession();
       } catch (err) {
         const errorMsg = extractError(err);
         toast.error(errorMsg);
@@ -382,25 +386,16 @@ export const useChatStore = create<ChatState>()(
     },
 
     finalizeMessage: async () => {
-      const saveSession = () => {
-        const store = get();
-        if (store.messages.length > 0) {
-          invoke('chat_save_session', {
-            id: store.conversationId,
-            title: store.conversationTitle,
-            messages: store.messages,
-          }).catch((err) => toast.error(extractError(err)));
-          localStorage.setItem('weave_active_session_id', store.conversationId);
-        }
-      };
-
       // Phase 2: the backend agent loop owns the turn end-to-end (native
       // tool-calling, approval gate, execution, completion rule). The
-      // frontend only stops streaming and persists the session here.
+      // frontend only stops streaming and persists the session here — the
+      // save is skipped when the last message isn't an assistant reply
+      // (lost events / refresh mid-run) so a response-less snapshot never
+      // overwrites a good session file.
       set((state) => {
         state.isStreaming = false;
       });
-      saveSession();
+      await maybeSaveSession();
     },
 
     /** Backend-driven tool-call lifecycle (chat-tool-call-detected). */

@@ -1,5 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Minimal localStorage stub (the runner env has no DOM storage).
+const storage = new Map<string, string>();
+globalThis.localStorage = {
+  getItem: (k: string) => storage.get(k) ?? null,
+  setItem: (k: string, v: string) => void storage.set(k, v),
+  removeItem: (k: string) => void storage.delete(k),
+  clear: () => storage.clear(),
+  key: () => null,
+  get length() {
+    return storage.size;
+  },
+} as Storage;
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockResolvedValue(''),
 }));
@@ -9,6 +22,7 @@ vi.mock('sonner', () => ({
 
 import type { ToolCallDetected } from '@/types/chat';
 import { useChatStore } from '@/stores/useChatStore';
+import { invoke } from '@tauri-apps/api/core';
 
 /**
  * Frontend half of the Phase 2 tool-call path: backend events
@@ -165,5 +179,46 @@ describe('stream-order segments (text/tool interleave)', () => {
     store.appendChunk('lo', 'assistant-1');
     const msg = useChatStore.getState().messages[0];
     expect(msg.metadata!.segments).toEqual([{ t: 'text', len: 5 }]);
+  });
+});
+
+describe('session persistence guard (last message lost)', () => {
+  beforeEach(() => {
+    useChatStore.setState({ messages: [], conversationId: 'test' });
+    vi.mocked(invoke).mockClear();
+  });
+
+  it('skips the session save when the last message is not an assistant reply', async () => {
+    // Simulates the lost-events case: store holds only the user message.
+    useChatStore.setState({
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'tekrar dene.',
+          timestamp: Date.now(),
+        },
+      ],
+      conversationId: 'conv-1',
+    });
+    await useChatStore.getState().finalizeMessage();
+
+    const saveCalls = vi.mocked(invoke).mock.calls.filter((c) => c[0] === 'chat_save_session');
+    expect(saveCalls).toHaveLength(0);
+  });
+
+  it('saves the session when the turn completed with an assistant reply', async () => {
+    useChatStore.setState({
+      messages: [
+        { id: 'u1', role: 'user', content: 'hi', timestamp: Date.now() },
+        { id: 'a1', role: 'assistant', content: 'Merhaba!', timestamp: Date.now() },
+      ],
+      conversationId: 'conv-1',
+    });
+    await useChatStore.getState().finalizeMessage();
+
+    const saveCalls = vi.mocked(invoke).mock.calls.filter((c) => c[0] === 'chat_save_session');
+    expect(saveCalls).toHaveLength(1);
+    expect(saveCalls[0][1]).toMatchObject({ id: 'conv-1' });
   });
 });
