@@ -89,11 +89,24 @@ export function ChatCommandCenter() {
     setIsPinnedToBottom(distanceFromBottom < 80);
   };
 
+  // Jump to the bottom when a conversation is (re)loaded or switched, and
+  // follow the stream while it runs. rAF defers past the layout of a fresh
+  // message list so bottomRef exists; an instant jump avoids the "starts at
+  // top, I have to scroll down" case on reload/session switch. The
+  // programmatic scroll fires the container's scroll event, which
+  // re-pins isPinnedToBottom via handleScroll.
+  const prevConversationId = useRef(conversationId);
   useEffect(() => {
-    if (bottomRef.current && isPinnedToBottom) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isStreaming, isPinnedToBottom]);
+    const switched = prevConversationId.current !== conversationId;
+    prevConversationId.current = conversationId;
+    if (!switched && !isPinnedToBottom) return;
+    const frame = requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior: switched && !isStreaming ? 'auto' : 'smooth',
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, conversationId, isStreaming, isPinnedToBottom]);
 
   const scrollToBottom = () => {
     setIsPinnedToBottom(true);
