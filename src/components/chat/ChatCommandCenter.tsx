@@ -416,7 +416,7 @@ export function ChatCommandCenter() {
         open={confirmAutoApprove}
         onOpenChange={setConfirmAutoApprove}
         title="Bypass the approval gate?"
-        description="In Auto-Approve mode, sensitive reads, network requests, and destructive operations run without confirmation. The mode persists across restarts — a startup notice will remind you each session. Switch back to Ask anytime."
+        description="In Auto-Approve mode, sensitive reads, network requests, and destructive operations run without confirmation. The mode persists across restarts and the Auto-Approve button in the command center stays lit as long as it is on — switch back to Ask anytime."
         confirmLabel="Enable Auto-Approve"
         onConfirm={() => {
           setApprovalMode('accept-edits');
