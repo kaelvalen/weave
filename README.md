@@ -258,18 +258,23 @@ client. Evidence and re-run instructions:
 
 **OAuth 2.1 / CIMD authorization (implemented 2026-08-13):** a server that
 challenges 401 registers in an unauthenticated state; the Marketplace
-"Add MCP Server" dialog then offers an **Authorize** step. Weave performs
-RFC 8414 authorization-server discovery from the 401 challenge
-(`Mcp-Authorization` / `WWW-Authenticate: Bearer resource_metadata=...`),
-opens the authorization page in the system browser with a PKCE (S256)
-challenge and a CIMD client identity (an HTTPS metadata-document URL),
-captures the loopback redirect, exchanges the code for tokens, persists
-them in `~/.weave/config.json`, and re-registers the server's tools.
-Token refresh (`mcp_oauth_refresh`) is available; automatic refresh-on-401
-inside a tool call is not yet wired. Note: Weave does not yet host its
-CIMD metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and
-see `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite
-for servers that strictly validate CIMD.
+"Add MCP Server" dialog then offers an **Authorize** step. Weave resolves
+the challenge — `Mcp-Authorization` names the authorization server
+directly, while `WWW-Authenticate: Bearer resource_metadata="..."` points
+at an RFC 9728 protected-resource metadata document that must be fetched
+first and read via its `authorization_servers` field — then performs
+RFC 8414 discovery, opens the authorization page in the system browser
+with a PKCE (S256) challenge and a CIMD client identity (an HTTPS
+metadata-document URL), captures the loopback redirect, exchanges the
+code for tokens, persists them in `~/.weave/config.json`, and
+re-registers the server's tools. The RFC 9728 resolution step was added
+after a live failure against Puter MCP exposed the naive
+double-`.well-known` bug (2026-08-13). Token refresh
+(`mcp_oauth_refresh`) is available; automatic refresh-on-401 inside a
+tool call is not yet wired. Note: Weave does not yet host its CIMD
+metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and see
+`docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite for
+servers that strictly validate CIMD.
 
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:

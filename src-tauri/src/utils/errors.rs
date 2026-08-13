@@ -1,6 +1,27 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// An OAuth challenge as signalled by an MCP server's 401 response —
+/// two distinct URL shapes (see `WeaveError::AuthRequired`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AuthChallenge {
+    /// The URL is the authorization server itself (`Mcp-Authorization` header).
+    Direct(String),
+    /// The URL is an RFC 9728 protected-resource metadata document
+    /// (`WWW-Authenticate: Bearer resource_metadata="..."`); fetch it and
+    /// read `authorization_servers` to find the real authorization server.
+    ResourceMetadata(String),
+}
+
+impl std::fmt::Display for AuthChallenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuthChallenge::Direct(url) => write!(f, "{}", url),
+            AuthChallenge::ResourceMetadata(url) => write!(f, "{}", url),
+        }
+    }
+}
+
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
 pub enum WeaveError {
     #[error("Plugin error: {0}")]
@@ -27,8 +48,15 @@ pub enum WeaveError {
     TomlParse(String),
     #[error("HTTP error: {0}")]
     Http(String),
+    /// An OAuth challenge surfaced by a 401 from an MCP server. The URL in
+    /// the challenge is either the authorization server itself
+    /// (`Mcp-Authorization` header) or an RFC 9728 protected-resource
+    /// metadata document (`WWW-Authenticate: resource_metadata="..."`)
+    /// that must be fetched to learn the authorization server — resolve
+    /// with `mcp_client::resolve_authorization_server` before RFC 8414
+    /// discovery.
     #[error("Authorization required: {0}")]
-    AuthRequired(String),
+    AuthRequired(AuthChallenge),
     #[error("Plugin not found: {0}")]
     PluginNotFound(String),
     #[error("Plugin already loaded: {0}")]

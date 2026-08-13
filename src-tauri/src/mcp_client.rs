@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::models::plugin::PluginExecutor;
-use crate::utils::errors::WeaveError;
+use crate::utils::errors::{AuthChallenge, WeaveError};
 
 pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 
@@ -198,16 +198,18 @@ async fn post(
         .ok_or_else(|| WeaveError::Http(format!("MCP response from {} had no result field", base_url)))
 }
 
-/// Extracts the OAuth authorization-server URL from a 401 response's
-/// headers. Real 2026-07-28 servers use either a direct
-/// `Mcp-Authorization: <url>` header or a `WWW-Authenticate` challenge
-/// carrying `resource_metadata="<url>"` (the 2025-06-18-era shape).
-fn auth_challenge_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
+/// Extracts the OAuth challenge from a 401 response's headers. Real
+/// 2026-07-28 servers use either a direct `Mcp-Authorization: <url>`
+/// header or a `WWW-Authenticate` challenge carrying
+/// `resource_metadata="<url>"` (the 2025-06-18-era shape).
+fn auth_challenge_from_headers(
+    headers: &reqwest::header::HeaderMap,
+) -> Option<AuthChallenge> {
     if let Some(v) = headers.get("mcp-authorization") {
         if let Ok(s) = v.to_str() {
             let s = s.trim();
             if s.starts_with("http://") || s.starts_with("https://") {
-                return Some(s.to_string());
+                return Some(AuthChallenge::Direct(s.to_string()));
             }
         }
     }
@@ -218,7 +220,7 @@ fn auth_challenge_from_headers(headers: &reqwest::header::HeaderMap) -> Option<S
                     let rest = &s[idx + marker.len()..];
                     if let Some(quoted) = rest.strip_prefix('"') {
                         if let Some(end) = quoted.find('"') {
-                            return Some(quoted[..end].to_string());
+                            return Some(AuthChallenge::ResourceMetadata(quoted[..end].to_string()));
                         }
                     }
                 }
@@ -226,6 +228,64 @@ fn auth_challenge_from_headers(headers: &reqwest::header::HeaderMap) -> Option<S
         }
     }
     None
+}
+
+/// Fetches an RFC 9728 protected-resource metadata document and returns the
+/// first authorization-server identifier it declares. Per RFC 9728 §3,
+/// `authorization_servers` is an array of AS identifiers (strings); a
+/// server may also be bare (no `authorization_servers`) — then it must be
+/// readable via RFC 8414 at its own `/.well-known/oauth-authorization-server`,
+/// so the metadata URL itself is returned.
+pub async fn fetch_protected_resource_metadata(
+    metadata_url: &str,
+) -> Result<String, WeaveError> {
+    let client = build_client()?;
+    let response = client
+        .get(metadata_url)
+        .send()
+        .await
+        .map_err(|e| WeaveError::Http(format!("protected-resource metadata request to {} failed: {}", metadata_url, e)))?;
+    if !response.status().is_success() {
+        return Err(WeaveError::Http(format!(
+            "protected-resource metadata at {} returned {}",
+            metadata_url,
+            response.status()
+        )));
+    }
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|e| WeaveError::Http(format!("protected-resource metadata at {} was not JSON: {}", metadata_url, e)))?;
+
+    let mut servers: Vec<String> = payload
+        .get("authorization_servers")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(first) = servers.first() {
+        return Ok(first.clone());
+    }
+    // RFC 9728: an empty/absent authorization_servers means the resource
+    // server itself serves AS metadata at its own discovery endpoint.
+    Ok(metadata_url.to_string())
+}
+
+/// Resolves an `AuthChallenge` to the authorization-server base URL:
+/// direct challenges pass through; `resource_metadata` URLs are fetched
+/// first (RFC 9728), and the declared authorization server is used.
+pub async fn resolve_authorization_server(
+    challenge: &AuthChallenge,
+) -> Result<String, WeaveError> {
+    match challenge {
+        AuthChallenge::Direct(url) => Ok(url.clone()),
+        AuthChallenge::ResourceMetadata(metadata_url) => {
+            fetch_protected_resource_metadata(metadata_url).await
+        }
+    }
 }
 
 /// `server/discover` — spec changelog "Major changes" #3: servers MUST
@@ -472,8 +532,9 @@ pub struct AuthorizationServerMetadata {
 }
 
 /// RFC 8414 discovery: `GET {base}/.well-known/oauth-authorization-server`.
-/// `base` is the authorization-server URL from the 401 challenge (or, when
-/// the server used a `resource_metadata` URL, that metadata URL).
+/// `base_url` MUST be the authorization-server base URL — for challenges
+/// that arrive as an RFC 9728 `resource_metadata` URL, resolve it with
+/// `resolve_authorization_server` first, never pass the metadata URL here.
 pub async fn discover_authorization_server(
     base_url: &str,
 ) -> Result<AuthorizationServerMetadata, WeaveError> {
@@ -846,8 +907,8 @@ mod tests {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("mcp-authorization", "https://auth.example/oauth".parse().unwrap());
         assert_eq!(
-            auth_challenge_from_headers(&headers).as_deref(),
-            Some("https://auth.example/oauth")
+            auth_challenge_from_headers(&headers),
+            Some(AuthChallenge::Direct("https://auth.example/oauth".to_string()))
         );
     }
 
@@ -856,13 +917,13 @@ mod tests {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::WWW_AUTHENTICATE,
-            "Bearer resource_metadata=\"https://auth.example/meta\", error=\"insufficient_scope\""
+            "Bearer resource_metadata=\"https://rs.example/meta\", error=\"insufficient_scope\""
                 .parse()
                 .unwrap(),
         );
         assert_eq!(
-            auth_challenge_from_headers(&headers).as_deref(),
-            Some("https://auth.example/meta")
+            auth_challenge_from_headers(&headers),
+            Some(AuthChallenge::ResourceMetadata("https://rs.example/meta".to_string()))
         );
     }
 
@@ -870,6 +931,97 @@ mod tests {
     fn auth_challenge_absent_without_oauth_headers() {
         let headers = reqwest::header::HeaderMap::new();
         assert_eq!(auth_challenge_from_headers(&headers), None);
+    }
+
+    #[tokio::test]
+    async fn post_401_with_resource_metadata_surfaces_typed_challenge() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut byte = [0u8; 1];
+            loop {
+                if stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                    break;
+                }
+                buf.push(byte[0]);
+                if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+            let _ = stream
+                .write_all(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: 2\r\nWWW-Authenticate: Bearer resource_metadata=\"https://rs.example/protected-resource-metadata\", error=\"unauthorized\"\r\nConnection: close\r\n\r\n{}",
+                )
+                .await;
+            let _ = stream.flush().await;
+        });
+        let err = post(
+            &format!("http://{}/mcp", addr),
+            "tools/list",
+            None,
+            rpc_request("t", "tools/list", serde_json::json!({})),
+            None,
+        )
+        .await
+        .unwrap_err();
+        match err {
+            WeaveError::AuthRequired(AuthChallenge::ResourceMetadata(url)) => {
+                assert_eq!(url, "https://rs.example/protected-resource-metadata");
+            }
+            other => panic!("expected AuthRequired(ResourceMetadata), got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_protected_resource_metadata_extracts_authorization_servers() {
+        let base = spawn_mock(|method, text| {
+            assert_eq!(method, reqwest::Method::GET);
+            assert!(text.starts_with("GET /protected-resource-metadata HTTP/1.1"));
+            (
+                200,
+                serde_json::json!({
+                    "resource": "https://rs.example/",
+                    "authorization_servers": ["https://as.example"]
+                }),
+            )
+        })
+        .await;
+        let as_url = fetch_protected_resource_metadata(&format!("{}/protected-resource-metadata", base))
+            .await
+            .unwrap();
+        assert_eq!(as_url, "https://as.example");
+    }
+
+    #[tokio::test]
+    async fn fetch_protected_resource_metadata_falls_back_to_bare_server() {
+        let base = spawn_mock(|_, _| (200, serde_json::json!({"resource": "https://rs.example/"}))).await;
+        let as_url = fetch_protected_resource_metadata(&base).await.unwrap();
+        // No authorization_servers declared: RFC 9728 bare-server form —
+        // the resource server itself serves AS metadata.
+        assert_eq!(as_url, base);
+    }
+
+    #[tokio::test]
+    async fn resolve_authorization_server_handles_both_challenge_shapes() {
+        let meta_base = spawn_mock(|_, _| {
+            (200, serde_json::json!({"authorization_servers": ["https://as.example"]}))
+        })
+        .await;
+        let direct = resolve_authorization_server(&AuthChallenge::Direct(
+            "https://as.example".to_string(),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(direct, "https://as.example");
+        let via_metadata = resolve_authorization_server(&AuthChallenge::ResourceMetadata(
+            format!("{}/meta", meta_base),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(via_metadata, "https://as.example");
     }
 
     /// One-shot mock HTTP server for the RFC 8414 / token-endpoint tests.

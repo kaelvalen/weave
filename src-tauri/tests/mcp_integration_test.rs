@@ -295,3 +295,54 @@ async fn live_round_trip_against_github_mcp_server() {
         "get_me content should carry text blocks"
     );
 }
+
+/// Live OAuth challenge resolution (RFC 9728 + RFC 8414) against a real
+/// public MCP server that 401s with `resource_metadata` — Puter MCP
+/// (mcp.puter.com). Exercises the exact chain `mcp_add_server` uses:
+/// 401 challenge → metadata fetch → authorization_servers[0] → RFC 8414
+/// discovery. This is the regression guard for the double-`.well-known`
+/// bug: naively treating the metadata URL as the AS base yields a 404,
+/// this must yield real endpoints.
+///
+/// ```sh
+/// cargo test --test mcp_integration_test -- --ignored --nocapture live_oauth
+/// ```
+#[tokio::test]
+#[ignore = "requires network egress"]
+async fn live_oauth_challenge_resolution_against_puter_mcp() {
+    use weave::mcp_client;
+    use weave::utils::errors::AuthChallenge;
+
+    let base = "https://mcp.puter.com";
+    let challenge = match mcp_client::discover(base, None).await {
+        Err(weave::utils::errors::WeaveError::AuthRequired(c)) => c,
+        other => panic!("expected AuthRequired from a live OAuth server, got: {:?}", other),
+    };
+    assert!(
+        matches!(challenge, AuthChallenge::ResourceMetadata(_)),
+        "Puter challenges with an RFC 9728 resource_metadata URL"
+    );
+    println!("challenge: {:?}", challenge);
+
+    let as_base = mcp_client::resolve_authorization_server(&challenge)
+        .await
+        .expect("RFC 9728 metadata must yield an authorization server");
+    println!("resolved AS base: {}", as_base);
+    assert!(
+        as_base.contains("puter"),
+        "authorization_servers[0] should name Puter's AS, got: {}",
+        as_base
+    );
+
+    let md = mcp_client::discover_authorization_server(&as_base)
+        .await
+        .expect("RFC 8414 discovery on the resolved AS base");
+    println!("discovered: {:?}", md);
+    assert!(md.authorization_endpoint.is_some());
+    assert!(md.token_endpoint.is_some());
+    assert!(
+        md.authorization_endpoint.as_deref().unwrap().ends_with("/authorize"),
+        "expected an authorization endpoint, got {:?}",
+        md.authorization_endpoint
+    );
+}

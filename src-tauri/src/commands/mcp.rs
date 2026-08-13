@@ -88,7 +88,7 @@ pub async fn mcp_add_server(
     // doesn't declare 2026-07-28 support before touching the registry.
     // A 401 challenge (WeaveError::AuthRequired) is not a protocol failure —
     // it's the signal that OAuth is required, handled below.
-    let mut auth_required: Option<String> = match mcp_client::discover(&url, None).await {
+    let mut auth_required: Option<crate::utils::errors::AuthChallenge> = match mcp_client::discover(&url, None).await {
         Ok(_) => None,
         Err(WeaveError::AuthRequired(challenge)) => Some(challenge),
         Err(e) => return Err(e),
@@ -106,8 +106,12 @@ pub async fn mcp_add_server(
     };
 
     let (issuer, authorization_endpoint, token_endpoint) = match &auth_required {
-        Some(auth_url) => {
-            let md = mcp_client::discover_authorization_server(auth_url).await?;
+        Some(challenge) => {
+            // RFC 9728: a resource_metadata URL is a metadata *document*,
+            // not the AS base — resolve it before RFC 8414 discovery.
+            let auth_server =
+                mcp_client::resolve_authorization_server(challenge).await?;
+            let md = mcp_client::discover_authorization_server(&auth_server).await?;
             info!(
                 "MCP server {} requires OAuth; discovered authorization server {:?}",
                 display_name, md.issuer

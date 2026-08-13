@@ -33,6 +33,23 @@ document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 > AS). Not yet wired: automatic refresh-on-401 inside `tools/call` (the
 > synchronous executor has no config/AS handle), and self-hosting of the
 > CIMD document (env override `WEAVE_CIMD_CLIENT_ID` for now).
+>
+> **Addendum 2026-08-13 — RFC 9728 resolution bug found & fixed via live
+> failure:** the first real OAuth-requiring connection (Puter MCP) blew up
+> exactly as the shipped code's own doc comment had hinted: a
+> `resource_metadata` URL is an RFC 9728 **protected-resource metadata
+> document**, not the authorization server base. The initial
+> implementation fed it straight into RFC 8414 discovery, producing a
+> nonsense `.../.well-known/oauth-protected-resource/.well-known/
+> oauth-authorization-server` URL. Fixed: `AuthChallenge` now distinguishes
+> `Mcp-Authorization` (direct AS URL) from `resource_metadata` (document to
+> fetch), `fetch_protected_resource_metadata()` reads
+> `authorization_servers` (RFC 9728 bare-server fallback: the metadata URL
+> itself), and `resolve_authorization_server()` sits between the challenge
+> and `discover_authorization_server()` in `mcp_add_server`. Verified
+> against Puter MCP live: challenge → metadata → `authorization_servers[0]`
+> → RFC 8414 discovery all resolve
+> (`live_oauth_challenge_resolution_against_puter_mcp`, `#[ignore]`d).
 
 Phase 8.0 (Ollama `use_native_tools` probe) close-out: see
 `phase1-spine-spec.md` §8. The 2026-08-11 probe result was re-verified on
