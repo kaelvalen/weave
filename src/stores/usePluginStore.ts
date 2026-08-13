@@ -393,6 +393,9 @@ export const usePluginStore = create<PluginState>()(
           await invoke('mcp_remove_server', { serverId });
           set((state) => {
             state.plugins = state.plugins.filter((p) => p.id !== `com.weave.mcp.${serverId}`);
+            state.loadedPlugins = state.loadedPlugins.filter(
+              (id) => id !== `com.weave.mcp.${serverId}`
+            );
             state.mcpServers = state.mcpServers.filter((s) => s.id !== serverId);
           });
           toast.success('MCP server removed');

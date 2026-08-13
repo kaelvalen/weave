@@ -48,6 +48,7 @@ export function PluginMarket() {
   const installFromFile = usePluginStore((s) => s.installFromFile);
   const mcpServers = usePluginStore((s) => s.mcpServers);
   const oauthAuthorize = usePluginStore((s) => s.oauthAuthorize);
+  const removeMcpServer = usePluginStore((s) => s.removeMcpServer);
 
   const [refreshing, setRefreshing] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -286,6 +287,7 @@ export function PluginMarket() {
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                         {discoveredPlugins.map((p) => {
                           const authorize = mcpAuthorizeFor(p);
+                          const MCP_PREFIX = 'com.weave.mcp.';
                           return (
                             <PluginCard
                               key={p.id}
@@ -299,6 +301,11 @@ export function PluginMarket() {
                               onUnload={() => unloadPlugin(p.id)}
                               authRequired={authorize !== null}
                               onAuthorize={authorize ?? undefined}
+                              onRemove={
+                                p.id.startsWith(MCP_PREFIX)
+                                  ? () => removeMcpServer(p.id.slice(MCP_PREFIX.length))
+                                  : undefined
+                              }
                             />
                           );
                         })}

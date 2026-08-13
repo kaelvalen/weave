@@ -22,6 +22,7 @@ import {
   HardDrive,
   Info,
   KeyRound,
+  Trash2,
 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -92,11 +93,34 @@ interface PluginCardProps {
    */
   authRequired?: boolean;
   onAuthorize?: () => Promise<void> | void;
+  /** MCP server removal (destructive: also deletes stored tokens). */
+  onRemove?: () => Promise<void> | void;
 }
 
-export function PluginCard({ plugin, isLoaded, onLoad, onUnload, authRequired, onAuthorize }: PluginCardProps) {
+export function PluginCard({
+  plugin,
+  isLoaded,
+  onLoad,
+  onUnload,
+  authRequired,
+  onAuthorize,
+  onRemove,
+}: PluginCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+
+  // Two-step remove: first click arms, second click executes; auto-disarms
+  // after 3s so an accidental click can't be followed by a stray one.
+  const handleRemoveClick = () => {
+    if (!confirmingRemove) {
+      setConfirmingRemove(true);
+      setTimeout(() => setConfirmingRemove(false), 3000);
+      return;
+    }
+    setConfirmingRemove(false);
+    void onRemove?.();
+  };
 
   // Rust serde serializes Error(String) as { "error": "msg" } due to rename_all="lowercase"
   const hasError =
@@ -216,15 +240,37 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload, authRequired, o
               )}
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs px-2 gap-1.5"
-              onClick={() => setDetailsOpen(true)}
-            >
-              <Info className="w-3.5 h-3.5" />
-              Details
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2 gap-1.5"
+                onClick={() => setDetailsOpen(true)}
+              >
+                <Info className="w-3.5 h-3.5" />
+                Details
+              </Button>
+              {onRemove && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 text-xs px-2 gap-1 ${
+                    confirmingRemove
+                      ? 'text-destructive hover:bg-destructive/10'
+                      : 'text-muted-foreground hover:text-destructive hover:bg-destructive/10'
+                  }`}
+                  onClick={handleRemoveClick}
+                  title="Remove this MCP server and its stored tokens"
+                >
+                  {confirmingRemove ? (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  {confirmingRemove ? 'Remove?' : null}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
