@@ -379,7 +379,12 @@ pub async fn mcp_oauth_authorize(
         })?;
     let authorization_url = mcp_client::authorization_url(&md, &state, &pkce)?;
 
-    info!("Opening OAuth authorization page for {} ...", cfg.name);
+    info!(
+        "Opening OAuth authorization page for {} (client_id={}): {}",
+        cfg.name,
+        mcp_client::cimd_client_id(),
+        authorization_url
+    );
     app.shell().open(&authorization_url, None).map_err(|e| {
         WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e))
     })?;
@@ -396,7 +401,10 @@ pub async fn mcp_oauth_authorize(
     )
     .await
     .map_err(|_| {
-        WeaveError::PluginError("OAuth authorization timed out after 120s — no redirect received".to_string())
+        WeaveError::PluginError(format!(
+            "OAuth authorization timed out after 120s — no redirect received. If the browser showed an error (e.g. GitHub 404), verify the client_id in the opened URL matches a registered OAuth App (WEAVE_CIMD_CLIENT_ID): {}",
+            authorization_url
+        ))
     })??;
 
     if state_back != state {
