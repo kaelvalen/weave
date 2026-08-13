@@ -65,11 +65,13 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
             </span>
           )}
           <span className="text-muted-foreground text-[11px]">
-            {stats.durationMs != null
-              ? `· ${stats.durationMs}ms`
-              : stats.status === 'running'
-                ? '· running'
-                : ''}
+            {stats.status === 'failed' && stats.stepCount > 0
+              ? `· ${stats.stepCount - stats.failedCount} ok · ${stats.failedCount} failed`
+              : stats.durationMs != null
+                ? `· ${stats.durationMs}ms`
+                : stats.status === 'running'
+                  ? '· running'
+                  : ''}
           </span>
         </CollapsibleTrigger>
         <CollapsibleContent>

@@ -86,7 +86,12 @@ export function GoalCard({
           </div>
           <div className="flex items-center gap-1.5">
             <span>Execution</span>
-            <span className="text-foreground">{stats.stepCount} tools</span>
+            <span className="text-foreground">
+              {stats.stepCount} tools
+              {stats.status === 'failed' && stats.stepCount > 0
+                ? ` · ${stats.stepCount - stats.failedCount} ok · ${stats.failedCount} failed`
+                : ''}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>Artifacts</span>
