@@ -245,6 +245,17 @@ only**. A server that responds with `resultType: "input_required"`
 finishing) surfaces as a clear tool-execution error, not a hang — Weave
 does not yet drive the follow-up round trip that would answer it.
 
+**Live-server verified (2026-08-13):** a full `server/discover` →
+`tools/list` → `tools/call` round trip was run through Weave's own client
+against GitHub's official public MCP server (`api.githubcopilot.com/mcp/`),
+which is protocol-2026-07-28. The run surfaced three real-world
+requirements the mock tests couldn't: `_meta` protocol-negotiation fields
+on every request, SSE-framed responses even for single round trips
+(`event: message` / `data:`), and server identity under
+`_meta.io.modelcontextprotocol/serverInfo` — all three now handled by the
+client. Evidence and re-run instructions:
+`docs/probes/mcp-live-github-2026-08-13/`.
+
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:
 those are hand-classified by reading each plugin's code; an MCP server's

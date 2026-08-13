@@ -4,14 +4,26 @@ Status: **DRAFT — pending review. Phase 8.3 (build) MUST NOT start until this
 document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 (§6 review log) and `phase0-inventory.md`.
 
+> **Addendum 2026-08-13 — live-server validation (Phase 8.4) done:**
+> a full `server/discover` → `tools/list` → `tools/call` round trip now
+> runs through Weave's own client against GitHub's official public MCP
+> server (`api.githubcopilot.com/mcp/`, protocol 2026-07-28) and passes.
+> Evidence + re-run: `docs/probes/mcp-live-github-2026-08-13/`.
+> Real-world findings that changed the client: (1) `_meta`
+> `protocolVersion`/`clientCapabilities` are mandatory on every request
+> (live server rejects without them, -32602); (2) responses are SSE-framed
+> even for single round trips (`event: message`/`data:`) — `post()` now
+> parses SSE when `Content-Type: text/event-stream`; (3) server identity is
+> under `_meta.io.modelcontextprotocol/serverInfo`, which `server/discover`
+> now reads (and it tolerates a missing `protocolVersions` array — GitHub
+> omits it). See the addendum in §"Transport shape" if merging.
+
 Phase 8.0 (Ollama `use_native_tools` probe) close-out: see
-`phase1-spine-spec.md` §7. Summary: the 2026-08-11 probe result cannot be
-independently re-verified from this session (no local inference server is
-reachable from this sandboxed environment, and the only artifact backing the
-original claim is prose in a commit message/doc comment, not a script or
-captured transcript). This does not block this document — it is orthogonal
-to the MCP integration surface — but it remains open and is **not** claimed
-as resolved here.
+`phase1-spine-spec.md` §8. The 2026-08-11 probe result was re-verified on
+2026-08-13 against a real local Ollama 0.32.7 with `qwen3.5:9b`; both
+`stream:false` and `stream:true` `/api/chat` requests returned native
+`message.tool_calls`, transcript committed at
+`docs/probes/ollama-native-tools-2026-08-13/`. The gap is closed.
 
 **Sources for the 2026-07-28 spec text** (the primitive-level spec itself,
 `modelcontextprotocol.io`, is blocked by this session's network egress

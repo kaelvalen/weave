@@ -70,11 +70,28 @@ enum CallOutcome {
 }
 
 fn rpc_request(id: &str, method: &str, params: Value) -> Value {
+    let mut merged = params;
+    if let Some(obj) = merged.as_object_mut() {
+        obj.insert(
+            "_meta".to_string(),
+            serde_json::json!({
+                "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }),
+        );
+    } else {
+        merged = serde_json::json!({
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }
+        });
+    }
     serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
-        "params": params,
+        "params": merged,
     })
 }
 
@@ -96,6 +113,7 @@ async fn post(
     let mut req = client
         .post(base_url)
         .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
         .header("MCP-Protocol-Version", MCP_PROTOCOL_VERSION)
         .header("Mcp-Method", method);
     if let Some(name) = tool_name {
@@ -112,10 +130,43 @@ async fn post(
         .map_err(|e| WeaveError::Http(format!("MCP request to {} failed: {}", base_url, e)))?;
 
     let status = response.status();
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|e| WeaveError::Http(format!("MCP response from {} was not JSON: {}", base_url, e)))?;
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    // Live 2026-07-28 servers (verified against GitHub's public MCP endpoint,
+    // 2026-08-13) frame every response as SSE even for a single round trip:
+    // `event: message` / `data: {jsonrpc...}`. The last parseable data frame
+    // is the terminal JSON-RPC message.
+    let payload: Value = if content_type.contains("text/event-stream") {
+        let text = response
+            .text()
+            .await
+            .map_err(|e| WeaveError::Http(format!("MCP SSE response from {} unreadable: {}", base_url, e)))?;
+        let mut last: Option<Value> = None;
+        for line in text.lines() {
+            if let Some(data) = line.trim_start().strip_prefix("data:") {
+                if let Ok(v) = serde_json::from_str(data.trim()) {
+                    last = Some(v);
+                }
+            }
+        }
+        last.ok_or_else(|| {
+            WeaveError::Http(format!(
+                "MCP SSE response from {} had no parseable data frame: {}",
+                base_url,
+                text.chars().take(200).collect::<String>()
+            ))
+        })?
+    } else {
+        response
+            .json()
+            .await
+            .map_err(|e| WeaveError::Http(format!("MCP response from {} was not JSON: {}", base_url, e)))?
+    };
 
     if !status.is_success() {
         return Err(WeaveError::Http(format!(
@@ -167,12 +218,27 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
         )));
     }
 
+    // Live servers (GitHub MCP, 2026-08-13) advertise identity inside
+    // `_meta.io.modelcontextprotocol/serverInfo` rather than a top-level
+    // `name`; read both, preferring `_meta` when present.
+    let name = result
+        .get("_meta")
+        .and_then(|m| m.get("io.modelcontextprotocol/serverInfo"))
+        .and_then(|i| i.get("name"))
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            result
+                .get("_meta")
+                .and_then(|m| m.get("io.modelcontextprotocol/serverInfo"))
+                .and_then(|i| i.get("title"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| result.get("name").and_then(|v| v.as_str()))
+        .unwrap_or_default()
+        .to_string();
+
     Ok(ServerInfo {
-        name: result
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
+        name,
         protocol_versions,
     })
 }

@@ -240,3 +240,58 @@ async fn mcp_tool_call_rejected_still_pairs_result() {
     assert_completion_rule(second);
 }
 
+
+/// Phase 8.4 — live-server round trip. Proves the client talks to a real
+/// 2026-07-28 MCP server over real HTTP with no mock in the path:
+/// `server/discover` → `tools/list` → `tools/call`, all through
+/// `weave::mcp_client`. Target: GitHub's official public MCP endpoint
+/// (api.githubcopilot.com/mcp, "GitHub MCP Server").
+///
+/// `#[ignore]`d so offline/CI runs stay hermetic. Run with:
+///
+/// ```sh
+/// GITHUB_TOKEN=$(gh auth token) cargo test --test mcp_integration_test \
+///   -- --ignored --nocapture
+/// ```
+///
+/// The 2026-08-13 run's transcript (discover server identity, tool count,
+/// `get_me` result) is recorded in `docs/probes/mcp-live-github-2026-08-13/`.
+#[tokio::test]
+#[ignore = "requires network egress + GITHUB_TOKEN"]
+async fn live_round_trip_against_github_mcp_server() {
+    let token = std::env::var("GITHUB_TOKEN")
+        .or_else(|_| std::env::var("GH_TOKEN"))
+        .expect("GITHUB_TOKEN or GH_TOKEN must be set for the live MCP test");
+    let base = "https://api.githubcopilot.com/mcp/";
+
+    let info = mcp_client::discover(base, Some(&token))
+        .await
+        .expect("server/discover against a live 2026-07-28 server");
+    println!("discover: server={:?} protocol_versions={:?}", info.name, info.protocol_versions);
+    assert_eq!(info.name, "github-mcp-server", "expected GitHub MCP identity from _meta.serverInfo");
+
+    let listed = mcp_client::list_tools(base, Some(&token))
+        .await
+        .expect("tools/list against a live 2026-07-28 server");
+    println!("tools/list: {} tools advertised", listed.tools.len());
+    assert!(listed.tools.len() > 10, "expected a real tool surface, got {}", listed.tools.len());
+
+    let get_me = listed
+        .tools
+        .iter()
+        .find(|t| t.name == "get_me")
+        .expect("github-mcp-server advertises get_me");
+    println!("get_me schema: {}", serde_json::to_string(&get_me.input_schema).unwrap());
+
+    let result = mcp_client::call_tool(base, "get_me", serde_json::json!({}), Some(&token))
+        .await
+        .expect("tools/call against a live 2026-07-28 server");
+    let text = serde_json::to_string(&result).unwrap();
+    println!("tools/call get_me -> {}", &text.chars().take(400).collect::<String>());
+    assert!(result.is_array(), "get_me result should be a content array, got: {}", &text.chars().take(200).collect::<String>());
+    let content = result.as_array().unwrap();
+    assert!(
+        content.iter().any(|c| c.get("text").is_some()),
+        "get_me content should carry text blocks"
+    );
+}
