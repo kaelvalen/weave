@@ -91,6 +91,11 @@ pub struct McpServerConfig {
     pub url: String,
     #[serde(default)]
     pub enabled: bool,
+    /// Set when the server challenged 401 at add time (or never cleared
+    /// after a completed authorization); drives the "Authorize" affordance
+    /// in the Plugin Marketplace.
+    #[serde(default)]
+    pub auth_required: bool,
     #[serde(default)]
     pub allowlisted_tools: HashSet<String>,
     #[serde(default)]

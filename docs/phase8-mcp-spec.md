@@ -17,6 +17,22 @@ document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 > under `_meta.io.modelcontextprotocol/serverInfo`, which `server/discover`
 > now reads (and it tolerates a missing `protocolVersions` array — GitHub
 > omits it). See the addendum in §"Transport shape" if merging.
+>
+> **Addendum 2026-08-13 — OAuth 2.1/CIMD flow implemented (Part 2 §4–§5):**
+> `mcp_add_server` now treats a 401 challenge (`Mcp-Authorization` header or
+> `WWW-Authenticate: Bearer resource_metadata="..."`) as a registrable
+> state, not an error: it discovers the authorization server via RFC 8414,
+> stores the endpoints, and registers the server unauthenticated
+> (`auth_required`, no tools). `mcp_oauth_authorize` runs the full flow —
+> PKCE (S256) + CIMD client_id + loopback redirect listener bound before
+> the browser opens, state round-trip verified, code exchanged at the token
+> endpoint, tokens persisted to `~/.weave/config.json`, tools re-listed and
+> re-registered with the access token. `mcp_oauth_refresh` covers the
+> refresh-token grant. Hermetic tests in `mcp_client.rs` (RFC 7636 shape,
+> header parsing, discovery, code/refresh exchanges against a one-shot mock
+> AS). Not yet wired: automatic refresh-on-401 inside `tools/call` (the
+> synchronous executor has no config/AS handle), and self-hosting of the
+> CIMD document (env override `WEAVE_CIMD_CLIENT_ID` for now).
 
 Phase 8.0 (Ollama `use_native_tools` probe) close-out: see
 `phase1-spine-spec.md` §8. The 2026-08-11 probe result was re-verified on

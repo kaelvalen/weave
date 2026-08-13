@@ -22,6 +22,9 @@ pub struct McpServerSummary {
     pub enabled: bool,
     pub allowlisted_tools: Vec<String>,
     pub has_token: bool,
+    /// True while the server has challenged 401 but no token has been
+    /// obtained yet — the UI surfaces an "Authorize" affordance.
+    pub auth_required: bool,
 }
 
 impl From<&McpServerConfig> for McpServerSummary {
@@ -37,6 +40,7 @@ impl From<&McpServerConfig> for McpServerSummary {
                 tools
             },
             has_token: cfg.access_token.is_some(),
+            auth_required: cfg.auth_required && cfg.access_token.is_none(),
         }
     }
 }
@@ -57,9 +61,12 @@ fn slugify(name: &str) -> String {
 
 /// Discover a server's protocol support and tool list, register it into
 /// the plugin registry, and persist it to `~/.weave/config.json`
-/// (docs/phase8-mcp-spec.md Part 2 §5). No auth token is sent — servers
-/// that require OAuth are a documented follow-up (Part 1 Q4 named the CIMD
-/// flow as new infrastructure, not something this command implements).
+/// (docs/phase8-mcp-spec.md Part 2 §5).
+///
+/// Servers that challenge 401 are NOT rejected: they register in an
+/// unauthenticated state (`auth_required`, no tools) with their
+/// authorization-server metadata discovered via RFC 8414, and the
+/// Marketplace UI drives `mcp_oauth_authorize` to complete the flow.
 #[tauri::command]
 pub async fn mcp_add_server(
     url: String,
@@ -79,8 +86,36 @@ pub async fn mcp_add_server(
 
     // Version-scope enforcement point (Part 2 §4): reject anything that
     // doesn't declare 2026-07-28 support before touching the registry.
-    mcp_client::discover(&url, None).await?;
-    let listed = mcp_client::list_tools(&url, None).await?;
+    // A 401 challenge (WeaveError::AuthRequired) is not a protocol failure —
+    // it's the signal that OAuth is required, handled below.
+    let mut auth_required: Option<String> = match mcp_client::discover(&url, None).await {
+        Ok(_) => None,
+        Err(WeaveError::AuthRequired(challenge)) => Some(challenge),
+        Err(e) => return Err(e),
+    };
+    let listed = match mcp_client::list_tools(&url, None).await {
+        Ok(l) => l,
+        Err(WeaveError::AuthRequired(challenge)) => {
+            auth_required.get_or_insert(challenge);
+            mcp_client::ToolsListResult {
+                tools: Vec::new(),
+                ttl_ms: None,
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
+    let (issuer, authorization_endpoint, token_endpoint) = match &auth_required {
+        Some(auth_url) => {
+            let md = mcp_client::discover_authorization_server(auth_url).await?;
+            info!(
+                "MCP server {} requires OAuth; discovered authorization server {:?}",
+                display_name, md.issuer
+            );
+            (md.issuer, md.authorization_endpoint, md.token_endpoint)
+        }
+        None => (None, None, None),
+    };
 
     let base_id = slugify(&display_name);
     let server_id = {
@@ -117,6 +152,10 @@ pub async fn mcp_add_server(
                 name: display_name,
                 url,
                 enabled: true,
+                auth_required: auth_required.is_some(),
+                issuer,
+                authorization_endpoint,
+                token_endpoint,
                 ..Default::default()
             },
         );
@@ -167,4 +206,277 @@ pub fn mcp_set_tool_allowlisted(
         server.allowlisted_tools.remove(&capability);
     }
     config.save()
+}
+
+/// Outcome of the authorization round trip, for the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OauthResult {
+    pub server_id: String,
+    pub authorized: bool,
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(bytes[i]);
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Reads one HTTP request from the loopback redirect listener and extracts
+/// the `code`/`state` query parameters, responding with a closing HTML page.
+async fn read_redirect_request(
+    stream: &mut tokio::net::TcpStream,
+) -> Result<(String, String), WeaveError> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut buf = Vec::new();
+    let mut byte = [0u8; 1];
+    let mut header_end = None;
+    while header_end.is_none() {
+        stream
+            .read_exact(&mut byte)
+            .await
+            .map_err(|e| WeaveError::PluginError(format!("OAuth redirect read failed: {}", e)))?;
+        buf.push(byte[0]);
+        if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+            header_end = Some(buf.len());
+        }
+    }
+    let text = String::from_utf8_lossy(&buf).to_string();
+    let request_line = text.lines().next().unwrap_or("");
+    let path = request_line.split_whitespace().nth(1).unwrap_or("");
+    let query = path.split('?').nth(1).unwrap_or("");
+    let mut code = String::new();
+    let mut state = String::new();
+    for pair in query.split('&') {
+        let mut it = pair.splitn(2, '=');
+        let key = it.next().unwrap_or("");
+        let value = percent_decode(it.next().unwrap_or(""));
+        match key {
+            "code" => code = value,
+            "state" => state = value,
+            _ => {}
+        }
+    }
+
+    let body = "<html><body><p>Weave authorization complete — you can close this window.</p></body></html>";
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.flush().await;
+
+    if code.is_empty() || state.is_empty() {
+        return Err(WeaveError::PluginError(
+            "OAuth redirect arrived without code/state".to_string(),
+        ));
+    }
+    Ok((code, state))
+}
+
+/// Runs the OAuth 2.1 (CIMD client identity + PKCE) authorization flow for
+/// a server, end to end: binds the loopback redirect listener, opens the
+/// authorization URL in the system browser, waits for the redirect (120s),
+/// exchanges the code for tokens at the token endpoint, persists them, and
+/// re-registers the server's tools with the access token.
+///
+/// Blocker-aware: binds the listener BEFORE opening the browser so the
+/// redirect cannot arrive early, and `state` round-trip is verified against
+/// CSRF.
+#[tauri::command]
+pub async fn mcp_oauth_authorize(
+    server_id: String,
+    app: tauri::AppHandle,
+    app_state: State<'_, AppState>,
+) -> Result<OauthResult, WeaveError> {
+    use tauri_plugin_shell::ShellExt;
+
+    let cfg = app_state
+        .config
+        .read()
+        .mcp_servers
+        .get(&server_id)
+        .cloned()
+        .ok_or_else(|| WeaveError::PluginError(format!("MCP server '{}' not found", server_id)))?;
+
+    if cfg.access_token.is_some() {
+        return Ok(OauthResult {
+            server_id,
+            authorized: true,
+        });
+    }
+    if cfg.authorization_endpoint.is_none() || cfg.token_endpoint.is_none() {
+        return Err(WeaveError::PluginError(format!(
+            "server '{}' has no discovered authorization endpoints — remove and re-add it",
+            cfg.name
+        )));
+    }
+    let md = mcp_client::AuthorizationServerMetadata {
+        issuer: cfg.issuer.clone(),
+        authorization_endpoint: cfg.authorization_endpoint.clone(),
+        token_endpoint: cfg.token_endpoint.clone(),
+        scopes_supported: Vec::new(),
+    };
+
+    let pkce = mcp_client::new_pkce();
+    let state = uuid::Uuid::new_v4().simple().to_string();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:34987")
+        .await
+        .map_err(|e| {
+            WeaveError::PluginError(format!(
+                "cannot bind OAuth redirect listener on 127.0.0.1:34987: {}",
+                e
+            ))
+        })?;
+    let authorization_url = mcp_client::authorization_url(&md, &state, &pkce)?;
+
+    info!("Opening OAuth authorization page for {} ...", cfg.name);
+    app.shell().open(&authorization_url, None).map_err(|e| {
+        WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e))
+    })?;
+
+    let (code, state_back) = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        async {
+            let (mut stream, _peer) = listener
+                .accept()
+                .await
+                .map_err(|e| WeaveError::PluginError(format!("OAuth redirect accept failed: {}", e)))?;
+            read_redirect_request(&mut stream).await
+        },
+    )
+    .await
+    .map_err(|_| {
+        WeaveError::PluginError("OAuth authorization timed out after 120s — no redirect received".to_string())
+    })??;
+
+    if state_back != state {
+        return Err(WeaveError::PluginError(
+            "OAuth state mismatch — the redirect did not come from our authorization request".to_string(),
+        ));
+    }
+
+    let tokens = mcp_client::exchange_code(&md, &code, &pkce).await?;
+    info!("OAuth tokens received for {}", cfg.name);
+
+    {
+        let mut config = app_state.config.write();
+        if let Some(server) = config.mcp_servers.get_mut(&server_id) {
+            server.access_token = Some(tokens.access_token.clone());
+            server.refresh_token = tokens.refresh_token.clone();
+            server.token_expires_at = tokens
+                .expires_in
+                .map(|secs| chrono::Utc::now().timestamp() + secs as i64);
+            server.auth_required = false;
+        }
+        config.save()?;
+    }
+
+    // Tools could not be listed without a token; re-list and re-register
+    // them now that the executor carries one.
+    let listed = mcp_client::list_tools(&cfg.url, Some(&tokens.access_token)).await?;
+    app_state
+        .plugin_manager
+        .mcp_tool_cache()
+        .store(&server_id, listed.clone());
+    app_state.plugin_manager.add_mcp_server(
+        &server_id,
+        &cfg.name,
+        &cfg.url,
+        Some(tokens.access_token),
+        listed.tools,
+    );
+
+    Ok(OauthResult {
+        server_id,
+        authorized: true,
+    })
+}
+
+/// Refreshes a server's access token via its stored refresh token and
+/// re-registers the executor with the fresh token. Fails cleanly when the
+/// server has no refresh token (then re-authorize instead).
+#[tauri::command]
+pub async fn mcp_oauth_refresh(
+    server_id: String,
+    app_state: State<'_, AppState>,
+) -> Result<OauthResult, WeaveError> {
+    let cfg = app_state
+        .config
+        .read()
+        .mcp_servers
+        .get(&server_id)
+        .cloned()
+        .ok_or_else(|| WeaveError::PluginError(format!("MCP server '{}' not found", server_id)))?;
+
+    let refresh_token = cfg.refresh_token.clone().ok_or_else(|| {
+        WeaveError::PluginError(format!(
+            "server '{}' has no refresh token — authorize it again",
+            cfg.name
+        ))
+    })?;
+    let md = mcp_client::AuthorizationServerMetadata {
+        issuer: cfg.issuer.clone(),
+        authorization_endpoint: cfg.authorization_endpoint.clone(),
+        token_endpoint: cfg.token_endpoint.clone(),
+        scopes_supported: Vec::new(),
+    };
+
+    let tokens = mcp_client::refresh_access_token(&md, &refresh_token).await?;
+    info!("Refreshed OAuth token for {}", cfg.name);
+
+    {
+        let mut config = app_state.config.write();
+        if let Some(server) = config.mcp_servers.get_mut(&server_id) {
+            server.access_token = Some(tokens.access_token.clone());
+            server.refresh_token = tokens.refresh_token.clone();
+            server.token_expires_at = tokens
+                .expires_in
+                .map(|secs| chrono::Utc::now().timestamp() + secs as i64);
+        }
+        config.save()?;
+    }
+
+    app_state.plugin_manager.add_mcp_server(
+        &server_id,
+        &cfg.name,
+        &cfg.url,
+        Some(tokens.access_token),
+        app_state
+            .plugin_manager
+            .mcp_tool_cache()
+            .get_fresh(&server_id)
+            .unwrap_or_default(),
+    );
+
+    Ok(OauthResult {
+        server_id,
+        authorized: true,
+    })
 }

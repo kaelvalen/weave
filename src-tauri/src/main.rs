@@ -67,6 +67,8 @@ fn main() {
             weave::commands::mcp::mcp_remove_server,
             weave::commands::mcp::mcp_list_servers,
             weave::commands::mcp::mcp_set_tool_allowlisted,
+            weave::commands::mcp::mcp_oauth_authorize,
+            weave::commands::mcp::mcp_oauth_refresh,
             weave::commands::system::system_get_config,
             weave::commands::system::system_set_config,
             weave::commands::system::list_provider_models,

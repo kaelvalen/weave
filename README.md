@@ -256,6 +256,21 @@ on every request, SSE-framed responses even for single round trips
 client. Evidence and re-run instructions:
 `docs/probes/mcp-live-github-2026-08-13/`.
 
+**OAuth 2.1 / CIMD authorization (implemented 2026-08-13):** a server that
+challenges 401 registers in an unauthenticated state; the Marketplace
+"Add MCP Server" dialog then offers an **Authorize** step. Weave performs
+RFC 8414 authorization-server discovery from the 401 challenge
+(`Mcp-Authorization` / `WWW-Authenticate: Bearer resource_metadata=...`),
+opens the authorization page in the system browser with a PKCE (S256)
+challenge and a CIMD client identity (an HTTPS metadata-document URL),
+captures the loopback redirect, exchanges the code for tokens, persists
+them in `~/.weave/config.json`, and re-registers the server's tools.
+Token refresh (`mcp_oauth_refresh`) is available; automatic refresh-on-401
+inside a tool call is not yet wired. Note: Weave does not yet host its
+CIMD metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and
+see `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite
+for servers that strictly validate CIMD.
+
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:
 those are hand-classified by reading each plugin's code; an MCP server's

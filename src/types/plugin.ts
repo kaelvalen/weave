@@ -52,6 +52,7 @@ export interface McpServerSummary {
   enabled: boolean;
   allowlisted_tools: string[];
   has_token: boolean;
+  auth_required: boolean;
 }
 
 export interface GithubRepo {

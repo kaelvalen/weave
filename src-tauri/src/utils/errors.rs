@@ -27,6 +27,8 @@ pub enum WeaveError {
     TomlParse(String),
     #[error("HTTP error: {0}")]
     Http(String),
+    #[error("Authorization required: {0}")]
+    AuthRequired(String),
     #[error("Plugin not found: {0}")]
     PluginNotFound(String),
     #[error("Plugin already loaded: {0}")]
