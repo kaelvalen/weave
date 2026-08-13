@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   useRuntimeStore,
   stepsForGoal,
@@ -8,10 +8,7 @@ import {
   goalStats,
 } from '@/stores/useRuntimeStore';
 import { StepTimeline } from '@/components/execution/StepTimeline';
-import { InspectorPanel } from '@/components/execution/InspectorPanel';
-import { useAppStore } from '@/stores/useAppStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Check, ChevronRight, Loader2, X, Circle, Activity, Brain, Package, GitMerge } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 import { usePluginStore } from '@/stores/usePluginStore';
@@ -29,6 +26,7 @@ function StatusIcon({ status }: { status: 'running' | 'completed' | 'failed' | '
   }
 }
 
+/** Per-message execution trace box, rendered inside ChatMessage. */
 export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const events = useRuntimeStore((s) => s.events);
@@ -40,9 +38,9 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
   const steps = stepsForGoal(state, goalId);
   const artifacts = artifactsForGoal(state, goalId);
   const memory = memoryUpdatesForGoal(state, goalId);
-  
-  const plugins = usePluginStore(s => s.plugins);
-  
+
+  const plugins = usePluginStore((s) => s.plugins);
+
   const getCapabilityLabel = (cap: string) => {
     for (const plugin of plugins) {
       if (plugin.capabilities?.descriptions?.[cap]) {
@@ -150,49 +148,5 @@ export function GoalTrace({ goalId, defaultOpen }: { goalId: string; defaultOpen
         </CollapsibleContent>
       </div>
     </Collapsible>
-  );
-}
-
-export interface ExecutionPanelProps {
-  goalIds?: string[];
-  className?: string;
-}
-
-export function ExecutionPanel({ goalIds, className = '' }: ExecutionPanelProps) {
-  const isRightPanelOpen = useAppStore((s) => s.isRightPanelOpen);
-  
-  // For 'All Traces' tab (no goalIds provided)
-  const persistedTraces = useRuntimeStore((s) => s.traces);
-  const executions = useRuntimeStore((s) => s.executions);
-  
-  const allIds = useMemo(() => {
-    if (goalIds) return goalIds;
-    
-    // Aggregate live + persisted
-    const ids = new Set<string>();
-    executions.forEach(e => { if (e.goal_id) ids.add(e.goal_id) });
-    persistedTraces.forEach(t => ids.add(t.goal_id));
-    return Array.from(ids);
-  }, [goalIds, executions, persistedTraces]);
-
-  return (
-    <div className={`flex h-full w-full bg-background overflow-hidden ${className}`}>
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-        <ScrollArea className="flex-1">
-          {allIds.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground font-mono animate-in fade-in">
-              No executions found.
-            </div>
-          ) : (
-            <div className="p-2">
-              {allIds.map((id, idx) => (
-                <GoalTrace key={id} goalId={id} defaultOpen={idx === 0} />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-      </div>
-      {isRightPanelOpen && <InspectorPanel />}
-    </div>
   );
 }

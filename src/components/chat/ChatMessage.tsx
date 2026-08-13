@@ -15,7 +15,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
 import { GoalCard } from '@/components/workspace/GoalCard';
-import { GoalTrace } from '@/components/execution/ExecutionPanel';
+import { GoalTrace } from '@/components/execution/GoalTrace';
 import { usePlanForGoal, useStepsForGoal, useGoalStats } from '@/components/workspace/runtimeSelectors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

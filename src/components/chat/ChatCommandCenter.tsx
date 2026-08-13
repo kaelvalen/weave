@@ -6,7 +6,6 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
 import { ApprovalBanner } from './ApprovalBanner';
-import { ExecutionPanel } from '@/components/execution/ExecutionPanel';
 import {
   PlusCircle,
   FolderOpen,
@@ -17,8 +16,6 @@ import {
   MessageSquare,
   Trash2,
   ChevronDown,
-  Activity,
-  X,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -74,7 +71,6 @@ export function ChatCommandCenter() {
   } = useChatStore();
   
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
-  const [isExecutionPanelOpen, setIsExecutionPanelOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -86,17 +82,6 @@ export function ChatCommandCenter() {
     listSessions();
     useChatStore.getState().loadHistory();
   }, [listSessions]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
-        e.preventDefault();
-        setIsExecutionPanelOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -202,24 +187,9 @@ export function ChatCommandCenter() {
               className="gap-1.5 h-8 text-xs border-border/40 bg-surface-2"
               title="Start a new chat thread"
             >
-               <PlusCircle className="w-3.5 h-3.5 text-brand" />
-               New Thread
-             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className={`h-8 px-3 text-xs rounded-lg border-border/40 ${
-                isExecutionPanelOpen
-                  ? 'bg-surface-3 text-brand border-brand/50'
-                  : 'bg-surface-2 text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => setIsExecutionPanelOpen(!isExecutionPanelOpen)}
-              title="Toggle Execution Panel (Ctrl+E)"
-            >
-              <Activity className="w-3.5 h-3.5 mr-1.5" />
-              Executions
-            </Button>
+                <PlusCircle className="w-3.5 h-3.5 text-brand" />
+                New Thread
+              </Button>
 
             {isStreaming && (
               <div className="flex items-center gap-1.5 text-xs text-brand font-mono px-2 py-1 rounded bg-brand/10">
@@ -327,29 +297,6 @@ export function ChatCommandCenter() {
           <div className="flex-shrink-0">
             <ApprovalBanner />
             <ChatInput />
-          </div>
-        )}
-
-        {/* Bottom Drawer for ExecutionPanel */}
-        {isExecutionPanelOpen && (
-          <div className="h-[40vh] min-h-[300px] flex flex-col bg-surface-1 animate-in slide-in-from-bottom-2">
-            <div className="h-8 flex items-center justify-between px-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
-                <Activity className="w-3 h-3" />
-                Execution Workspace
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-5 h-5 text-muted-foreground hover:text-foreground"
-                onClick={() => setIsExecutionPanelOpen(false)}
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <ExecutionPanel />
-            </div>
           </div>
         )}
       </div>

@@ -6,7 +6,7 @@ import type { ExecutionStep } from '../../types/runtime';
 /**
  * Vertical execution step timeline — the canonical per-goal step list.
  *
- * Consumed by the Execution Workspace (chat) and the Execution view.
+ * Consumed by the per-message GoalTrace inside ChatMessage.
  * Visual contract: `step-node-enter` / `step-node-running` CSS classes
  * (defined in styles.css), flat surface styling, no shadows.
  *

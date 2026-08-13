@@ -11,7 +11,7 @@ import {
 import type { ExecutionStep, PlannedStep, RuntimeEvent } from '@/types/runtime';
 
 /**
- * Per-goal runtime selectors for the Execution Workspace.
+ * Per-goal runtime selectors for message traces and goal cards.
  *
  * `useRuntimeStore` is being extended with `stepsForGoal` / `planForGoal` /
  * `artifactsForGoal` helpers; while they land, these adapters derive the same

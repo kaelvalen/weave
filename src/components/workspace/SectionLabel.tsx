@@ -1,5 +1,5 @@
 /**
- * Shared chrome label for Execution Workspace sections
+ * Shared chrome label for goal cards
  * (GOAL / PLAN / OUTPUT) — mono, 10px, uppercase, tracking-wider.
  */
 export function SectionLabel({
