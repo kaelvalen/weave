@@ -38,6 +38,9 @@ pub struct AppState {
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort_generation: Arc<AtomicBool>,
+    /// Auto-Approve mode: when true the agent loop skips the approval gate
+    /// (set by `chat_set_approval_mode`; frontend "Auto-Approve" toggle).
+    pub approval_auto: Arc<AtomicBool>,
     pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub local_server: Arc<tokio::sync::Mutex<Option<Child>>>,
     pub model_telemetry: Arc<parking_lot::Mutex<ModelTelemetry>>,
@@ -82,6 +85,7 @@ impl AppState {
         let approvals = Arc::new(ApprovalRegistry::new());
         let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
         let abort_generation = Arc::new(AtomicBool::new(false));
+        let approval_auto = Arc::new(AtomicBool::new(false));
         let agent_loop = Arc::new(AgentLoop {
             ai_bridge: ai_bridge.clone(),
             plugin_manager: plugin_manager.clone(),
@@ -89,6 +93,7 @@ impl AppState {
             config: config_arc.clone(),
             chat_history: chat_history.clone(),
             abort: abort_generation.clone(),
+            approval_auto: approval_auto.clone(),
             event_bus: event_bus.clone(),
             observability: observability.clone(),
             event_store: event_store.clone(),
@@ -110,6 +115,7 @@ impl AppState {
             config: config_arc,
             chat_history,
             abort_generation,
+            approval_auto,
             canvas_tx,
             local_server: Arc::new(tokio::sync::Mutex::new(None)),
             model_telemetry,

@@ -230,6 +230,7 @@ impl Harness {
             config: config.clone(),
             chat_history: chat_history.clone(),
             abort,
+            approval_auto: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             event_bus,
             observability,
             event_store,

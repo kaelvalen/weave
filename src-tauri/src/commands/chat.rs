@@ -355,3 +355,20 @@ pub fn chat_abort_generation(app_state: State<'_, AppState>) -> Result<(), Weave
     info!("Generation aborted by user");
     Ok(())
 }
+
+/// Set the approval mode the agent loop uses. Auto-Approve (true) makes the
+/// loop skip the approval gate for every call — no PendingApproval events,
+/// no banner — matching the frontend "gate off" toggle; Ask (false)
+/// restores the per-call gate.
+#[tauri::command]
+pub fn chat_set_approval_mode(
+    auto_approve: bool,
+    app_state: State<'_, AppState>,
+) -> Result<(), WeaveError> {
+    app_state.approval_auto.store(auto_approve, Ordering::SeqCst);
+    info!(
+        "Approval mode: {}",
+        if auto_approve { "auto-approve (gate off)" } else { "ask" }
+    );
+    Ok(())
+}

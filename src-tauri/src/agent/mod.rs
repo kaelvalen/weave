@@ -131,6 +131,10 @@ pub struct AgentLoop {
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
     pub abort: Arc<AtomicBool>,
+    /// When true the approval gate is fully bypassed: sensitive/destructive
+    /// and MCP-sourced calls execute without a PendingApproval event
+    /// (frontend "Auto-Approve" mode).
+    pub approval_auto: Arc<AtomicBool>,
     pub event_bus: Arc<EventBus>,
     pub observability: Arc<Observability>,
     pub event_store: Arc<EventSourcingStore>,
@@ -357,6 +361,9 @@ impl AgentLoop {
                     ),
                     None => capability_policy::requires_approval(&call.capability),
                 };
+                // Auto-Approve (frontend toggle) bypasses the gate entirely —
+                // no PendingApproval event, no banner, no wait.
+                let gated = gated && !self.approval_auto.load(Ordering::SeqCst);
                 if gated {
                     let receiver = self.approvals.register(call.call_id.clone());
                     let _ = event_tx
