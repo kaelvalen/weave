@@ -40,7 +40,7 @@ interface PluginState {
   installFromGithubRelease: (repoUrl: string, tag?: string, asset?: string) => Promise<void>;
   fetchMcpServers: () => Promise<void>;
   addMcpServer: (url: string, name: string) => Promise<boolean>;
-  oauthAuthorize: (serverId: string) => Promise<unknown>;
+  oauthAuthorize: (serverId: string) => Promise<void>;
   oauthRefresh: (serverId: string) => Promise<void>;
   removeMcpServer: (serverId: string) => Promise<void>;
 }
@@ -355,7 +355,7 @@ export const usePluginStore = create<PluginState>()(
           state.error = null;
         });
         try {
-          const result = await invoke('mcp_oauth_authorize', { serverId });
+          await invoke('mcp_oauth_authorize', { serverId });
           // Backend re-registered the plugin with the authorized tool list;
           // refresh BOTH state sources — mcpServers (server summary) and
           // plugins (the DISCOVERED cards render from this). Only fetching
@@ -366,7 +366,6 @@ export const usePluginStore = create<PluginState>()(
             state.isLoading = false;
           });
           toast.success(`Authorized MCP server "${serverId}"`);
-          return result;
         } catch (err) {
           const msg = extractError(err);
           toast.error(`OAuth authorization failed: ${msg}`);

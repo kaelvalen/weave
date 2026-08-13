@@ -3,6 +3,7 @@ import { usePluginStore } from '@/stores/usePluginStore';
 import { PluginCard } from './PluginCard';
 import { GithubPluginPanel } from './GithubPluginPanel';
 import { AddMcpServerDialog } from './AddMcpServerDialog';
+import type { Plugin } from '@/types/plugin';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -45,6 +46,8 @@ export function PluginMarket() {
   const loadPlugin = usePluginStore((s) => s.loadPlugin);
   const unloadPlugin = usePluginStore((s) => s.unloadPlugin);
   const installFromFile = usePluginStore((s) => s.installFromFile);
+  const mcpServers = usePluginStore((s) => s.mcpServers);
+  const oauthAuthorize = usePluginStore((s) => s.oauthAuthorize);
 
   const [refreshing, setRefreshing] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -86,6 +89,21 @@ export function PluginMarket() {
 
   const builtinPlugins = filteredPlugins.filter((p) => p.is_builtin);
   const discoveredPlugins = filteredPlugins.filter((p) => !p.is_builtin);
+
+  /**
+   * OAuth-gated MCP server behind this plugin (`com.weave.mcp.<server_id>`)
+   * that still lacks a token: return an authorize handler for the card's
+   * Authorize action, or null when auth isn't pending. A server can end up
+   * here even if the Add dialog's one-shot flow was skipped or closed.
+   */
+  const mcpAuthorizeFor = (plugin: Plugin): (() => Promise<void> | void) | null => {
+    const PREFIX = 'com.weave.mcp.';
+    if (!plugin.id.startsWith(PREFIX)) return null;
+    const serverId = plugin.id.slice(PREFIX.length);
+    const server = mcpServers.find((s) => s.id === serverId);
+    if (!server || !server.auth_required || server.has_token) return null;
+    return () => oauthAuthorize(serverId);
+  };
 
   const categoryCounts: Record<string, number> = {};
   for (const p of plugins) {
@@ -266,19 +284,24 @@ export function PluginMarket() {
                         </span>
                       </h3>
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {discoveredPlugins.map((p) => (
-                          <PluginCard
-                            key={p.id}
-                            plugin={p}
-                            isLoaded={
-                              loadedPlugins.includes(p.id) ||
-                              p.state === 'active' ||
-                              p.state === 'loaded'
-                            }
-                            onLoad={() => loadPlugin(p.id)}
-                            onUnload={() => unloadPlugin(p.id)}
-                          />
-                        ))}
+                        {discoveredPlugins.map((p) => {
+                          const authorize = mcpAuthorizeFor(p);
+                          return (
+                            <PluginCard
+                              key={p.id}
+                              plugin={p}
+                              isLoaded={
+                                loadedPlugins.includes(p.id) ||
+                                p.state === 'active' ||
+                                p.state === 'loaded'
+                              }
+                              onLoad={() => loadPlugin(p.id)}
+                              onUnload={() => unloadPlugin(p.id)}
+                              authRequired={authorize !== null}
+                              onAuthorize={authorize ?? undefined}
+                            />
+                          );
+                        })}
                       </div>
                     </section>
                   )}

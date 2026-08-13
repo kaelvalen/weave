@@ -21,6 +21,7 @@ import {
   Send,
   HardDrive,
   Info,
+  KeyRound,
 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -84,9 +85,16 @@ interface PluginCardProps {
   isLoaded: boolean;
   onLoad: () => Promise<void> | void;
   onUnload: () => Promise<void> | void;
+  /**
+   * OAuth-gated MCP server awaiting authorization (`auth_required` &&
+   * !has_token in McpServerSummary): renders an Authorize action in place
+   * of the load toggle, since a 0-tool server is pointless to toggle.
+   */
+  authRequired?: boolean;
+  onAuthorize?: () => Promise<void> | void;
 }
 
-export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardProps) {
+export function PluginCard({ plugin, isLoaded, onLoad, onUnload, authRequired, onAuthorize }: PluginCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
 
@@ -181,6 +189,19 @@ export function PluginCard({ plugin, isLoaded, onLoad, onUnload }: PluginCardPro
                   <ShieldCheck className="w-4 h-4" />
                   Always Active
                 </span>
+              ) : authRequired && onAuthorize ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/40 text-amber-600 hover:text-amber-600 hover:bg-amber-500/10"
+                    onClick={() => void onAuthorize()}
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Authorize
+                  </Button>
+                  <span className="text-xs font-medium text-amber-600">Auth required</span>
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <SimpleToggle
