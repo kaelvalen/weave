@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
-import { useApprovalModeStore } from '@/stores/useApprovalModeStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChatMessage } from './ChatMessage';
@@ -20,7 +19,6 @@ import {
   ChevronDown,
   Activity,
   X,
-  ShieldAlert,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -75,11 +73,7 @@ export function ChatCommandCenter() {
     isStreaming,
   } = useChatStore();
   
-  const approvalMode = useApprovalModeStore((s) => s.mode);
-  const setApprovalMode = useApprovalModeStore((s) => s.setMode);
-
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
-  const [confirmAutoApprove, setConfirmAutoApprove] = useState(false);
   const [isExecutionPanelOpen, setIsExecutionPanelOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -208,49 +202,9 @@ export function ChatCommandCenter() {
               className="gap-1.5 h-8 text-xs border-border/40 bg-surface-2"
               title="Start a new chat thread"
             >
-              <PlusCircle className="w-3.5 h-3.5 text-brand" />
-              New Thread
-            </Button>
-
-            {/* Approval Mode Switcher */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-surface-2 rounded-lg p-0.5 border border-border/40 font-mono">
-                <button
-                  type="button"
-                  onClick={() => setApprovalMode('ask')}
-                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                    approvalMode === 'ask'
-                      ? 'bg-surface-3 text-foreground font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Ask
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (approvalMode === 'accept-edits') return;
-                    setConfirmAutoApprove(true);
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                    approvalMode === 'accept-edits'
-                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Auto-Approve
-                </button>
-              </div>
-              {approvalMode === 'accept-edits' && (
-                <span
-                  className="flex items-center gap-1 text-[10px] font-mono text-amber-600 dark:text-amber-400 whitespace-nowrap"
-                  title="The approval gate is bypassed: sensitive reads, network requests, and destructive operations run without confirmation until you switch back to Ask."
-                >
-                  <ShieldAlert className="w-3 h-3" />
-                  gate off — runs without confirmation
-                </span>
-              )}
-            </div>
+               <PlusCircle className="w-3.5 h-3.5 text-brand" />
+               New Thread
+             </Button>
 
             <Button
               variant="outline"
@@ -409,17 +363,6 @@ export function ChatCommandCenter() {
         destructive
         onConfirm={() => {
           if (sessionToDelete) deleteSession(sessionToDelete);
-        }}
-      />
-
-      <ConfirmDialog
-        open={confirmAutoApprove}
-        onOpenChange={setConfirmAutoApprove}
-        title="Bypass the approval gate?"
-        description="In Auto-Approve mode, sensitive reads, network requests, and destructive operations run without confirmation. The mode persists across restarts and the Auto-Approve button in the command center stays lit as long as it is on — switch back to Ask anytime."
-        confirmLabel="Enable Auto-Approve"
-        onConfirm={() => {
-          setApprovalMode('accept-edits');
         }}
       />
     </div>

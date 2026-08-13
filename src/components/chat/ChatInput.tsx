@@ -29,6 +29,7 @@ import {
   Star,
 } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
+import { ApprovalModeToggle } from './ApprovalModeToggle';
 import { toast } from 'sonner';
 
 type ModelOption = { value: string; label: string; provider: Provider };
@@ -521,19 +522,19 @@ export function ChatInput() {
 
         {/* Action Row */}
         <div className="flex items-center justify-between pt-1 font-mono text-xs">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {/* Model Selector */}
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger
                 disabled={modelsLoading || isStreaming || isSwitchingModel}
-                className="h-7 text-xs bg-surface-2 hover:bg-surface-3 px-2.5 rounded-md gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
+                className="h-7 text-xs bg-surface-2 hover:bg-surface-3 px-3 rounded-md gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
               >
-                <span className="truncate max-w-[120px] font-medium">
+                <span className="truncate max-w-[240px] font-medium">
                   {modelsLoading || isSwitchingModel
                     ? 'Loading...'
                     : models.find((m) => m.value === selectedModel)?.label || 'Model'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-64 rounded-md bg-popover border border-border p-1 shadow-lg" sideOffset={6}>
                 <div className="flex items-center px-2 py-1 border-b border-border/50 mb-1">
@@ -585,15 +586,12 @@ export function ChatInput() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Paperclip Attach — every file type is visible; text rides inline, images use vision */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Attach file (text or image)"
-            >
-              <Paperclip className="w-3.5 h-3.5" />
-            </button>
+            {/* Approval mode (Ask / Auto-Approve) — next to the model selector */}
+            <ApprovalModeToggle />
+          </div>
+
+          {/* Right side: attachments + send */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <input
               type="file"
               ref={fileInputRef}
@@ -604,29 +602,38 @@ export function ChatInput() {
                 e.target.value = '';
               }}
             />
-          </div>
+            {/* Paperclip Attach — every file type is visible; text rides inline, images use vision */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Attach file (text or image)"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
 
-          {/* Send / Stop Button */}
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="flex items-center gap-1.5 px-3 py-1 bg-destructive text-destructive-foreground font-semibold rounded text-xs hover:bg-destructive/90 transition-colors"
-            >
-              <Square className="w-3 h-3 fill-current" />
-              <span>Stop</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
-              className="flex items-center gap-1 px-3 py-1 bg-brand text-brand-foreground font-semibold rounded-md text-xs hover:bg-brand/90 disabled:opacity-40 transition-all cursor-pointer"
-            >
-              <span>Send</span>
-              <ArrowUp className="w-3.5 h-3.5" />
-            </button>
-          )}
+            {/* Send / Stop Button */}
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="flex items-center gap-1.5 px-3 py-1 bg-destructive text-destructive-foreground font-semibold rounded text-xs hover:bg-destructive/90 transition-colors"
+              >
+                <Square className="w-3 h-3 fill-current" />
+                <span>Stop</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                className="flex items-center gap-1 px-3 py-1 bg-brand text-brand-foreground font-semibold rounded-md text-xs hover:bg-brand/90 disabled:opacity-40 transition-all cursor-pointer"
+              >
+                <span>Send</span>
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
