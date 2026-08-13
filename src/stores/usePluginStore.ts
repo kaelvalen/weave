@@ -356,7 +356,12 @@ export const usePluginStore = create<PluginState>()(
         });
         try {
           const result = await invoke('mcp_oauth_authorize', { serverId });
+          // Backend re-registered the plugin with the authorized tool list;
+          // refresh BOTH state sources — mcpServers (server summary) and
+          // plugins (the DISCOVERED cards render from this). Only fetching
+          // mcpServers leaves the cards showing the pre-auth 0-tool plugin.
           await get().fetchMcpServers();
+          await get().discoverPlugins();
           set((state) => {
             state.isLoading = false;
           });
