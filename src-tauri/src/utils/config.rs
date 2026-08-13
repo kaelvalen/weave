@@ -66,7 +66,9 @@ pub struct LocalConfig {
     /// decision Q2. The 2026-08-11 probe confirmed streamed native tool calls
     /// for Qwen3.5-9B-Q4_K_M through both llama-server and Ollama 0.32.6;
     /// qwen2.5-coder-7b returned XML text instead, so models/templates without
-    /// native support must set this to false.
+    /// native support must set this to false. The Ollama/Qwen3.5 leg was
+    /// re-verified on 2026-08-13 against Ollama 0.32.7 with a committed
+    /// transcript (docs/probes/ollama-native-tools-2026-08-13/).
     #[serde(default = "default_use_native_tools")]
     pub use_native_tools: bool,
 }

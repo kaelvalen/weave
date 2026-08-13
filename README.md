@@ -59,6 +59,10 @@ The local probe performed on 2026-08-11 produced these results:
   `message.tool_calls` with the expected `probe-ok` argument. The temporary
   probe model was removed after the test.
 
+The Ollama/Qwen3.5 leg was independently re-run and verified on 2026-08-13
+against a real local server (Ollama 0.32.7, `qwen3.5:9b`) with the
+transcript committed: see `docs/probes/ollama-native-tools-2026-08-13/`.
+
 ## Architecture
 
 ```text
