@@ -1,9 +1,7 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
 import { usePluginStore } from '@/stores/usePluginStore';
-import { useApprovalModeStore } from '@/stores/useApprovalModeStore';
 import { useRuntimeEvents } from '@/hooks/useRuntimeEvents';
-import { maybeWarnAboutBypassedGate } from '@/lib/approvalReminder';
 import { TopNav } from '@/components/layout/TopNav';
 import { Workspace } from '@/components/layout/Workspace';
 import { WorkspaceSidebar } from '@/components/layout/WorkspaceSidebar';
@@ -26,13 +24,6 @@ function App() {
       .catch(console.error);
 
     usePluginStore.getState().discoverPlugins();
-
-    // Persisted approval mode from a previous session: the gate is silently
-    // off — surface it once, prominently, with an action to switch back.
-    maybeWarnAboutBypassedGate(
-      () => useApprovalModeStore.getState().mode,
-      (mode) => useApprovalModeStore.getState().setMode(mode)
-    );
 
     setReady(true);
   }, [setReady, setVersion]);
