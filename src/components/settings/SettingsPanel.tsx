@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
@@ -444,6 +444,8 @@ export function SettingsPanel() {
                     />
                   </FieldLabel>
                 </SectionCard>
+
+                <LlamaSwapCard />
               </TabsContent>
 
               <TabsContent value="general" className="space-y-8 mt-0 outline-none">
@@ -801,5 +803,102 @@ function PasswordInput({
         {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
       </button>
     </div>
+  );
+}
+
+function LlamaSwapCard() {
+  const [status, setStatus] = useState<{
+    active: boolean;
+    model_count: number;
+    models: string[];
+    last_error?: string | null;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(() => {
+    invoke<{
+      active: boolean;
+      model_count: number;
+      models: string[];
+      last_error?: string | null;
+    }>('llama_swap_status')
+      .then(setStatus)
+      .catch((e) => toast.error('llama-swap durumu alınamadı', { description: extractError(e) }));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const run = async (action: 'start' | 'stop') => {
+    setBusy(true);
+    try {
+      await invoke(action === 'start' ? 'llama_swap_start' : 'llama_swap_stop');
+      refresh();
+      if (action === 'start') toast.success('llama-swap router başlatıldı');
+      else toast.success('llama-swap router durduruldu');
+    } catch (e) {
+      toast.error(action === 'start' ? 'Başlatılamadı' : 'Durdurulamadı', {
+        description: extractError(e),
+      });
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard
+      title="llama-swap (GGUF)"
+      desc="Senin llama.cpp router'ın (127.0.0.1:8080) — Weave sadece systemd servisini yönetir, config'i senin Nix kurulumun üretir."
+    >
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                status?.active ? 'bg-emerald-500' : 'bg-muted-foreground/50'
+              }`}
+            />
+            <span className="font-medium">
+              {status ? (status.active ? 'Aktif' : 'Kapalı') : 'Kontrol ediliyor…'}
+            </span>
+            {status && (
+              <span className="text-muted-foreground">
+                · {status.model_count} model{' '}
+                {status.model_count > 0 ? `(${status.models.slice(0, 3).join(', ')}…)` : ''}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || status?.active}
+              onClick={() => void run('start')}
+            >
+              Start
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !status?.active}
+              onClick={() => void run('stop')}
+            >
+              Stop
+            </Button>
+          </div>
+        </div>
+        {status?.last_error && (
+          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md p-2.5 whitespace-pre-wrap font-mono max-h-32 overflow-y-auto">
+            {status.last_error}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Boştaki modeller ttl (5 dk) sonrası bellekten düşer; router açık kaldığında fark
+          edilmez. Ayrıca `llm service start|stop|status` ile de yönetilebilir.
+        </p>
+      </div>
+    </SectionCard>
   );
 }

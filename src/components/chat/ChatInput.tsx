@@ -151,6 +151,9 @@ export function ChatInput() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // llama-swap router reachability (spec §4): knowable before send, so the
+  // picker shows it per model instead of discovering it via a failed request.
+  const [llamaSwapActive, setLlamaSwapActive] = useState<boolean | null>(null);
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('weave_favorite_models');
@@ -187,7 +190,7 @@ export function ChatInput() {
     invoke<AppConfig>('system_get_config')
       .then(async () => {
         if (!cancelled) setModelsLoading(true);
-        const providers: Provider[] = ['openai', 'anthropic', 'opencode', 'local'];
+        const providers: Provider[] = ['openai', 'anthropic', 'opencode', 'llama-swap', 'local'];
 
         const results = await Promise.allSettled(
           providers.map((key) => invoke<string[]>('list_provider_models', { provider: key }))
@@ -202,6 +205,13 @@ export function ChatInput() {
           }
         });
         if (!cancelled) setModels(merged);
+        void invoke<{ active: boolean }>('llama_swap_status')
+          .then((s) => {
+            if (!cancelled) setLlamaSwapActive(s.active);
+          })
+          .catch(() => {
+            if (!cancelled) setLlamaSwapActive(null);
+          });
       })
       .catch(() => {
         if (!cancelled) setModels(FALLBACK_MODELS);
@@ -570,7 +580,25 @@ export function ChatInput() {
                             m.value === selectedModel ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'
                           }`}
                         >
-                          <span className="truncate">{m.label}</span>
+                          <span className="truncate flex items-center gap-1.5">
+                            {m.provider === 'llama-swap' && (
+                              <span
+                                title={
+                                  llamaSwapActive
+                                    ? 'llama-swap router aktif'
+                                    : 'llama-swap router kapalı — seçilince otomatik başlar'
+                                }
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  llamaSwapActive
+                                    ? 'bg-emerald-500'
+                                    : llamaSwapActive === null
+                                      ? 'bg-muted-foreground/40'
+                                      : 'bg-amber-500'
+                                }`}
+                              />
+                            )}
+                            {m.label}
+                          </span>
                           <button
                             type="button"
                             onClick={(e) => toggleFavorite(m.value, e)}

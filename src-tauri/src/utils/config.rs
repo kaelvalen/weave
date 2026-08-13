@@ -38,6 +38,7 @@ pub enum Provider {
     Kimi,
     Opencode,
     Local,
+    LlamaSwap,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +72,14 @@ pub struct LocalConfig {
     /// transcript (docs/probes/ollama-native-tools-2026-08-13/).
     #[serde(default = "default_use_native_tools")]
     pub use_native_tools: bool,
+    /// Per llama-swap model-id native tool-calling probe results. Unlike the
+    /// static `use_native_tools` flag (Ollama, fixed per endpoint), llama-swap
+    /// serves many model families (DeepSeek, Gemma, granite, Qwen-coder…)
+    /// behind one OpenAI-compatible endpoint — tool-call formatting can differ
+    /// per family even with `--jinja`, so the capability is probed once per
+    /// model on first real use and cached here. Absent entry = not yet probed.
+    #[serde(default)]
+    pub use_native_tools_per_model: HashMap<String, bool>,
 }
 
 fn default_use_native_tools() -> bool {
@@ -189,6 +198,7 @@ impl Default for AppConfig {
                     temperature: 0.7,
                     api_url: Some(OLLAMA_DEFAULT_URL.to_string()),
                     use_native_tools: default_use_native_tools(),
+                    use_native_tools_per_model: HashMap::new(),
                 },
             },
             plugins: PluginConfig {

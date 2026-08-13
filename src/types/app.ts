@@ -22,6 +22,16 @@ export interface LocalConfig {
   context_length: number;
   temperature: number;
   api_url?: string;
+  use_native_tools?: boolean;
+  /** Per llama-swap model-id native tool-calling probe results (spec §3). */
+  use_native_tools_per_model?: Record<string, boolean>;
+}
+
+export interface LlamaSwapStatus {
+  active: boolean;
+  model_count: number;
+  models: string[];
+  last_error?: string | null;
 }
 
 import type { Provider } from './chat';

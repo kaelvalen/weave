@@ -2,7 +2,7 @@ export type ChatRole = 'user' | 'assistant' | 'system';
 
 export type CallStatus = 'pending' | 'pending_approval' | 'success' | 'error';
 
-export type Provider = 'openai' | 'anthropic' | 'kimi' | 'opencode' | 'local';
+export type Provider = 'openai' | 'anthropic' | 'kimi' | 'opencode' | 'local' | 'llama-swap';
 
 export interface PluginCall {
   /** Provider-side tool-call id (backend agent loop pairs results by this). */

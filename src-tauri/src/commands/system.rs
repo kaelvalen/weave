@@ -36,6 +36,7 @@ pub async fn list_provider_models(
         "kimi" => Provider::Kimi,
         "opencode" => Provider::Opencode,
         "local" => Provider::Local,
+        "llama-swap" => Provider::LlamaSwap,
         _ => {
             return Err(WeaveError::ConfigError(format!(
                 "Unknown provider: {}",

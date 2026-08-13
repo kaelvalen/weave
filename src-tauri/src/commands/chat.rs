@@ -77,6 +77,7 @@ pub async fn chat_send_message(
                     "kimi" => crate::models::chat::Provider::Kimi,
                     "opencode" => crate::models::chat::Provider::Opencode,
                     "local" => crate::models::chat::Provider::Local,
+                    "llama-swap" => crate::models::chat::Provider::LlamaSwap,
                     _ => crate::models::chat::Provider::Openai,
                 }
             } else {
@@ -86,9 +87,10 @@ pub async fn chat_send_message(
                     crate::models::chat::Provider::Kimi
                 } else if m.starts_with("opencode") {
                     crate::models::chat::Provider::Opencode
-                } else if m.starts_with("llama") || m.starts_with("mistral") || m.ends_with(".gguf")
-                {
+                } else if m.starts_with("llama") || m.starts_with("mistral") {
                     crate::models::chat::Provider::Local
+                } else if m.ends_with(".gguf") {
+                    crate::models::chat::Provider::LlamaSwap
                 } else {
                     crate::models::chat::Provider::Openai
                 }
@@ -118,6 +120,12 @@ pub async fn chat_send_message(
                     ai_config.local.api_url.clone(),
                     ai_config.local.temperature,
                     0, // No token limit for local models
+                ),
+                crate::models::chat::Provider::LlamaSwap => (
+                    None,
+                    Some(crate::commands::llama_swap::LLAMA_SWAP_BASE_URL.to_string()),
+                    ai_config.local.temperature,
+                    0, // context is fixed by the unit (-c 8192)
                 ),
                 crate::models::chat::Provider::Openai => (
                     Some(ai_config.openai.api_key.clone()),
@@ -355,10 +363,16 @@ pub fn chat_set_approval_mode(
     auto_approve: bool,
     app_state: State<'_, AppState>,
 ) -> Result<(), WeaveError> {
-    app_state.approval_auto.store(auto_approve, Ordering::SeqCst);
+    app_state
+        .approval_auto
+        .store(auto_approve, Ordering::SeqCst);
     info!(
         "Approval mode: {}",
-        if auto_approve { "auto-approve (gate off)" } else { "ask" }
+        if auto_approve {
+            "auto-approve (gate off)"
+        } else {
+            "ask"
+        }
     );
     Ok(())
 }

@@ -216,6 +216,49 @@ impl AgentLoop {
                 if !use_native {
                     tools.clear();
                 }
+            } else if provider == Provider::LlamaSwap {
+                // One OpenAI-compatible endpoint, many model families — tool
+                // formatting can differ per family even under --jinja, so the
+                // capability is probed once per model id on first real use and
+                // cached in the per-model map (llama-swap spec §3).
+                let model_id = model_config.model.clone();
+                let use_native = {
+                    let config = self.config.read();
+                    config
+                        .ai
+                        .local
+                        .use_native_tools_per_model
+                        .get(&model_id)
+                        .copied()
+                };
+                let use_native = match use_native {
+                    Some(v) => v,
+                    None => {
+                        // First use of this model: probe it now (loads the
+                        // model into VRAM; ttl:300 unloads it ~5min later).
+                        let ok = self
+                            .ai_bridge
+                            .llama_swap_probe_tools(&model_id)
+                            .await?;
+                        {
+                            let mut config = self.config.write();
+                            config
+                                .ai
+                                .local
+                                .use_native_tools_per_model
+                                .insert(model_id.clone(), ok);
+                        }
+                        // Persist alongside use_native_tools (spec §3).
+                        let config = self.config.read().clone();
+                        if let Err(e) = config.save() {
+                            tracing::warn!("probe sonucu kaydedilemedi: {}", e);
+                        }
+                        ok
+                    }
+                };
+                if !use_native {
+                    tools.clear();
+                }
             }
             let tools_opt = if tools.is_empty() { None } else { Some(tools) };
 
