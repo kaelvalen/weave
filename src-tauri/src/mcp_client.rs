@@ -531,41 +531,97 @@ pub struct AuthorizationServerMetadata {
     pub scopes_supported: Vec<String>,
 }
 
-/// RFC 8414 discovery: `GET {base}/.well-known/oauth-authorization-server`.
-/// `base_url` MUST be the authorization-server base URL — for challenges
-/// that arrive as an RFC 9728 `resource_metadata` URL, resolve it with
+/// RFC 8414 §3 discovery URL candidates for an authorization-server base
+/// URL, tried in order:
+///
+/// 1. **Path-aware** — the well-known path is inserted between the host
+///    and the issuer's path: issuer `https://github.com/login/oauth` →
+///    `https://github.com/.well-known/oauth-authorization-server/
+///    login/oauth`. This is what §3 prescribes and what GitHub serves.
+/// 2. **Append** — `{base}/.well-known/oauth-authorization-server`, the
+///    pre-§3 form still served by some implementations (e.g. Keycloak).
+///
+/// Both exist in the wild; a discovery attempt must try path-aware first
+/// and fall back to append on 404.
+pub fn discovery_url_candidates(base_url: &str) -> [String; 2] {
+    let base = base_url.trim_end_matches('/');
+    let path_aware = match reqwest::Url::parse(base) {
+        Ok(url) => {
+            let scheme = url.scheme();
+            let host = url.host_str().unwrap_or("");
+            if host.is_empty() {
+                format!("{}/.well-known/oauth-authorization-server", base)
+            } else {
+                let port = url.port().map(|p| format!(":{}", p)).unwrap_or_default();
+                let path = url.path().trim_end_matches('/');
+                format!(
+                    "{}://{}{}/.well-known/oauth-authorization-server{}",
+                    scheme, host, port, path
+                )
+            }
+        }
+        Err(_) => format!("{}/.well-known/oauth-authorization-server", base),
+    };
+    [
+        path_aware,
+        format!("{}/.well-known/oauth-authorization-server", base),
+    ]
+}
+
+/// RFC 8414 discovery, path-aware (§3) with append fallback: tries
+/// `discovery_url_candidates()` in order, moving on when a candidate
+/// 404s (or the request fails to connect). `base_url` MUST be the
+/// authorization-server base URL — for challenges that arrive as an RFC
+/// 9728 `resource_metadata` URL, resolve it with
 /// `resolve_authorization_server` first, never pass the metadata URL here.
 pub async fn discover_authorization_server(
     base_url: &str,
 ) -> Result<AuthorizationServerMetadata, WeaveError> {
     let client = build_client()?;
-    let discovery_url = format!(
-        "{}/.well-known/oauth-authorization-server",
-        base_url.trim_end_matches('/')
-    );
-    let response = client
-        .get(&discovery_url)
-        .send()
-        .await
-        .map_err(|e| WeaveError::Http(format!("authorization-server discovery request to {} failed: {}", discovery_url, e)))?;
-    if !response.status().is_success() {
-        return Err(WeaveError::Http(format!(
-            "authorization-server discovery at {} returned {}",
-            discovery_url,
-            response.status()
-        )));
+    let mut last_error: Option<WeaveError> = None;
+    for discovery_url in discovery_url_candidates(base_url) {
+        let response = match client.get(&discovery_url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_error = Some(WeaveError::Http(format!(
+                    "authorization-server discovery request to {} failed: {}",
+                    discovery_url, e
+                )));
+                continue;
+            }
+        };
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            last_error = Some(WeaveError::Http(format!(
+                "authorization-server discovery at {} returned 404",
+                discovery_url
+            )));
+            continue;
+        }
+        if !response.status().is_success() {
+            return Err(WeaveError::Http(format!(
+                "authorization-server discovery at {} returned {}",
+                discovery_url,
+                response.status()
+            )));
+        }
+        let md: AuthorizationServerMetadata = response
+            .json()
+            .await
+            .map_err(|e| WeaveError::Http(format!("authorization-server discovery at {} was not JSON: {}", discovery_url, e)))?;
+        if md.authorization_endpoint.is_none() || md.token_endpoint.is_none() {
+            return Err(WeaveError::Http(format!(
+                "authorization-server discovery at {} was incomplete (no authorization/token endpoint)",
+                discovery_url
+            )));
+        }
+        return Ok(md);
     }
-    let md: AuthorizationServerMetadata = response
-        .json()
-        .await
-        .map_err(|e| WeaveError::Http(format!("authorization-server discovery at {} was not JSON: {}", discovery_url, e)))?;
-    if md.authorization_endpoint.is_none() || md.token_endpoint.is_none() {
-        return Err(WeaveError::Http(format!(
-            "authorization-server discovery at {} was incomplete (no authorization/token endpoint)",
-            discovery_url
-        )));
-    }
-    Ok(md)
+    Err(last_error.unwrap_or_else(|| {
+        WeaveError::Http(format!(
+            "authorization-server discovery for {} produced no usable URL",
+            base_url
+        ))
+    }))
 }
 
 /// Builds the OAuth 2.1 authorization-code URL: response_type=code,
@@ -1100,6 +1156,137 @@ mod tests {
         assert_eq!(md.issuer.as_deref(), Some("https://as.example"));
         assert_eq!(md.authorization_endpoint.as_deref(), Some("https://as.example/authorize"));
         assert_eq!(md.token_endpoint.as_deref(), Some("https://as.example/token"));
+    }
+
+    #[test]
+    fn discovery_url_candidates_github_issuer_is_path_aware_first() {
+        // RFC 8414 §3: well-known goes between host and issuer path.
+        // GitHub serves ONLY this form; the append form 404s.
+        let [path_aware, append] = discovery_url_candidates("https://github.com/login/oauth");
+        assert_eq!(
+            path_aware,
+            "https://github.com/.well-known/oauth-authorization-server/login/oauth"
+        );
+        assert_eq!(
+            append,
+            "https://github.com/login/oauth/.well-known/oauth-authorization-server"
+        );
+    }
+
+    #[test]
+    fn discovery_url_candidates_bare_host_collapse() {
+        // No path: both forms are the same URL, no duplicate segment.
+        let [path_aware, append] = discovery_url_candidates("https://as.example/");
+        assert_eq!(
+            path_aware,
+            "https://as.example/.well-known/oauth-authorization-server"
+        );
+        assert_eq!(path_aware, append);
+    }
+
+    #[test]
+    fn discovery_url_candidates_preserve_port() {
+        let [path_aware, _] = discovery_url_candidates("http://localhost:8080/issuer");
+        assert_eq!(
+            path_aware,
+            "http://localhost:8080/.well-known/oauth-authorization-server/issuer"
+        );
+    }
+
+    #[tokio::test]
+    async fn discover_falls_back_to_append_when_path_aware_404s() {
+        // One-shot mock answering exactly one request: the path-aware URL.
+        // The client must then fall back to the append form, which the
+        // (real) target serves; to observe the fallback without a second
+        // server, answer 404 from the same listener for the first request
+        // and a full metadata document for the second.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut served = 0;
+            loop {
+                let (mut stream, _) = match listener.accept().await {
+                    Ok(s) => s,
+                    Err(_) => break,
+                };
+                let mut buf = Vec::new();
+                let mut byte = [0u8; 1];
+                loop {
+                    if stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                        break;
+                    }
+                    buf.push(byte[0]);
+                    if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+                        break;
+                    }
+                }
+                let text = String::from_utf8_lossy(&buf).to_string();
+                let line = text.lines().next().unwrap_or("");
+                served += 1;
+                let body = if line.contains("/.well-known/oauth-authorization-server/issuer") {
+                    // path-aware candidate → 404 to force the fallback
+                    b"{}".to_vec()
+                } else {
+                    serde_json::to_vec(&serde_json::json!({
+                        "issuer": "https://as.example/issuer",
+                        "authorization_endpoint": "https://as.example/issuer/authorize",
+                        "token_endpoint": "https://as.example/issuer/token"
+                    }))
+                    .unwrap()
+                };
+                let status = if line.contains("/.well-known/oauth-authorization-server/issuer") {
+                    "404 Not Found"
+                } else {
+                    "200 OK"
+                };
+                let resp = format!(
+                    "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    status,
+                    body.len()
+                );
+                let mut bytes = resp.into_bytes();
+                bytes.extend_from_slice(&body);
+                let _ = stream.write_all(&bytes).await;
+                if served >= 2 {
+                    break;
+                }
+            }
+        });
+        let md = discover_authorization_server(&format!("http://{}/issuer", addr))
+            .await
+            .unwrap();
+        assert_eq!(md.issuer.as_deref(), Some("https://as.example/issuer"));
+        assert_eq!(
+            md.authorization_endpoint.as_deref(),
+            Some("https://as.example/issuer/authorize")
+        );
+    }
+
+    #[tokio::test]
+    async fn discover_uses_path_aware_without_fallback() {
+        // Server answers ONLY the path-aware candidate (one accept); if
+        // the client wrongly tried the append form first (or fell back
+        // after a success), the second connection would hang/fail — the
+        // test would time out or error instead of passing.
+        let base = spawn_mock(|_, text| {
+            assert!(
+                text.contains("/.well-known/oauth-authorization-server/issuer"),
+                "expected path-aware request, got: {}",
+                text
+            );
+            (
+                200,
+                serde_json::json!({
+                    "issuer": "https://as.example/issuer",
+                    "authorization_endpoint": "https://as.example/issuer/authorize",
+                    "token_endpoint": "https://as.example/issuer/token"
+                }),
+            )
+        })
+        .await;
+        let md = discover_authorization_server(&format!("{}/issuer", base)).await.unwrap();
+        assert_eq!(md.issuer.as_deref(), Some("https://as.example/issuer"));
     }
 
     #[tokio::test]

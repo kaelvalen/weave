@@ -346,3 +346,39 @@ async fn live_oauth_challenge_resolution_against_puter_mcp() {
         md.authorization_endpoint
     );
 }
+
+/// Live RFC 8414 §3 path-aware discovery against GitHub's real issuer
+/// (`https://github.com/login/oauth`). GitHub serves ONLY the path-aware
+/// form (`https://github.com/.well-known/oauth-authorization-server/
+/// login/oauth`) and 404s the naive append form — the regression guard
+/// for the path-insertion bug.
+///
+/// ```sh
+/// cargo test --test mcp_integration_test -- --ignored --nocapture live_github_discovery
+/// ```
+#[tokio::test]
+#[ignore = "requires network egress"]
+async fn live_github_discovery_is_path_aware() {
+    use weave::mcp_client;
+
+    let [path_aware, append] = mcp_client::discovery_url_candidates("https://github.com/login/oauth");
+    assert_eq!(
+        path_aware,
+        "https://github.com/.well-known/oauth-authorization-server/login/oauth"
+    );
+
+    let md = mcp_client::discover_authorization_server("https://github.com/login/oauth")
+        .await
+        .expect("RFC 8414 §3 path-aware discovery against GitHub");
+    println!("github issuer: {:?}", md.issuer);
+    assert_eq!(md.issuer.as_deref(), Some("https://github.com/login/oauth"));
+    assert_eq!(
+        md.authorization_endpoint.as_deref(),
+        Some("https://github.com/login/oauth/authorize")
+    );
+    assert_eq!(
+        md.token_endpoint.as_deref(),
+        Some("https://github.com/login/oauth/access_token")
+    );
+    println!("append form 404s (expected): {}", append);
+}

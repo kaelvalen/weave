@@ -262,8 +262,9 @@ challenges 401 registers in an unauthenticated state; the Marketplace
 the challenge — `Mcp-Authorization` names the authorization server
 directly, while `WWW-Authenticate: Bearer resource_metadata="..."` points
 at an RFC 9728 protected-resource metadata document that must be fetched
-first and read via its `authorization_servers` field — then performs
-RFC 8414 discovery, opens the authorization page in the system browser
+first and read via its `authorization_servers` field — then performs RFC 8414 discovery — path-aware (§3: well-known between
+host and issuer path) with append fallback, both forms existing in the
+wild — opens the authorization page in the system browser
 with a PKCE (S256) challenge and a CIMD client identity (an HTTPS
 metadata-document URL), captures the loopback redirect, exchanges the
 code for tokens, persists them in `~/.weave/config.json`, and
