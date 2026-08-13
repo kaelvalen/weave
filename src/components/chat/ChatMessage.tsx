@@ -16,6 +16,7 @@ import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
 import { GoalCard } from '@/components/workspace/GoalCard';
 import { GoalTrace } from '@/components/execution/GoalTrace';
+import { TraceBox } from '@/components/execution/TraceBox';
 import { usePlanForGoal, useStepsForGoal, useGoalStats } from '@/components/workspace/runtimeSelectors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -555,9 +556,15 @@ export const ChatMessage = React.memo(function ChatMessage({
             </div>
           )}
 
-          {/* Fallback: metadata-driven activity for history without runtime events */}
+          {/* Fallback: metadata-driven activity for history without runtime events —
+              kept inside a collapsible trace box, matching the layout of
+              event-backed traces. */}
           {hasPluginCalls && !hasRuntimeExecution && (
-            <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
+            <div className="my-3">
+              <TraceBox goalId={message.id} defaultOpen={isStreaming}>
+                <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
+              </TraceBox>
+            </div>
           )}
         </>
       )}
