@@ -21,12 +21,22 @@ export interface IntentResult {
   params: Record<string, unknown>;
 }
 
+/** One chronologically-ordered block of an assistant turn: either a slice
+ *  of streamed text or the tool calls that ran at that point in the stream.
+ *  Lets the UI interleave text and executions in their true order. */
+export type MessageSegment =
+  | { t: 'text'; len: number }
+  | { t: 'tools'; calls: string[] };
+
 export interface MessageMetadata {
   model?: string;
   tokens_used?: number;
   plugin_calls: PluginCall[];
   intent?: IntentResult;
   isHidden?: boolean;
+  /** Stream-order segments (text slices + tool call ids). Absent for
+   *  messages built before segments existed (e.g. loaded history). */
+  segments?: MessageSegment[];
 }
 
 export interface ChatMessage {

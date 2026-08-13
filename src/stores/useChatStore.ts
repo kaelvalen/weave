@@ -359,12 +359,23 @@ export const useChatStore = create<ChatState>()(
         const targetMsg = state.messages.find((m) => m.id === messageId);
         if (targetMsg) {
           targetMsg.content += chunk;
+          // Record the text slice in the stream-order timeline so the UI
+          // can interleave text with tool calls at their true positions.
+          if (!targetMsg.metadata) targetMsg.metadata = { plugin_calls: [] };
+          const segments = targetMsg.metadata.segments ?? (targetMsg.metadata.segments = []);
+          const last = segments[segments.length - 1];
+          if (last && last.t === 'text') {
+            last.len += chunk.length;
+          } else {
+            segments.push({ t: 'text', len: chunk.length });
+          }
         } else {
           state.messages.push({
             id: messageId,
             role: 'assistant',
             content: chunk,
             timestamp: Date.now(),
+            metadata: { plugin_calls: [], segments: [{ t: 'text', len: chunk.length }] },
           });
         }
       });
@@ -419,14 +430,31 @@ export const useChatStore = create<ChatState>()(
         }
         if (!msg.metadata) msg.metadata = { plugin_calls: [] };
         const calls = msg.metadata.plugin_calls;
-        const existing = calls.find((c) => c.capability === payload.capability);
+        // Match by call_id first so repeated capabilities (e.g. several
+        // pull_request_read calls) stay separate entries instead of merging
+        // into one. Only fall back to capability matching when the event
+        // carries no call_id at all.
+        const existing = payload.call_id
+          ? calls.find((c) => c.call_id === payload.call_id)
+          : calls.find((c) => c.capability === payload.capability && !c.call_id);
         if (existing) {
-          existing.call_id = payload.call_id;
+          existing.call_id = payload.call_id ?? existing.call_id;
           existing.params = { ...existing.params, ...call.params };
           existing.status = call.status;
           if (call.result !== undefined) existing.result = call.result;
         } else {
           calls.push(call);
+        }
+        // Record the tool call in the stream-order timeline at the position
+        // it actually happened (between text slices).
+        if (payload.call_id) {
+          const segments = msg.metadata.segments ?? (msg.metadata.segments = []);
+          const last = segments[segments.length - 1];
+          if (last && last.t === 'tools' && !last.calls.includes(payload.call_id)) {
+            last.calls.push(payload.call_id);
+          } else if (!last || last.t !== 'tools') {
+            segments.push({ t: 'tools', calls: [payload.call_id] });
+          }
         }
       });
     },

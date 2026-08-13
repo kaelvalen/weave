@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Copy, Check, Brain, Edit2, RefreshCw, Loader2, FileCode } from 'lucide-react';
 import { ToolCallCard } from './ToolCallCard';
+import { ToolCallBatch } from './ToolCallBatch';
 import { AgentActivityAccordion } from './AgentActivityAccordion';
 import { ArtifactCard } from './ArtifactCard';
 import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
@@ -43,11 +44,18 @@ interface ChatMessageProps {
 }
 
 function formatTime(ts: number) {
-  // ChatMessage timestamps are UNIX seconds; Date expects milliseconds.
-  return new Date(ts * 1000).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Same cleaning as `cleanedMarkdown`, applied to one interleaved text slice. */
+function cleanSlice(text: string): string {
+  return text
+    .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
+    .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
+    .replace(/<\/?(?:call|think|thought)[^>]*$/gi, '')
+    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+    .replace(/\\\((.*?)\)/g, '$$$1$$');
 }
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
@@ -296,6 +304,50 @@ export const ChatMessage = React.memo(function ChatMessage({
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
   const intent = message.metadata?.intent;
 
+  // Stream-order interleave: text slices and tool-call batches rendered at
+  // the positions they actually occurred. Absent for history loaded before
+  // segments existed — those fall back to the grouped layout below.
+  const segments = message.metadata?.segments;
+  const hasSegments = !!segments && segments.length > 0;
+
+  const renderInterleaved = () => {
+    if (!segments) return null;
+    let offset = 0;
+    return segments.map((seg, i) => {
+      if (seg.t === 'text') {
+        const slice = message.content.slice(offset, offset + seg.len);
+        offset += seg.len;
+        if (!slice.trim()) return null;
+        return (
+          <div
+            key={i}
+            className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans"
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={{ code: CodeBlock }}
+            >
+              {cleanSlice(slice)}
+            </ReactMarkdown>
+          </div>
+        );
+      }
+      const calls = seg.calls
+        .map((id) => message.metadata!.plugin_calls.find((c) => c.call_id === id))
+        .filter((c): c is PluginCall => Boolean(c));
+      if (calls.length === 0) return null;
+      return (
+        <ToolCallBatch
+          key={i}
+          calls={calls}
+          messageId={message.id}
+          live={isStreaming}
+        />
+      );
+    });
+  };
+
   // Detect raw OpenRouter tool return messages injected by backend
   const isFakeToolUser =
     message.role === 'user' &&
@@ -482,21 +534,32 @@ export const ChatMessage = React.memo(function ChatMessage({
         </div>
       )}
 
-      {/* Execution section — live plan + step timeline sourced from runtime events.
-          Mutually exclusive with the metadata accordion below: the trace box
-          only renders when runtime events exist for this goal, otherwise the
-          empty "No execution steps yet" box appeared next to the accordion
-          (events are in-memory, so after a restart or before the first event
-          arrives they are absent and the box was pure noise). */}
-      {hasRuntimeExecution && (
-        <div className="my-3">
-          <GoalTrace goalId={message.id} defaultOpen={isStreaming} />
+      {/* Stream-order interleave: text and tool calls rendered where they
+          actually happened, each batch a compact click-to-expand row. */}
+      {hasSegments ? (
+        <div className="mt-2 space-y-3">
+          {renderInterleaved()}
+          {isStreaming && <span className="streaming-cursor" />}
         </div>
-      )}
+      ) : (
+        <>
+          {/* Execution section — live plan + step timeline sourced from runtime events.
+              Mutually exclusive with the metadata accordion below: the trace box
+              only renders when runtime events exist for this goal, otherwise the
+              empty "No execution steps yet" box appeared next to the accordion
+              (events are in-memory, so after a restart or before the first event
+              arrives they are absent and the box was pure noise). */}
+          {hasRuntimeExecution && (
+            <div className="my-3">
+              <GoalTrace goalId={message.id} defaultOpen={isStreaming} />
+            </div>
+          )}
 
-      {/* Fallback: metadata-driven activity for history without runtime events */}
-      {hasPluginCalls && !hasRuntimeExecution && (
-        <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
+          {/* Fallback: metadata-driven activity for history without runtime events */}
+          {hasPluginCalls && !hasRuntimeExecution && (
+            <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
+          )}
+        </>
       )}
 
       {/* Incomplete Tool Call Warning — only after streaming finishes, since while
@@ -564,8 +627,9 @@ export const ChatMessage = React.memo(function ChatMessage({
         );
       })()}
 
-      {/* Output section — main assistant response */}
-      {(hasOutputContent || showsCompletedNotice) && (
+      {/* Output section — main assistant response. Skipped for segment
+          messages: their text is already rendered inline between batches. */}
+      {!hasSegments && (hasOutputContent || showsCompletedNotice) && (
         <div className="mt-2 text-sm text-foreground leading-relaxed break-words w-full font-sans">
           {imagesBlock}
           {showsExecutingPlaceholder ? (

@@ -98,3 +98,72 @@ describe('handleToolCallEvent (backend-driven approval flow)', () => {
     expect(messages[0].metadata!.plugin_calls[0].call_id).toBe('call_1');
   });
 });
+
+describe('stream-order segments (text/tool interleave)', () => {
+  beforeEach(() => {
+    useChatStore.setState({ messages: [], conversationId: 'test' });
+  });
+
+  it('tracks text slices and tool calls in chronological order', () => {
+    const store = useChatStore.getState();
+    store.appendChunk('Checking the repo…', 'assistant-1');
+    store.handleToolCallEvent({
+      call_id: 'call_1',
+      message_id: 'assistant-1',
+      plugin_id: 'com.weave.mcp.github',
+      capability: 'list_branches',
+      params: { owner: 'kaelvalen' },
+      status: 'success',
+      result: { ok: true },
+    });
+    store.appendChunk('Done.', 'assistant-1');
+
+    const msg = useChatStore.getState().messages[0];
+    expect(msg.metadata?.segments).toEqual([
+      { t: 'text', len: 'Checking the repo…'.length },
+      { t: 'tools', calls: ['call_1'] },
+      { t: 'text', len: 'Done.'.length },
+    ]);
+    // Content offsets line up with the segment lens.
+    expect(msg.content.slice(0, 'Checking the repo…'.length)).toBe('Checking the repo…');
+    expect(msg.content.slice('Checking the repo…'.length)).toBe('Done.');
+  });
+
+  it('keeps repeated capabilities as separate calls keyed by call_id', () => {
+    const store = useChatStore.getState();
+    store.handleToolCallEvent({
+      call_id: 'call_a',
+      message_id: 'assistant-1',
+      plugin_id: 'com.weave.mcp.github',
+      capability: 'pull_request_read',
+      params: { owner: 'kaelvalen', repo: 'weave' },
+      status: 'success',
+    });
+    store.handleToolCallEvent({
+      call_id: 'call_b',
+      message_id: 'assistant-1',
+      plugin_id: 'com.weave.mcp.github',
+      capability: 'pull_request_read',
+      params: { owner: 'kaelvalen', repo: 'weave' },
+      status: 'error',
+      result: { error: 'nope' },
+    });
+
+    const msg = useChatStore.getState().messages[0];
+    expect(msg.metadata!.plugin_calls).toHaveLength(2);
+    expect(msg.metadata!.plugin_calls[0].call_id).toBe('call_a');
+    expect(msg.metadata!.plugin_calls[1].call_id).toBe('call_b');
+    expect(msg.metadata!.plugin_calls[1].status).toBe('error');
+    expect(msg.metadata!.segments).toEqual([
+      { t: 'tools', calls: ['call_a', 'call_b'] },
+    ]);
+  });
+
+  it('coalesces consecutive text chunks into one segment', () => {
+    const store = useChatStore.getState();
+    store.appendChunk('Hel', 'assistant-1');
+    store.appendChunk('lo', 'assistant-1');
+    const msg = useChatStore.getState().messages[0];
+    expect(msg.metadata!.segments).toEqual([{ t: 'text', len: 5 }]);
+  });
+});
