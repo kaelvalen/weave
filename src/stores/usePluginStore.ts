@@ -40,6 +40,8 @@ interface PluginState {
   installFromGithubRelease: (repoUrl: string, tag?: string, asset?: string) => Promise<void>;
   fetchMcpServers: () => Promise<void>;
   addMcpServer: (url: string, name: string) => Promise<boolean>;
+  oauthAuthorize: (serverId: string) => Promise<unknown>;
+  oauthRefresh: (serverId: string) => Promise<void>;
   removeMcpServer: (serverId: string) => Promise<void>;
 }
 
@@ -340,6 +342,45 @@ export const usePluginStore = create<PluginState>()(
             state.error = `Failed to add MCP server: ${msg}`;
           });
           return false;
+        }
+      },
+
+      // OAuth 2.1 / CIMD (docs/phase8-mcp-spec.md Part 2 §4–§5): opens the
+      // authorization page in the system browser; the backend's loopback
+      // listener captures the redirect and exchanges the code for tokens,
+      // so this command resolves only after the round trip (or timeout).
+      oauthAuthorize: async (serverId: string) => {
+        set((state) => {
+          state.isLoading = true;
+          state.error = null;
+        });
+        try {
+          const result = await invoke('mcp_oauth_authorize', { serverId });
+          await get().fetchMcpServers();
+          set((state) => {
+            state.isLoading = false;
+          });
+          toast.success(`Authorized MCP server "${serverId}"`);
+          return result;
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`OAuth authorization failed: ${msg}`);
+          set((state) => {
+            state.isLoading = false;
+            state.error = `OAuth authorization failed: ${msg}`;
+          });
+          throw err;
+        }
+      },
+
+      oauthRefresh: async (serverId: string) => {
+        try {
+          await invoke('mcp_oauth_refresh', { serverId });
+          await get().fetchMcpServers();
+          toast.success('Access token refreshed');
+        } catch (err) {
+          const msg = extractError(err);
+          toast.error(`Token refresh failed: ${msg}`);
         }
       },
 

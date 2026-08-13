@@ -269,3 +269,21 @@ own machine (a `tools`-bearing request to their local endpoint, checking for
 `tool_calls` in the response) before relying on `use_native_tools: true` as
 a verified default in a production setting, and ideally with the transcript
 committed this time so the claim is checkable.
+
+## 8. Phase 8.0 addendum (2026-08-13) — probe verified with real transcript
+
+Gap from §7 closed on the user's own machine. Ollama 0.32.7 was installed
+(`nix profile install nixpkgs#ollama`), `qwen3.5:9b` (Qwen3.5-9B-Q4_K_M)
+pulled, and a `tools`-bearing `/api/chat` request was run twice —
+`stream:false` and `stream:true`. Both returned native
+`message.tool_calls` with `function.name == "get_weather"` and structured
+JSON arguments (`{"city":"Istanbul"}`), `done_reason: "stop"`.
+
+Reproducible artifacts committed: `docs/probes/ollama-native-tools-2026-08-13/`
+(`request.json`, `response-nonstream.json`, `response-stream.ndjson`,
+methodology README). The 2026-08-11 claim for the Ollama/Qwen3.5 leg is now
+independently reproduced with committed evidence; `use_native_tools: true`
+default stands. The `llama-server` leg and the qwen2.5-coder-7b negative
+case remain as originally asserted (2026-08-11), without a committed
+transcript — re-running those requires the GGUF files and is out of scope
+for this probe's closure.

@@ -59,6 +59,10 @@ The local probe performed on 2026-08-11 produced these results:
   `message.tool_calls` with the expected `probe-ok` argument. The temporary
   probe model was removed after the test.
 
+The Ollama/Qwen3.5 leg was independently re-run and verified on 2026-08-13
+against a real local server (Ollama 0.32.7, `qwen3.5:9b`) with the
+transcript committed: see `docs/probes/ollama-native-tools-2026-08-13/`.
+
 ## Architecture
 
 ```text
@@ -240,6 +244,32 @@ only**. A server that responds with `resultType: "input_required"`
 (MRTR mid-call elicitation, e.g. asking the user "Delete 3 files?" before
 finishing) surfaces as a clear tool-execution error, not a hang — Weave
 does not yet drive the follow-up round trip that would answer it.
+
+**Live-server verified (2026-08-13):** a full `server/discover` →
+`tools/list` → `tools/call` round trip was run through Weave's own client
+against GitHub's official public MCP server (`api.githubcopilot.com/mcp/`),
+which is protocol-2026-07-28. The run surfaced three real-world
+requirements the mock tests couldn't: `_meta` protocol-negotiation fields
+on every request, SSE-framed responses even for single round trips
+(`event: message` / `data:`), and server identity under
+`_meta.io.modelcontextprotocol/serverInfo` — all three now handled by the
+client. Evidence and re-run instructions:
+`docs/probes/mcp-live-github-2026-08-13/`.
+
+**OAuth 2.1 / CIMD authorization (implemented 2026-08-13):** a server that
+challenges 401 registers in an unauthenticated state; the Marketplace
+"Add MCP Server" dialog then offers an **Authorize** step. Weave performs
+RFC 8414 authorization-server discovery from the 401 challenge
+(`Mcp-Authorization` / `WWW-Authenticate: Bearer resource_metadata=...`),
+opens the authorization page in the system browser with a PKCE (S256)
+challenge and a CIMD client identity (an HTTPS metadata-document URL),
+captures the loopback redirect, exchanges the code for tokens, persists
+them in `~/.weave/config.json`, and re-registers the server's tools.
+Token refresh (`mcp_oauth_refresh`) is available; automatic refresh-on-401
+inside a tool call is not yet wired. Note: Weave does not yet host its
+CIMD metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and
+see `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite
+for servers that strictly validate CIMD.
 
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:

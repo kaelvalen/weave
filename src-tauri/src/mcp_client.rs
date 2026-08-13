@@ -70,11 +70,28 @@ enum CallOutcome {
 }
 
 fn rpc_request(id: &str, method: &str, params: Value) -> Value {
+    let mut merged = params;
+    if let Some(obj) = merged.as_object_mut() {
+        obj.insert(
+            "_meta".to_string(),
+            serde_json::json!({
+                "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }),
+        );
+    } else {
+        merged = serde_json::json!({
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }
+        });
+    }
     serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
-        "params": params,
+        "params": merged,
     })
 }
 
@@ -96,6 +113,7 @@ async fn post(
     let mut req = client
         .post(base_url)
         .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
         .header("MCP-Protocol-Version", MCP_PROTOCOL_VERSION)
         .header("Mcp-Method", method);
     if let Some(name) = tool_name {
@@ -112,10 +130,53 @@ async fn post(
         .map_err(|e| WeaveError::Http(format!("MCP request to {} failed: {}", base_url, e)))?;
 
     let status = response.status();
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|e| WeaveError::Http(format!("MCP response from {} was not JSON: {}", base_url, e)))?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        // OAuth-requiring servers signal the authorization-server URL on
+        // 401 via `Mcp-Authorization` or `WWW-Authenticate: Bearer
+        // resource_metadata="..."` — turn it into a typed error the
+        // registration flow can act on instead of a raw HTTP failure.
+        if let Some(auth_url) = auth_challenge_from_headers(response.headers()) {
+            return Err(WeaveError::AuthRequired(auth_url));
+        }
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    // Live 2026-07-28 servers (verified against GitHub's public MCP endpoint,
+    // 2026-08-13) frame every response as SSE even for a single round trip:
+    // `event: message` / `data: {jsonrpc...}`. The last parseable data frame
+    // is the terminal JSON-RPC message.
+    let payload: Value = if content_type.contains("text/event-stream") {
+        let text = response
+            .text()
+            .await
+            .map_err(|e| WeaveError::Http(format!("MCP SSE response from {} unreadable: {}", base_url, e)))?;
+        let mut last: Option<Value> = None;
+        for line in text.lines() {
+            if let Some(data) = line.trim_start().strip_prefix("data:") {
+                if let Ok(v) = serde_json::from_str(data.trim()) {
+                    last = Some(v);
+                }
+            }
+        }
+        last.ok_or_else(|| {
+            WeaveError::Http(format!(
+                "MCP SSE response from {} had no parseable data frame: {}",
+                base_url,
+                text.chars().take(200).collect::<String>()
+            ))
+        })?
+    } else {
+        response
+            .json()
+            .await
+            .map_err(|e| WeaveError::Http(format!("MCP response from {} was not JSON: {}", base_url, e)))?
+    };
 
     if !status.is_success() {
         return Err(WeaveError::Http(format!(
@@ -135,6 +196,36 @@ async fn post(
         .get("result")
         .cloned()
         .ok_or_else(|| WeaveError::Http(format!("MCP response from {} had no result field", base_url)))
+}
+
+/// Extracts the OAuth authorization-server URL from a 401 response's
+/// headers. Real 2026-07-28 servers use either a direct
+/// `Mcp-Authorization: <url>` header or a `WWW-Authenticate` challenge
+/// carrying `resource_metadata="<url>"` (the 2025-06-18-era shape).
+fn auth_challenge_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    if let Some(v) = headers.get("mcp-authorization") {
+        if let Ok(s) = v.to_str() {
+            let s = s.trim();
+            if s.starts_with("http://") || s.starts_with("https://") {
+                return Some(s.to_string());
+            }
+        }
+    }
+    if let Some(v) = headers.get(reqwest::header::WWW_AUTHENTICATE) {
+        if let Ok(s) = v.to_str() {
+            for marker in ["resource_metadata=", "authorization_uri="] {
+                if let Some(idx) = s.find(marker) {
+                    let rest = &s[idx + marker.len()..];
+                    if let Some(quoted) = rest.strip_prefix('"') {
+                        if let Some(end) = quoted.find('"') {
+                            return Some(quoted[..end].to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// `server/discover` — spec changelog "Major changes" #3: servers MUST
@@ -167,12 +258,27 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
         )));
     }
 
+    // Live servers (GitHub MCP, 2026-08-13) advertise identity inside
+    // `_meta.io.modelcontextprotocol/serverInfo` rather than a top-level
+    // `name`; read both, preferring `_meta` when present.
+    let name = result
+        .get("_meta")
+        .and_then(|m| m.get("io.modelcontextprotocol/serverInfo"))
+        .and_then(|i| i.get("name"))
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            result
+                .get("_meta")
+                .and_then(|m| m.get("io.modelcontextprotocol/serverInfo"))
+                .and_then(|i| i.get("title"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| result.get("name").and_then(|v| v.as_str()))
+        .unwrap_or_default()
+        .to_string();
+
     Ok(ServerInfo {
-        name: result
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
+        name,
         protocol_versions,
     })
 }
@@ -289,6 +395,215 @@ pub fn call_tool_sync(
     })
     .join()
     .map_err(|_| WeaveError::PluginError("MCP tool-call thread panicked".to_string()))?
+}
+
+// ── OAuth 2.1 / CIMD authorization (Phase 8.2 Part 2 §4–§5) ─────────────
+
+/// Loopback redirect URI the OAuth flow's local listener binds.
+/// `mcp_oauth_authorize` in commands/mcp.rs starts this listener before
+/// opening the browser, so the redirect always arrives.
+pub const OAUTH_REDIRECT_URI: &str = "http://127.0.0.1:34987/callback";
+
+/// Default CIMD client identity: `client_id` as an HTTPS URL pointing at a
+/// static metadata document, per draft-ietf-oauth-client-id-metadata-document.
+/// Weave does not yet host this document — per phase8-mcp-spec.md Part 2 §5
+/// it is a documented manual prerequisite for servers that strictly validate
+/// CIMD. Override with `WEAVE_CIMD_CLIENT_ID` when hosting your own.
+pub fn cimd_client_id() -> String {
+    std::env::var("WEAVE_CIMD_CLIENT_ID")
+        .unwrap_or_else(|_| "https://weave.app/mcp/client-metadata.json".to_string())
+}
+
+/// PKCE (RFC 7636) pair, S256 challenge.
+#[derive(Debug, Clone)]
+pub struct PkcePair {
+    pub code_verifier: String,
+    pub code_challenge: String,
+}
+
+fn base64url_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(TABLE[(n >> 18) as usize & 63] as char);
+        out.push(TABLE[(n >> 12) as usize & 63] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[(n >> 6) as usize & 63] as char);
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[n as usize & 63] as char);
+        }
+    }
+    out
+}
+
+/// New PKCE pair: 64-char alphanumeric verifier (within RFC 7636's
+/// 43–128 range), S256 code challenge derived from it.
+pub fn new_pkce() -> PkcePair {
+    let mut verifier = String::with_capacity(64);
+    verifier.push_str(&uuid::Uuid::new_v4().simple().to_string());
+    verifier.push_str(&uuid::Uuid::new_v4().simple().to_string());
+    let code_challenge = {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(verifier.as_bytes());
+        base64url_encode(&hasher.finalize())
+    };
+    PkcePair {
+        code_verifier: verifier,
+        code_challenge,
+    }
+}
+
+/// RFC 8414 authorization-server metadata (a subset — only the fields the
+/// code flow needs).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AuthorizationServerMetadata {
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub authorization_endpoint: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+    #[serde(default)]
+    pub scopes_supported: Vec<String>,
+}
+
+/// RFC 8414 discovery: `GET {base}/.well-known/oauth-authorization-server`.
+/// `base` is the authorization-server URL from the 401 challenge (or, when
+/// the server used a `resource_metadata` URL, that metadata URL).
+pub async fn discover_authorization_server(
+    base_url: &str,
+) -> Result<AuthorizationServerMetadata, WeaveError> {
+    let client = build_client()?;
+    let discovery_url = format!(
+        "{}/.well-known/oauth-authorization-server",
+        base_url.trim_end_matches('/')
+    );
+    let response = client
+        .get(&discovery_url)
+        .send()
+        .await
+        .map_err(|e| WeaveError::Http(format!("authorization-server discovery request to {} failed: {}", discovery_url, e)))?;
+    if !response.status().is_success() {
+        return Err(WeaveError::Http(format!(
+            "authorization-server discovery at {} returned {}",
+            discovery_url,
+            response.status()
+        )));
+    }
+    let md: AuthorizationServerMetadata = response
+        .json()
+        .await
+        .map_err(|e| WeaveError::Http(format!("authorization-server discovery at {} was not JSON: {}", discovery_url, e)))?;
+    if md.authorization_endpoint.is_none() || md.token_endpoint.is_none() {
+        return Err(WeaveError::Http(format!(
+            "authorization-server discovery at {} was incomplete (no authorization/token endpoint)",
+            discovery_url
+        )));
+    }
+    Ok(md)
+}
+
+/// Builds the OAuth 2.1 authorization-code URL: response_type=code,
+/// PKCE S256 challenge, CIMD client_id, loopback redirect.
+pub fn authorization_url(
+    md: &AuthorizationServerMetadata,
+    state: &str,
+    pkce: &PkcePair,
+) -> Result<String, WeaveError> {
+    let endpoint = md.authorization_endpoint.as_deref().ok_or_else(|| {
+        WeaveError::Http("authorization endpoint not discovered".to_string())
+    })?;
+    let mut url = reqwest::Url::parse(endpoint)
+        .map_err(|e| WeaveError::Http(format!("invalid authorization endpoint: {}", e)))?;
+    url.query_pairs_mut()
+        .append_pair("response_type", "code")
+        .append_pair("client_id", &cimd_client_id())
+        .append_pair("redirect_uri", OAUTH_REDIRECT_URI)
+        .append_pair("scope", "mcp")
+        .append_pair("state", state)
+        .append_pair("code_challenge", &pkce.code_challenge)
+        .append_pair("code_challenge_method", "S256");
+    Ok(url.to_string())
+}
+
+/// Result of a successful token-endpoint exchange.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenSet {
+    pub access_token: String,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default)]
+    pub expires_in: Option<u64>,
+    #[serde(default)]
+    pub scope: Option<String>,
+}
+
+async fn token_request(
+    md: &AuthorizationServerMetadata,
+    form: &[(&str, &str)],
+) -> Result<TokenSet, WeaveError> {
+    let endpoint = md.token_endpoint.as_deref().ok_or_else(|| {
+        WeaveError::Http("token endpoint not discovered".to_string())
+    })?;
+    let client = build_client()?;
+    let response = client
+        .post(endpoint)
+        .form(form)
+        .send()
+        .await
+        .map_err(|e| WeaveError::Http(format!("token request to {} failed: {}", endpoint, e)))?;
+    let status = response.status();
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|e| WeaveError::Http(format!("token response from {} was not JSON: {}", endpoint, e)))?;
+    if !status.is_success() {
+        return Err(WeaveError::Http(format!(
+            "token endpoint {} returned {}: {}",
+            endpoint, status, payload
+        )));
+    }
+    serde_json::from_value(payload)
+        .map_err(|e| WeaveError::Http(format!("token response from {} was unexpected: {}", endpoint, e)))
+}
+
+/// Authorization-code grant with PKCE (OAuth 2.1 public-client shape).
+pub async fn exchange_code(
+    md: &AuthorizationServerMetadata,
+    code: &str,
+    pkce: &PkcePair,
+) -> Result<TokenSet, WeaveError> {
+    token_request(
+        md,
+        &[
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", OAUTH_REDIRECT_URI),
+            ("client_id", &cimd_client_id()),
+            ("code_verifier", &pkce.code_verifier),
+        ],
+    )
+    .await
+}
+
+/// Refresh-token grant.
+pub async fn refresh_access_token(
+    md: &AuthorizationServerMetadata,
+    refresh_token: &str,
+) -> Result<TokenSet, WeaveError> {
+    token_request(
+        md,
+        &[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+            ("client_id", &cimd_client_id()),
+        ],
+    )
+    .await
 }
 
 /// Capability id an MCP tool is registered under: namespaced by server id
@@ -480,5 +795,210 @@ mod tests {
         );
         let result = executor.execute("mcp.other-server.get_forecast", serde_json::json!({}), &ctx);
         assert!(matches!(result, Err(WeaveError::CapabilityNotFound(_))));
+    }
+
+    // ── OAuth 2.1 / CIMD (Phase 8.2 §4–§5) ────────────────────────────────
+
+    #[test]
+    fn pkce_pair_is_rfc7636_shaped() {
+        let pkce = new_pkce();
+        assert_eq!(pkce.code_verifier.len(), 64);
+        assert!(pkce
+            .code_verifier
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric()));
+        // S256 challenge must be base64url(SHA-256(verifier)), unpadded → 43 chars.
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(pkce.code_verifier.as_bytes());
+        let expected = base64url_encode(&hasher.finalize());
+        assert_eq!(pkce.code_challenge, expected);
+        assert_eq!(pkce.code_challenge.len(), 43);
+    }
+
+    #[test]
+    fn authorization_url_carries_pkce_cimd_and_redirect() {
+        let md = AuthorizationServerMetadata {
+            issuer: Some("https://as.example".into()),
+            authorization_endpoint: Some("https://as.example/authorize".into()),
+            token_endpoint: Some("https://as.example/token".into()),
+            scopes_supported: vec![],
+        };
+        let pkce = new_pkce();
+        let url = authorization_url(&md, "state-42", &pkce).unwrap();
+        let parsed = reqwest::Url::parse(&url).unwrap();
+        assert_eq!(parsed.host_str(), Some("as.example"));
+        let params: std::collections::HashMap<String, String> = parsed
+            .query_pairs()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        assert_eq!(params.get("response_type").map(String::as_str), Some("code"));
+        assert_eq!(params.get("client_id").map(String::as_str), Some(cimd_client_id().as_str()));
+        assert_eq!(params.get("redirect_uri").map(String::as_str), Some(OAUTH_REDIRECT_URI));
+        assert_eq!(params.get("scope").map(String::as_str), Some("mcp"));
+        assert_eq!(params.get("state").map(String::as_str), Some("state-42"));
+        assert_eq!(params.get("code_challenge_method").map(String::as_str), Some("S256"));
+        assert_eq!(params.get("code_challenge").map(String::as_str), Some(pkce.code_challenge.as_str()));
+    }
+
+    #[test]
+    fn auth_challenge_parses_mcp_authorization_header() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("mcp-authorization", "https://auth.example/oauth".parse().unwrap());
+        assert_eq!(
+            auth_challenge_from_headers(&headers).as_deref(),
+            Some("https://auth.example/oauth")
+        );
+    }
+
+    #[test]
+    fn auth_challenge_parses_www_authenticate_resource_metadata() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::WWW_AUTHENTICATE,
+            "Bearer resource_metadata=\"https://auth.example/meta\", error=\"insufficient_scope\""
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(
+            auth_challenge_from_headers(&headers).as_deref(),
+            Some("https://auth.example/meta")
+        );
+    }
+
+    #[test]
+    fn auth_challenge_absent_without_oauth_headers() {
+        let headers = reqwest::header::HeaderMap::new();
+        assert_eq!(auth_challenge_from_headers(&headers), None);
+    }
+
+    /// One-shot mock HTTP server for the RFC 8414 / token-endpoint tests.
+    /// Returns the base URL; the spawned task handles exactly one request.
+    async fn spawn_mock(
+        mut respond: impl Fn(reqwest::Method, &str) -> (u16, Value) + Send + 'static,
+    ) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut byte = [0u8; 1];
+            loop {
+                if stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                    break;
+                }
+                buf.push(byte[0]);
+                if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let content_length = text
+                .lines()
+                .find_map(|l| {
+                    l.to_lowercase()
+                        .strip_prefix("content-length:")
+                        .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                })
+                .unwrap_or(0);
+            let mut body = vec![0u8; content_length];
+            if content_length > 0 {
+                let _ = stream.read_exact(&mut body).await;
+            }
+            let full = format!("{}{}", text, String::from_utf8_lossy(&body));
+            let line = text.lines().next().unwrap_or("");
+            let method = if line.starts_with("GET ") {
+                reqwest::Method::GET
+            } else {
+                reqwest::Method::POST
+            };
+            let (status, body) = respond(method, &full);
+            let status_text = if status == 200 { "200 OK" } else { "401 Unauthorized" };
+            let bytes = serde_json::to_vec(&body).unwrap();
+            let mut resp = format!(
+                "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                status_text,
+                bytes.len()
+            )
+            .into_bytes();
+            resp.extend_from_slice(&bytes);
+            let _ = stream.write_all(&resp).await;
+        });
+        format!("http://{}", addr)
+    }
+
+    #[tokio::test]
+    async fn discover_authorization_server_parses_rfc8414_metadata() {
+        let base = spawn_mock(|method, text| {
+            assert_eq!(method, reqwest::Method::GET);
+            assert!(text.contains("/.well-known/oauth-authorization-server"));
+            (
+                200,
+                serde_json::json!({
+                    "issuer": "https://as.example",
+                    "authorization_endpoint": "https://as.example/authorize",
+                    "token_endpoint": "https://as.example/token",
+                    "scopes_supported": ["mcp"]
+                }),
+            )
+        })
+        .await;
+        let md = discover_authorization_server(&base).await.unwrap();
+        assert_eq!(md.issuer.as_deref(), Some("https://as.example"));
+        assert_eq!(md.authorization_endpoint.as_deref(), Some("https://as.example/authorize"));
+        assert_eq!(md.token_endpoint.as_deref(), Some("https://as.example/token"));
+    }
+
+    #[tokio::test]
+    async fn discover_authorization_server_rejects_incomplete_metadata() {
+        let base = spawn_mock(|_, _| (200, serde_json::json!({"issuer": "https://as.example"}))).await;
+        let err = discover_authorization_server(&base).await.unwrap_err();
+        assert!(err.to_string().contains("incomplete"));
+    }
+
+    #[tokio::test]
+    async fn exchange_code_posts_pkce_form_and_parses_tokens() {
+        let pkce = new_pkce();
+        let verifier = pkce.code_verifier.clone();
+        let base = spawn_mock(move |method, text| {
+            assert_eq!(method, reqwest::Method::POST);
+            assert!(text.contains("grant_type=authorization_code"), "got: {}", text);
+            assert!(text.contains("code=abc123"));
+            assert!(text.contains(&format!("code_verifier={}", verifier)));
+            assert!(text.contains("client_id="));
+            (200, serde_json::json!({"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600, "scope": "mcp"}))
+        })
+        .await;
+        let md = AuthorizationServerMetadata {
+            issuer: Some("https://as.example".into()),
+            authorization_endpoint: Some("https://as.example/authorize".into()),
+            token_endpoint: Some(format!("{}/token", base)),
+            scopes_supported: vec![],
+        };
+        let tokens = exchange_code(&md, "abc123", &pkce).await.unwrap();
+        assert_eq!(tokens.access_token, "at-1");
+        assert_eq!(tokens.refresh_token.as_deref(), Some("rt-1"));
+        assert_eq!(tokens.expires_in, Some(3600));
+    }
+
+    #[tokio::test]
+    async fn refresh_access_token_posts_refresh_grant() {
+        let base = spawn_mock(|method, text| {
+            assert_eq!(method, reqwest::Method::POST);
+            assert!(text.contains("grant_type=refresh_token"));
+            assert!(text.contains("refresh_token=rt-old"));
+            (200, serde_json::json!({"access_token": "at-2", "expires_in": 3600}))
+        })
+        .await;
+        let md = AuthorizationServerMetadata {
+            issuer: Some("https://as.example".into()),
+            authorization_endpoint: Some("https://as.example/authorize".into()),
+            token_endpoint: Some(format!("{}/token", base)),
+            scopes_supported: vec![],
+        };
+        let tokens = refresh_access_token(&md, "rt-old").await.unwrap();
+        assert_eq!(tokens.access_token, "at-2");
+        assert!(tokens.refresh_token.is_none());
     }
 }
