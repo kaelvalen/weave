@@ -1,5 +1,6 @@
 import { Cpu, Download, Activity, Trash2, StopCircle, HardDrive, Play, Square, Search, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -327,43 +328,31 @@ export function RuntimeView() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Activity className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Runtime Process Monitor
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                {models.length} local models
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Live process telemetry, inference performance & resource allocation</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
-            <Input
-              placeholder="Paste HuggingFace .gguf URL..."
-              value={downloadUrl}
-              onChange={(e) => setDownloadUrl(e.target.value)}
-              className="h-8 bg-surface-2 border-border/40 text-xs focus-visible:ring-1 focus-visible:ring-brand"
-            />
-          </div>
-          <Button
-            size="sm"
-            className="gap-1.5 h-8 text-xs bg-brand text-brand-foreground hover:bg-brand/90"
-            onClick={handleDownload}
-            disabled={!!activeDownload}
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download GGUF
-          </Button>
-        </div>
-      </header>
+      <ViewHeader
+        title="Models"
+        count={`${models.length} local models`}
+        actions={
+          <>
+            <div className="relative w-64">
+              <Input
+                placeholder="Paste HuggingFace .gguf URL..."
+                value={downloadUrl}
+                onChange={(e) => setDownloadUrl(e.target.value)}
+                className="h-8 bg-surface-2 border-border/40 text-xs focus-visible:ring-1 focus-visible:ring-brand"
+              />
+            </div>
+            <Button
+              size="sm"
+              className="gap-1.5 h-8 text-xs bg-brand text-brand-foreground hover:bg-brand/90"
+              onClick={handleDownload}
+              disabled={!!activeDownload}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download GGUF
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 max-w-6xl mx-auto w-full space-y-4">
 

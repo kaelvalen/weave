@@ -6,6 +6,7 @@ import { AddMcpServerDialog } from './AddMcpServerDialog';
 import type { Plugin } from '@/types/plugin';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import {
   Search,
   RefreshCw,
@@ -113,64 +114,52 @@ export function PluginMarket() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Puzzle className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Plugin Marketplace
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                {plugins.length} loaded
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Extend AI OS capabilities and integrations</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search plugins & capabilities..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 bg-surface-2 border-border/40 h-8 text-xs focus-visible:ring-1 focus-visible:ring-brand"
-            />
-          </div>
-          <Button
-            onClick={() => setShowGithub((s) => !s)}
-            size="sm"
-            variant={showGithub ? 'default' : 'outline'}
-            className="gap-1.5 h-8 text-xs border-border/40"
-          >
-            <Github className="w-3.5 h-3.5" />
-            {showGithub ? 'Marketplace' : 'GitHub'}
-          </Button>
-          <AddMcpServerDialog />
-          <Button
-            onClick={handleInstall}
-            disabled={installing || isLoading}
-            size="sm"
-            variant="outline"
-            className="gap-1.5 h-8 text-xs border-border/40 bg-surface-2"
-          >
-            <Download className={`w-3.5 h-3.5 ${installing ? 'animate-spin' : ''}`} />
-            Install .wpk
-          </Button>
-          <Button
-            onClick={handleRefresh}
-            disabled={refreshing || isLoading}
-            size="sm"
-            variant="ghost"
-            className="gap-1.5 h-8 text-xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </header>
+      <ViewHeader
+        title="Plugins"
+        count={`${plugins.length} loaded`}
+        actions={
+          <>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search plugins & capabilities..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 bg-surface-2 border-border/40 h-8 text-xs focus-visible:ring-1 focus-visible:ring-brand"
+              />
+            </div>
+            <Button
+              onClick={() => setShowGithub((s) => !s)}
+              size="sm"
+              variant={showGithub ? 'default' : 'outline'}
+              className="gap-1.5 h-8 text-xs border-border/40"
+            >
+              <Github className="w-3.5 h-3.5" />
+              {showGithub ? 'Marketplace' : 'GitHub'}
+            </Button>
+            <AddMcpServerDialog />
+            <Button
+              onClick={handleInstall}
+              disabled={installing || isLoading}
+              size="sm"
+              variant="outline"
+              className="gap-1.5 h-8 text-xs border-border/40 bg-surface-2"
+            >
+              <Download className={`w-3.5 h-3.5 ${installing ? 'animate-spin' : ''}`} />
+              Install .wpk
+            </Button>
+            <Button
+              onClick={handleRefresh}
+              disabled={refreshing || isLoading}
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 h-8 text-xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 max-w-6xl mx-auto w-full">
 

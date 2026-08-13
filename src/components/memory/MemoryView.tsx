@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import { Brain, Check, Pencil, Plus, Search, Trash2, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -229,24 +230,10 @@ export function MemoryView() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Brain className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Memory Substrate
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                {filtered.length} entries
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Persistent knowledge, learned directives, and semantic context graph</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
+      <ViewHeader
+        title="Memory"
+        count={`${filtered.length} entries`}
+        actions={
           <div className="relative w-64">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
@@ -256,8 +243,8 @@ export function MemoryView() {
               className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
             />
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* ── Memory content ── */}
       <div className="flex-1 min-h-0 w-full overflow-y-auto p-6 max-w-6xl mx-auto space-y-6">

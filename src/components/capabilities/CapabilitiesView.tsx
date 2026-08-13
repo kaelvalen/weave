@@ -6,6 +6,7 @@ import type { ToolMetrics } from '@/types/runtime';
 import { requiresApproval } from '@/lib/capabilities';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import {
   Select,
   SelectContent,
@@ -111,63 +112,51 @@ export function CapabilitiesView() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Boxes className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Capabilities & Tools
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                {filtered.length} / {rows.length}
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">System tool contracts, schemas and execution reliability</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative w-56">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search capabilities..."
-              className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
-            />
-          </div>
-          <Select value={pluginFilter} onValueChange={setPluginFilter}>
-            <SelectTrigger className="w-40 h-8 text-xs font-mono bg-surface-2 border-border/40">
-              <SelectValue placeholder="All plugins" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs font-mono">
-                All plugins
-              </SelectItem>
-              {plugins.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs font-mono">
-                  {p.name}
+      <ViewHeader
+        title="Capabilities"
+        count={`${filtered.length} / ${rows.length}`}
+        actions={
+          <>
+            <div className="relative w-56">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search capabilities..."
+                className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
+              />
+            </div>
+            <Select value={pluginFilter} onValueChange={setPluginFilter}>
+              <SelectTrigger className="w-40 h-8 text-xs font-mono bg-surface-2 border-border/40">
+                <SelectValue placeholder="All plugins" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-mono">
+                  All plugins
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <button
-            type="button"
-            onClick={() => setApprovalOnly((v) => !v)}
-            className={`flex items-center gap-1.5 px-2.5 h-8 rounded border font-mono text-[11px] transition-colors ${
-              approvalOnly
-                ? 'border-destructive/50 text-destructive bg-destructive/10'
-                : 'border-border/40 text-muted-foreground hover:text-foreground bg-surface-2'
-            }`}
-            title="Show only capabilities that require approval"
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Requires approval
-          </button>
-        </div>
-      </header>
+                {plugins.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs font-mono">
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              onClick={() => setApprovalOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-2.5 h-8 rounded border font-mono text-[11px] transition-colors ${
+                approvalOnly
+                  ? 'border-destructive/50 text-destructive bg-destructive/10'
+                  : 'border-border/40 text-muted-foreground hover:text-foreground bg-surface-2'
+              }`}
+              title="Show only capabilities that require approval"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              Requires approval
+            </button>
+          </>
+        }
+      />
 
       {/* ── Capability list and detail split ── */}
       <div className="flex flex-1 min-h-0 w-full overflow-hidden">

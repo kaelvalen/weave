@@ -4,6 +4,7 @@ import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { useAppStore } from '@/stores/useAppStore';
 import type { PluginCall } from '@/types/chat';
 import { extractArtifactsFromCalls } from '@/lib/extractArtifacts';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import ReactMarkdown from 'react-markdown';
@@ -205,35 +206,7 @@ export function ArtifactsView() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Package className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Artifact Explorer
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                {items.length} items
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Synthesized products, generated code, and dynamic workspace outputs</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search artifacts..."
-              className="pl-8 h-8 text-xs font-mono bg-surface-2 border-border/40 focus-visible:ring-1 focus-visible:ring-brand"
-            />
-          </div>
-        </div>
-      </header>
+      <ViewHeader title="Artifacts" count={`${items.length} items`} />
 
       {/* ── Artifact list and preview split ── */}
       <div className="flex flex-1 min-h-0 w-full overflow-hidden">

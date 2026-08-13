@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ViewHeader } from '@/components/ui/ViewHeader';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
@@ -85,27 +86,15 @@ export function SettingsPanel() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden">
-      {/* ── Unified View Header ── */}
-      <header className="flex items-center justify-between px-6 py-4 bg-surface-1 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-surface-2 text-foreground/80">
-            <Monitor className="w-5 h-5 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-              System Settings
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Manage runtime environment, AI providers, and visual theme</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
+      <ViewHeader
+        title="Settings"
+        actions={
           <Button onClick={handleSave} size="sm" className="gap-1.5 h-8 text-xs bg-brand text-brand-foreground hover:bg-brand/90">
             <Save className="w-3.5 h-3.5" />
             Save Changes
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 max-w-5xl mx-auto w-full"> 
 
