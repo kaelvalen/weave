@@ -8,7 +8,7 @@
 //!
 //! The frontend only relays approval decisions via `chat_approve_tool_call`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -202,6 +202,27 @@ impl AgentLoop {
         let mut final_text = String::new();
         let session_id = session_id.to_string();
 
+        // Tools actually invoked earlier in this session — the context-budget
+        // trimmer keeps them ahead of never-used tools so the model can keep
+        // doing what it was doing across rounds.
+        let mut used_tools: HashSet<String> = HashSet::new();
+
+        // VRAM-bound context window (llama-swap -c, Ollama context_length):
+        // the tool catalog (MCP schemas are huge — github is ~33K tokens for
+        // 47 tools) and history must fit in it, or the request is rejected
+        // with 400 exceed_context_size_error. Cloud providers are untouched.
+        let context_budget: Option<usize> = match provider {
+            Provider::LlamaSwap => Some(crate::commands::llama_swap::context_size()),
+            Provider::Local => {
+                let ctx = self.config.read().ai.local.context_length;
+                Some(if ctx == 0 { 8192 } else { ctx as usize })
+            }
+            _ => None,
+        };
+        if let Some(budget) = context_budget {
+            trim_history_to_budget(&mut native, budget);
+        }
+
         for _round in 0..MAX_ROUNDS {
             if self.abort.load(Ordering::SeqCst) {
                 break;
@@ -259,6 +280,12 @@ impl AgentLoop {
                 if !use_native {
                     tools.clear();
                 }
+            }
+            // Context budget: order tools (session-used first, then smallest
+            // schema first — keeps the most coverage per token) and drop the
+            // tail that would overflow the context window.
+            if let Some(budget) = context_budget {
+                trim_tools_to_budget(&mut tools, budget, &used_tools);
             }
             let tools_opt = if tools.is_empty() { None } else { Some(tools) };
 
@@ -341,6 +368,9 @@ impl AgentLoop {
             }
 
             // ---- Resolve tool calls against the plugin registry ----
+            for p in &pending {
+                used_tools.insert(p.name.clone());
+            }
             let calls: Vec<AgentToolCall> = pending
                 .into_iter()
                 .map(|p| {
@@ -710,5 +740,182 @@ fn tool_result_message(provider: &Provider, call_id: &str, outcome: &CallOutcome
             "tool_call_id": call_id,
             "content": outcome_content(outcome),
         }),
+    }
+}
+
+// ---- Context-budget trimming (VRAM-bound providers) ----
+//
+// llama-swap models run behind a fixed `-c NNNN` (VRAM ceiling on the
+// user's 8GB card); Ollama's context_length is config-owned. The MCP tool
+// catalog alone can exceed it (github: 47 tools ≈ 33K tokens), so the
+// request is rejected with 400 exceed_context_size_error before the model
+// ever sees it. History trimming alone cannot fix that — the tool catalog
+// must be budgeted too.
+
+/// Conservative token estimate (bytes/4; JSON is ASCII-heavy). Undershoots
+/// for CJK-heavy content, but the 10% headroom below absorbs that.
+fn estimate_json_tokens(value: &Value) -> usize {
+    serde_json::to_string(value).map(|s| s.len() / 4).unwrap_or(0)
+}
+
+/// Order `tools` for the context budget: tools already used this session
+/// first (stable), then smallest-schema-first (max coverage per token),
+/// then drop the tail that no longer fits. The 10% headroom protects the
+/// estimate's undershoot.
+fn trim_tools_to_budget(
+    tools: &mut Vec<Value>,
+    context_budget: usize,
+    used_tools: &HashSet<String>,
+) {
+    if tools.is_empty() {
+        return;
+    }
+    let original_len = tools.len();
+    let budget = (context_budget * 9) / 10;
+    let total: usize = tools.iter().map(estimate_json_tokens).sum();
+    if total <= budget {
+        return;
+    }
+
+    let mut indexed: Vec<(usize, bool, usize)> = tools
+        .iter()
+        .enumerate()
+        .map(|(idx, t)| {
+            let used = t["function"]["name"]
+                .as_str()
+                .map(|n| used_tools.contains(n))
+                .unwrap_or(false);
+            (idx, used, estimate_json_tokens(t))
+        })
+        .collect();
+    // used-first, then size ascending (stable by original index).
+    indexed.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
+
+    let mut kept: Vec<usize> = Vec::new();
+    let mut acc = 0usize;
+    for (idx, _used, size) in indexed {
+        if acc + size > budget && !kept.is_empty() {
+            break;
+        }
+        acc += size;
+        kept.push(idx);
+    }
+    if kept.is_empty() || kept.len() == tools.len() {
+        return;
+    }
+    kept.sort_unstable();
+    *tools = kept.into_iter().map(|i| tools[i].clone()).collect();
+    tracing::info!(
+        "context budget {}: {} tools → {} (≈{}K tokens)",
+        context_budget,
+        original_len,
+        tools.len(),
+        acc / 1024
+    );
+}
+
+/// Drop the oldest user/assistant turns (never the system prompt at index 0)
+/// so the newest messages that fit the budget stay. The last message is
+/// always kept — better to send an oversized prompt (and get a clear
+/// provider error) than an empty one. Runs once before the first round;
+/// later rounds only append small tool results.
+fn trim_history_to_budget(native: &mut Vec<Value>, context_budget: usize) {
+    if native.len() <= 1 {
+        return;
+    }
+    let budget = (context_budget * 9) / 10;
+    let total: usize = native.iter().map(estimate_json_tokens).sum();
+    if total <= budget {
+        return;
+    }
+    let system = estimate_json_tokens(&native[0]);
+    let mut acc = system;
+    let mut keep_from = native.len();
+    for i in (1..native.len()).rev() {
+        let size = estimate_json_tokens(&native[i]);
+        if acc + size > budget && i < native.len() - 1 {
+            break;
+        }
+        acc += size;
+        keep_from = i;
+    }
+    if keep_from <= 1 || keep_from == native.len() {
+        return;
+    }
+    let dropped = keep_from - 1;
+    native.drain(1..keep_from);
+    tracing::info!("context budget: history trimmed by {} messages", dropped);
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    fn tool(name: &str, payload: usize) -> Value {
+        json!({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": "x".repeat(payload),
+                "parameters": json!({"type": "object", "properties": {}}),
+            },
+        })
+    }
+
+    #[test]
+    fn test_trim_tools_keeps_smallest() {
+        let mut tools = vec![tool("big", 6000), tool("small1", 2000), tool("small2", 2000)];
+        // est: big ≈1500 tok, smalls ≈500 each; eff budget 1800 → big drops.
+        trim_tools_to_budget(&mut tools, 2000, &HashSet::new());
+        assert_eq!(tools.len(), 2);
+        assert!(tools.iter().any(|t| t["function"]["name"] == "small1"));
+        assert!(tools.iter().any(|t| t["function"]["name"] == "small2"));
+        assert!(!tools.iter().any(|t| t["function"]["name"] == "big"));
+    }
+
+    #[test]
+    fn test_trim_tools_prefers_used() {
+        let mut tools = vec![tool("a", 4000), tool("b", 2400), tool("c", 1600)];
+        let mut used = HashSet::new();
+        used.insert("a".to_string());
+        // est: a ≈1000, b ≈600, c ≈400; eff budget 1800 → a(used)+c fit,
+        // b would overflow → the used tool survives despite being largest.
+        trim_tools_to_budget(&mut tools, 2000, &used);
+        assert_eq!(tools.len(), 2);
+        assert!(tools.iter().any(|t| t["function"]["name"] == "a"));
+        assert!(tools.iter().any(|t| t["function"]["name"] == "c"));
+    }
+
+    #[test]
+    fn test_trim_tools_noop_within_budget() {
+        let mut tools = vec![tool("x", 100), tool("y", 200)];
+        trim_tools_to_budget(&mut tools, 10_000, &HashSet::new());
+        assert_eq!(tools.len(), 2);
+    }
+
+    #[test]
+    fn test_trim_history_keeps_system_and_recent() {
+        let mk = |role: &str, n: usize| json!({"role": role, "content": "x".repeat(n)});
+        let mut native = vec![
+            mk("system", 4000),  // est ≈1000
+            mk("user", 6000),    // est ≈1500 — oldest turn, must go
+            mk("assistant", 1000),
+            mk("user", 500),
+        ];
+        // eff budget 1800: system+assistant+latest user ≈1375 fit; the
+        // 6000-char user would overflow → dropped.
+        trim_history_to_budget(&mut native, 2000);
+        assert_eq!(native[0]["role"], "system");
+        assert_eq!(native.len(), 3);
+        assert_eq!(native[1]["role"], "assistant");
+        assert_eq!(native[2]["content"].as_str().unwrap().len(), 500);
+    }
+
+    #[test]
+    fn test_trim_history_noop_within_budget() {
+        let mk = |role: &str| json!({"role": role, "content": "x".repeat(50)});
+        let mut native = vec![mk("system"), mk("user"), mk("assistant")];
+        trim_history_to_budget(&mut native, 100_000);
+        assert_eq!(native.len(), 3);
     }
 }

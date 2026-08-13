@@ -70,6 +70,33 @@ pub fn list_models() -> Result<Vec<String>, WeaveError> {
     Ok(parse_config_models(&content))
 }
 
+/// The context window every model runs with — parsed live from the
+/// generated config's `-c NNNN` arg (the unit's generator pins it once for
+/// all models; the VRAM-bound ceiling is infra-owned, Weave only needs to
+/// know it). Fallback 8192 when unparseable/absent.
+pub fn context_size() -> usize {
+    let content = match config_path().and_then(|p| std::fs::read_to_string(p).map_err(Into::into)) {
+        Ok(c) => c,
+        Err(_) => return 8192,
+    };
+    context_size_from_content(&content)
+}
+
+fn context_size_from_content(content: &str) -> usize {
+    for line in content.lines() {
+        if let Some(pos) = line.find("-c ") {
+            let rest = &line[pos + 3..];
+            let num: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(n) = num.parse::<usize>() {
+                if n > 0 {
+                    return n;
+                }
+            }
+        }
+    }
+    8192
+}
+
 /// Router reachability — `GET /v1/models` returns the catalog without
 /// loading any model (loading is lazy, per request, on the router side).
 async fn router_active(client: &reqwest::Client) -> bool {
@@ -258,5 +285,13 @@ models:
     fn test_config_path_points_at_user_config() {
         let path = config_path().unwrap();
         assert!(path.ends_with(".config/llama-swap/config.yaml"));
+    }
+
+    #[test]
+    fn test_context_size_parses_c_from_cmd() {
+        let sample = "models:\n  \"m\":\n    cmd: >\n      llama-server -m \"...\" -c 32768 --threads 12\n";
+        assert_eq!(context_size_from_content(sample), 32768);
+        assert_eq!(context_size_from_content("no -c here"), 8192);
+        assert_eq!(context_size_from_content(""), 8192);
     }
 }
