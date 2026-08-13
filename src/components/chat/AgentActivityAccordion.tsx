@@ -3,43 +3,10 @@ import { Check, AlertCircle, Loader2, ChevronDown, ChevronRight } from 'lucide-r
 import type { PluginCall } from '@/types/chat';
 import { ArtifactCard } from './ArtifactCard';
 import { ActiveArtifact } from '@/stores/useAppStore';
+import { extractArtifactsFromCalls as extractBaseArtifacts } from '@/lib/extractArtifacts';
 
 interface AgentActivityAccordionProps {
   calls: PluginCall[];
-}
-
-function extractArtifactsFromCalls(calls: PluginCall[]): ActiveArtifact[] {
-  const artifacts: ActiveArtifact[] = [];
-
-  for (const call of calls) {
-    if (call.status !== 'success') continue;
-    const cap = call.capability;
-    const params = (call.params || {}) as Record<string, unknown>;
-    const result = (call.result || {}) as Record<string, unknown>;
-
-    if (cap.includes('note.create') || cap.includes('note.update') || cap.includes('note.get')) {
-      const title = (params.title as string) || (result.title as string) || 'Note';
-      const content = (params.content as string) || (result.content as string) || (typeof call.result === 'string' ? call.result : '');
-      if (content || title) {
-        artifacts.push({ title, type: 'note', content });
-      }
-    } else if (cap.includes('write_file') || cap.includes('file.write') || cap.includes('apply_diff')) {
-      const path = (params.path as string) || (result.path as string) || 'file.txt';
-      const title = path.split('/').pop() || path;
-      const content = (params.content as string) || (params.new_str as string) || (typeof call.result === 'string' ? call.result : '');
-      artifacts.push({ title, type: 'file', content, path });
-    }
-  }
-
-  // Deduplicate by title & type to prevent card flooding
-  const uniqueArtifacts: ActiveArtifact[] = [];
-  for (const art of artifacts) {
-    if (!uniqueArtifacts.some((a) => a.title === art.title && a.type === art.type)) {
-      uniqueArtifacts.push(art);
-    }
-  }
-
-  return uniqueArtifacts;
 }
 
 export function AgentActivityAccordion({
@@ -49,7 +16,9 @@ export function AgentActivityAccordion({
 
   if (!calls || calls.length === 0) return null;
 
-  const artifacts = extractArtifactsFromCalls(calls);
+  const artifacts: ActiveArtifact[] = extractBaseArtifacts(calls).map(
+    ({ type, title, content, path }) => ({ type, title, content, path })
+  );
 
   return (
     <div className="my-2 space-y-1.5 font-mono text-xs pl-2">

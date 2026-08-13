@@ -3,6 +3,7 @@ import { useChatStore } from '@/stores/useChatStore';
 import { useRuntimeStore } from '@/stores/useRuntimeStore';
 import { useAppStore } from '@/stores/useAppStore';
 import type { PluginCall } from '@/types/chat';
+import { extractArtifactsFromCalls } from '@/lib/extractArtifacts';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import ReactMarkdown from 'react-markdown';
@@ -81,61 +82,34 @@ function typeForPath(path: string | undefined): ArtifactType {
   return 'file';
 }
 
-/** Mirrors extractArtifactsFromCalls in AgentActivityAccordion, keeping provenance. */
+/** Maps the shared artifact extraction onto the view's richer item shape
+ *  (key/source/timestamp/language/capability provenance). */
 function extractFromCalls(calls: PluginCall[], messageTs: number): ArtifactItem[] {
-  const items: ArtifactItem[] = [];
-
-  for (const call of calls) {
-    if (call.status !== 'success') continue;
-    const cap = call.capability;
-    const params = (call.params || {}) as Record<string, unknown>;
-    const result = (call.result || {}) as Record<string, unknown>;
-    // ChatMessage timestamps are UNIX seconds; Date expects milliseconds.
-    const timestamp = new Date(messageTs * 1000).toISOString();
-
-    if (cap.includes('note.create') || cap.includes('note.update') || cap.includes('note.get')) {
-      const title = (params.title as string) || (result.title as string) || 'Note';
-      const content =
-        (params.content as string) ||
-        (result.content as string) ||
-        (typeof call.result === 'string' ? call.result : '');
-      if (content || title) {
-        items.push({
-          key: `chat:note:${title}`,
-          title,
-          type: 'note',
-          content,
+  // ChatMessage timestamps are UNIX seconds; Date expects milliseconds.
+  const timestamp = new Date(messageTs * 1000).toISOString();
+  return extractArtifactsFromCalls(calls).map((art) =>
+    art.type === 'file'
+      ? {
+          key: `chat:file:${art.path}`,
+          title: art.title,
+          type: typeForPath(art.path),
+          content: art.content,
+          path: art.path,
+          language: languageForPath(art.path),
           source: 'chat',
           timestamp,
-          capability: cap,
-        });
-      }
-    } else if (
-      cap.includes('write_file') ||
-      cap.includes('file.write') ||
-      cap.includes('apply_diff')
-    ) {
-      const path = (params.path as string) || (result.path as string) || 'file.txt';
-      const title = path.split('/').pop() || path;
-      const content =
-        (params.content as string) ||
-        (params.new_str as string) ||
-        (typeof call.result === 'string' ? call.result : '');
-      items.push({
-        key: `chat:file:${path}`,
-        title,
-        type: typeForPath(path),
-        content,
-        path,
-        language: languageForPath(path),
-        source: 'chat',
-        timestamp,
-        capability: cap,
-      });
-    }
-  }
-
-  return items;
+          capability: art.capability,
+        }
+      : {
+          key: `chat:note:${art.title}`,
+          title: art.title,
+          type: 'note',
+          content: art.content,
+          source: 'chat',
+          timestamp,
+          capability: art.capability,
+        }
+  );
 }
 
 export function ArtifactsView() {
