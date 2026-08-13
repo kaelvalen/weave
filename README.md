@@ -277,6 +277,19 @@ metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and see
 `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite for
 servers that strictly validate CIMD.
 
+**GitHub-specific OAuth:** GitHub's authorization server does **not**
+implement CIMD — it rejects URL-style `client_id`s (the authorize URL
+404s) and requires a registered OAuth App whose callback URL matches
+exactly. To authorize a server backed by GitHub's AS (e.g. GitHub MCP):
+
+1. `github.com → Settings → Developer settings → OAuth Apps → New OAuth App`
+   with Authorization callback URL `http://127.0.0.1:34987/callback`
+   (or your `WEAVE_OAUTH_REDIRECT_URI`).
+2. Start Weave with the app's client id (e.g. `Iv1.xxxx`):
+   `WEAVE_CIMD_CLIENT_ID=Iv1.xxxx WEAVE_OAUTH_REDIRECT_URI=http://127.0.0.1:34987/callback`.
+   The loopback listener binds whatever port the redirect URI declares.
+3. Add the server and click **Authorize** (card or dialog).
+
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:
 those are hand-classified by reading each plugin's code; an MCP server's

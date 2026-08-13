@@ -459,16 +459,30 @@ pub fn call_tool_sync(
 
 // ── OAuth 2.1 / CIMD authorization (Phase 8.2 Part 2 §4–§5) ─────────────
 
-/// Loopback redirect URI the OAuth flow's local listener binds.
+/// Default loopback redirect URI the OAuth flow's local listener binds.
 /// `mcp_oauth_authorize` in commands/mcp.rs starts this listener before
-/// opening the browser, so the redirect always arrives.
-pub const OAUTH_REDIRECT_URI: &str = "http://127.0.0.1:34987/callback";
+/// opening the browser, so the redirect always arrives. Override with
+/// `WEAVE_OAUTH_REDIRECT_URI` — required when the authorization server
+/// (e.g. GitHub's) does not accept a CIMD URL client_id and you instead
+/// register a client with a specific redirect URI.
+pub const DEFAULT_OAUTH_REDIRECT_URI: &str = "http://127.0.0.1:34987/callback";
+
+/// The redirect URI in effect: `WEAVE_OAUTH_REDIRECT_URI` if set, else
+/// `DEFAULT_OAUTH_REDIRECT_URI`. The token exchange must send exactly the
+/// URI the authorization request advertised.
+pub fn oauth_redirect_uri() -> String {
+    std::env::var("WEAVE_OAUTH_REDIRECT_URI")
+        .unwrap_or_else(|_| DEFAULT_OAUTH_REDIRECT_URI.to_string())
+}
 
 /// Default CIMD client identity: `client_id` as an HTTPS URL pointing at a
 /// static metadata document, per draft-ietf-oauth-client-id-metadata-document.
 /// Weave does not yet host this document — per phase8-mcp-spec.md Part 2 §5
 /// it is a documented manual prerequisite for servers that strictly validate
-/// CIMD. Override with `WEAVE_CIMD_CLIENT_ID` when hosting your own.
+/// CIMD. Override with `WEAVE_CIMD_CLIENT_ID` when hosting your own — or
+/// when the authorization server does not support CIMD at all and requires
+/// a registered plain client_id (e.g. GitHub: register an OAuth App whose
+/// redirect URI equals `oauth_redirect_uri()` and put its client id here).
 pub fn cimd_client_id() -> String {
     std::env::var("WEAVE_CIMD_CLIENT_ID")
         .unwrap_or_else(|_| "https://weave.app/mcp/client-metadata.json".to_string())
@@ -639,7 +653,7 @@ pub fn authorization_url(
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", &cimd_client_id())
-        .append_pair("redirect_uri", OAUTH_REDIRECT_URI)
+        .append_pair("redirect_uri", &oauth_redirect_uri())
         .append_pair("scope", "mcp")
         .append_pair("state", state)
         .append_pair("code_challenge", &pkce.code_challenge)
@@ -699,7 +713,7 @@ pub async fn exchange_code(
         &[
             ("grant_type", "authorization_code"),
             ("code", code),
-            ("redirect_uri", OAUTH_REDIRECT_URI),
+            ("redirect_uri", &oauth_redirect_uri()),
             ("client_id", &cimd_client_id()),
             ("code_verifier", &pkce.code_verifier),
         ],
@@ -951,7 +965,10 @@ mod tests {
             .collect();
         assert_eq!(params.get("response_type").map(String::as_str), Some("code"));
         assert_eq!(params.get("client_id").map(String::as_str), Some(cimd_client_id().as_str()));
-        assert_eq!(params.get("redirect_uri").map(String::as_str), Some(OAUTH_REDIRECT_URI));
+        assert_eq!(
+            params.get("redirect_uri").map(String::as_str),
+            Some(oauth_redirect_uri().as_str())
+        );
         assert_eq!(params.get("scope").map(String::as_str), Some("mcp"));
         assert_eq!(params.get("state").map(String::as_str), Some("state-42"));
         assert_eq!(params.get("code_challenge_method").map(String::as_str), Some("S256"));

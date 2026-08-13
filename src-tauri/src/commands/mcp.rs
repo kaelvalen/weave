@@ -350,12 +350,31 @@ pub async fn mcp_oauth_authorize(
 
     let pkce = mcp_client::new_pkce();
     let state = uuid::Uuid::new_v4().simple().to_string();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:34987")
+    // Bind the listener on the redirect URI's own port BEFORE opening the
+    // browser so the redirect cannot arrive early. Port comes from the
+    // (possibly overridden) redirect URI, not a hardcoded constant.
+    let redirect = mcp_client::oauth_redirect_uri();
+    let redirect_url = reqwest::Url::parse(&redirect)
+        .map_err(|e| WeaveError::PluginError(format!("invalid OAuth redirect URI {}: {}", redirect, e)))?;
+    let bind_host = redirect_url
+        .host_str()
+        .unwrap_or("127.0.0.1")
+        .to_string();
+    let bind_port = redirect_url
+        .port()
+        .ok_or_else(|| {
+            WeaveError::PluginError(format!(
+                "OAuth redirect URI {} must include a loopback port",
+                redirect
+            ))
+        })?;
+    let bind_addr = format!("{}:{}", bind_host, bind_port);
+    let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .map_err(|e| {
             WeaveError::PluginError(format!(
-                "cannot bind OAuth redirect listener on 127.0.0.1:34987: {}",
-                e
+                "cannot bind OAuth redirect listener on {}: {}",
+                bind_addr, e
             ))
         })?;
     let authorization_url = mcp_client::authorization_url(&md, &state, &pkce)?;

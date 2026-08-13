@@ -61,6 +61,16 @@ document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 > now tries `discovery_url_candidates()` in order — path-aware first,
 > append on 404 — and is verified live against GitHub's real issuer
 > (`live_github_discovery_is_path_aware`, `#[ignore]`d).
+>
+> **Addendum 2026-08-13 — non-CIMD authorization servers (GitHub) require
+> a registered client:** the authorize URL GitHub produced 404'd — GitHub's
+> AS does not implement CIMD and rejects URL-style `client_id`s, and its
+> consent flow requires an OAuth App whose callback URL matches exactly.
+> The client identity and redirect URI are now overridable
+> (`WEAVE_CIMD_CLIENT_ID`, `WEAVE_OAUTH_REDIRECT_URI`); the loopback
+> listener binds the redirect URI's own port instead of a hardcoded one,
+> so a registered GitHub OAuth App (callback `http://127.0.0.1:34987/
+> callback`) works end to end. Setup steps: README "GitHub-specific OAuth".
 
 Phase 8.0 (Ollama `use_native_tools` probe) close-out: see
 `phase1-spine-spec.md` §8. The 2026-08-11 probe result was re-verified on
