@@ -283,7 +283,13 @@ async fn live_round_trip_against_github_mcp_server() {
         .expect("github-mcp-server advertises get_me");
     println!("get_me schema: {}", serde_json::to_string(&get_me.input_schema).unwrap());
 
-    let result = mcp_client::call_tool(base, "get_me", serde_json::json!({}), Some(&token))
+    let result = mcp_client::call_tool(
+        base,
+        "get_me",
+        serde_json::json!({}),
+        Some(&get_me.input_schema),
+        Some(&token),
+    )
         .await
         .expect("tools/call against a live 2026-07-28 server");
     let text = serde_json::to_string(&result).unwrap();

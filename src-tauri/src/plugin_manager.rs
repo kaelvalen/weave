@@ -136,12 +136,17 @@ impl PluginManager {
         };
 
         self.plugins.write().insert(id.clone(), plugin.clone());
+        let mut schemas = HashMap::new();
+        for tool in &tools {
+            schemas.insert(tool.name.clone(), tool.input_schema.clone());
+        }
         self.executors.write().insert(
             id.clone(),
             Box::new(McpExecutor {
                 server_id: server_id.to_string(),
                 base_url: base_url.to_string(),
                 access_token,
+                schemas,
             }),
         );
 

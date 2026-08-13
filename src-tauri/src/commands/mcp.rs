@@ -129,15 +129,49 @@ pub async fn mcp_add_server(
         None => (None, None, None, Vec::new()),
     };
 
-    let base_id = slugify(&display_name);
+    // Reuse an existing registration for the same URL instead of spawning a
+    // new server id on every add — re-adding GitHub MCP had been creating a
+    // fresh com.weave.mcp.github-<uuid> card each time (nine of them in the
+    // marketplace), most stuck at 0 tools. The existing entry is updated in
+    // place below, so its tools/token state is refreshed, not duplicated.
     let server_id = {
-        let existing = app_state.config.read().mcp_servers.contains_key(&base_id);
-        if existing {
-            format!("{}-{}", base_id, uuid::Uuid::new_v4().simple())
-        } else {
-            base_id
+        let config = app_state.config.read();
+        match config.mcp_servers.values().find(|s| s.url == url) {
+            Some(existing) => existing.id.clone(),
+            None => {
+                let base_id = slugify(&display_name);
+                if config.mcp_servers.contains_key(&base_id) {
+                    format!("{}-{}", base_id, uuid::Uuid::new_v4().simple())
+                } else {
+                    base_id
+                }
+            }
         }
     };
+
+    // A re-added server may already hold an access token (OAuth completed in
+    // an earlier session): try it before falling back to the challenge path,
+    // and hand it to the executor so the tools are actually usable.
+    let stored_token = app_state
+        .config
+        .read()
+        .mcp_servers
+        .get(&server_id)
+        .and_then(|s| s.access_token.clone());
+    let mut registered_token = None;
+    if auth_required.is_some() {
+        if let Some(token) = stored_token {
+            if let Ok(l) = mcp_client::list_tools(&url, Some(&token)).await {
+                auth_required = None;
+                registered_token = Some(token);
+                info!(
+                    "MCP server {} re-authorized with stored token; {} tool(s)",
+                    display_name,
+                    l.tools.len()
+                );
+            }
+        }
+    }
 
     app_state
         .plugin_manager
@@ -151,12 +185,16 @@ pub async fn mcp_add_server(
         &server_id,
         &display_name,
         &url,
-        None,
+        registered_token,
         listed.tools,
     );
 
     {
         let mut config = app_state.config.write();
+        // Preserve OAuth state (access/refresh tokens, expiry, allowlist)
+        // when re-adding an already-configured server — only refresh the
+        // discovery metadata and auth-required flag.
+        let existing = config.mcp_servers.get(&server_id).cloned();
         config.mcp_servers.insert(
             server_id.clone(),
             McpServerConfig {
@@ -165,11 +203,17 @@ pub async fn mcp_add_server(
                 url,
                 enabled: true,
                 auth_required: auth_required.is_some(),
+                allowlisted_tools: existing
+                    .as_ref()
+                    .map(|e| e.allowlisted_tools.clone())
+                    .unwrap_or_default(),
                 issuer,
                 authorization_endpoint,
                 token_endpoint,
                 oauth_scopes,
-                ..Default::default()
+                access_token: existing.as_ref().and_then(|e| e.access_token.clone()),
+                refresh_token: existing.as_ref().and_then(|e| e.refresh_token.clone()),
+                token_expires_at: existing.as_ref().and_then(|e| e.token_expires_at),
             },
         );
         config.save()?;

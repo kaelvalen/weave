@@ -106,6 +106,7 @@ async fn post(
     base_url: &str,
     method: &str,
     tool_name: Option<&str>,
+    header_params: &[(String, String)],
     body: Value,
     token: Option<&str>,
 ) -> Result<Value, WeaveError> {
@@ -118,6 +119,9 @@ async fn post(
         .header("Mcp-Method", method);
     if let Some(name) = tool_name {
         req = req.header("Mcp-Name", name);
+    }
+    for (name, value) in header_params {
+        req = req.header(format!("Mcp-Param-{}", name), value);
     }
     if let Some(token) = token {
         req = req.header("Authorization", format!("Bearer {}", token));
@@ -328,6 +332,7 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
         base_url,
         "server/discover",
         None,
+        &[],
         rpc_request("discover", "server/discover", serde_json::json!({})),
         token,
     )
@@ -379,6 +384,7 @@ pub async fn list_tools(base_url: &str, token: Option<&str>) -> Result<ToolsList
         base_url,
         "tools/list",
         None,
+        &[],
         rpc_request("list", "tools/list", serde_json::json!({})),
         token,
     )
@@ -394,16 +400,63 @@ pub async fn list_tools(base_url: &str, token: Option<&str>) -> Result<ToolsList
     Ok(ToolsListResult { tools, ttl_ms })
 }
 
+/// Parameter names a tool's inputSchema marks as header-bound via
+/// `x-mcp-header` (value is the header suffix, usually the parameter name
+/// itself; some servers use a boolean `true`). Such parameters MUST travel
+/// as `Mcp-Param-<name>` request headers, not in the JSON-RPC body —
+/// GitHub MCP marks `owner`/`repo` this way and rejects the body form with
+/// "header mismatch: missing Mcp-Param-owner header".
+pub fn header_bound_params(schema: &Value) -> Vec<String> {
+    let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+    properties
+        .iter()
+        .filter_map(|(name, spec)| match spec.get("x-mcp-header") {
+            Some(Value::String(suffix)) if !suffix.is_empty() => Some(suffix.clone()),
+            Some(Value::Bool(true)) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Collects `Mcp-Param-<name>` header pairs for parameters the tool's
+/// inputSchema marks via `x-mcp-header`. The parameters are NOT removed
+/// from the body: live servers (GitHub MCP) reject a header whose
+/// parameter is absent from `arguments` ("unexpected Mcp-Param-repo header
+/// for absent or null parameter"), so the body keeps the value and the
+/// header mirrors it for gateway routing/metering.
+pub fn split_header_params(schema: Option<&Value>, arguments: &Value) -> Vec<(String, String)> {
+    let Some(schema) = schema else {
+        return Vec::new();
+    };
+    let mut headers = Vec::new();
+    for name in header_bound_params(schema) {
+        let value = arguments.get(&name).cloned();
+        if let Some(v) = value {
+            let text = match &v {
+                Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            headers.push((name, text));
+        }
+    }
+    headers
+}
+
 async fn call_tool_once(
     base_url: &str,
     tool_name: &str,
     arguments: Value,
+    schema: Option<&Value>,
     token: Option<&str>,
 ) -> Result<CallOutcome, WeaveError> {
+    let header_params = split_header_params(schema, &arguments);
     let result = post(
         base_url,
         "tools/call",
         Some(tool_name),
+        &header_params,
         rpc_request(
             "call",
             "tools/call",
@@ -429,14 +482,16 @@ async fn call_tool_once(
     }
 }
 
-/// `tools/call`, async. Single round trip only — see module doc.
+/// `tools/call`, async. Single round trip only — see module doc. `schema`
+/// is the tool's inputSchema, used to route `x-mcp-header` parameters.
 pub async fn call_tool(
     base_url: &str,
     tool_name: &str,
     arguments: Value,
+    schema: Option<&Value>,
     token: Option<&str>,
 ) -> Result<Value, WeaveError> {
-    match call_tool_once(base_url, tool_name, arguments, token).await? {
+    match call_tool_once(base_url, tool_name, arguments, schema, token).await? {
         CallOutcome::Complete(value) => Ok(value),
         CallOutcome::InputRequired => Err(WeaveError::PluginError(format!(
             "MCP tool '{}' requires interactive input mid-call (Multi Round-Trip Requests), which Weave does not yet support — see docs/phase8-mcp-spec.md Part 2 §1",
@@ -470,10 +525,12 @@ pub fn call_tool_sync(
     base_url: &str,
     tool_name: &str,
     arguments: Value,
+    schema: Option<&Value>,
     token: Option<&str>,
 ) -> Result<Value, WeaveError> {
     let base_url = base_url.to_string();
     let tool_name = tool_name.to_string();
+    let schema = schema.cloned();
     let token = token.map(|t| t.to_string());
 
     std::thread::spawn(move || {
@@ -481,7 +538,13 @@ pub fn call_tool_sync(
             .enable_all()
             .build()
             .map_err(|e| WeaveError::PluginError(e.to_string()))?;
-        rt.block_on(call_tool(&base_url, &tool_name, arguments, token.as_deref()))
+        rt.block_on(call_tool(
+            &base_url,
+            &tool_name,
+            arguments,
+            schema.as_ref(),
+            token.as_deref(),
+        ))
     })
     .join()
     .map_err(|_| WeaveError::PluginError("MCP tool-call thread panicked".to_string()))?
@@ -918,6 +981,9 @@ pub struct McpExecutor {
     pub server_id: String,
     pub base_url: String,
     pub access_token: Option<String>,
+    /// Tool input schemas at registration time, keyed by tool name — used
+    /// to route `x-mcp-header` parameters to `Mcp-Param-*` headers.
+    pub schemas: HashMap<String, Value>,
 }
 
 impl PluginExecutor for McpExecutor {
@@ -931,7 +997,13 @@ impl PluginExecutor for McpExecutor {
         let tool_name = capability
             .strip_prefix(prefix.as_str())
             .ok_or_else(|| WeaveError::CapabilityNotFound(capability.to_string()))?;
-        call_tool_sync(&self.base_url, tool_name, params, self.access_token.as_deref())
+        call_tool_sync(
+            &self.base_url,
+            tool_name,
+            params,
+            self.schemas.get(tool_name),
+            self.access_token.as_deref(),
+        )
     }
 }
 
@@ -1037,6 +1109,7 @@ mod tests {
             server_id: "weather".to_string(),
             base_url: "http://127.0.0.1:1".to_string(),
             access_token: None,
+            schemas: HashMap::new(),
         };
         let ctx = runtime_kernel::execution_context::ExecutionContext::new(
             "test".to_string(),
@@ -1143,6 +1216,93 @@ mod tests {
         assert_eq!(auth_challenge_from_headers(&headers), None);
     }
 
+    #[test]
+    fn header_bound_params_extracts_x_mcp_header_markers() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "owner": {"type": "string", "x-mcp-header": "owner"},
+                "repo": {"type": "string", "x-mcp-header": "repo"},
+                "page": {"type": "number"}
+            },
+            "required": ["owner", "repo"]
+        });
+        let mut params = header_bound_params(&schema);
+        params.sort();
+        assert_eq!(params, vec!["owner", "repo"]);
+        // Boolean marker is also honored (some servers use true instead of a
+        // suffix string).
+        let bool_schema = serde_json::json!({
+            "properties": {"token": {"type": "string", "x-mcp-header": true}}
+        });
+        assert_eq!(header_bound_params(&bool_schema), vec!["token"]);
+    }
+
+    #[test]
+    fn split_header_params_mirrors_marked_args_into_headers() {
+        let schema = serde_json::json!({
+            "properties": {
+                "owner": {"type": "string", "x-mcp-header": "owner"},
+                "perPage": {"type": "number"}
+            }
+        });
+        let args = serde_json::json!({"owner": "kaelvalen", "perPage": 30});
+        let headers = split_header_params(Some(&schema), &args);
+        assert_eq!(headers, vec![("owner".to_string(), "kaelvalen".to_string())]);
+        // The body keeps the parameter: live servers (GitHub MCP) reject a
+        // header whose parameter is absent from arguments.
+        assert_eq!(args, serde_json::json!({"owner": "kaelvalen", "perPage": 30}));
+    }
+
+    #[tokio::test]
+    async fn post_sends_mcp_param_headers_for_header_bound_args() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut byte = [0u8; 1];
+            loop {
+                if stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                    break;
+                }
+                buf.push(byte[0]);
+                if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+            let text = String::from_utf8_lossy(&buf).to_string();
+            assert!(
+                text.to_lowercase().contains("mcp-param-owner: kaelvalen"),
+                "missing Mcp-Param-owner header in: {}",
+                text
+            );
+            let body = br#"{"jsonrpc":"2.0","id":"call","result":{"resultType":"complete","content":[{"type":"text","text":"ok"}]}}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let mut bytes = resp.into_bytes();
+            bytes.extend_from_slice(body);
+            let _ = stream.write_all(&bytes).await;
+            let _ = stream.flush().await;
+        });
+        let schema = serde_json::json!({
+            "properties": {"owner": {"type": "string", "x-mcp-header": "owner"}}
+        });
+        let result = call_tool(
+            &format!("http://{}/mcp", addr),
+            "list_branches",
+            serde_json::json!({"owner": "kaelvalen"}),
+            Some(&schema),
+            None,
+        )
+        .await
+        .expect("call with header-bound param must succeed");
+        assert!(result.is_array());
+    }
+
     #[tokio::test]
     async fn post_401_with_resource_metadata_surfaces_typed_challenge() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -1172,6 +1332,7 @@ mod tests {
             &format!("http://{}/mcp", addr),
             "tools/list",
             None,
+            &[],
             rpc_request("t", "tools/list", serde_json::json!({})),
             None,
         )
