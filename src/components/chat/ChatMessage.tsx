@@ -322,7 +322,7 @@ export const ChatMessage = React.memo(function ChatMessage({
         return (
           <div
             key={i}
-            className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans"
+            className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans overflow-x-auto max-w-full"
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
@@ -489,7 +489,7 @@ export const ChatMessage = React.memo(function ChatMessage({
           ) : (
             <div className="text-sm font-medium text-foreground leading-relaxed break-words w-full font-sans">
               {imagesBlock}
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans font-medium">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans font-medium overflow-x-auto max-w-full">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
                   rehypePlugins={[rehypeKatex]}
@@ -646,7 +646,7 @@ export const ChatMessage = React.memo(function ChatMessage({
               {showCursor && <span className="streaming-cursor" />}
             </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans">
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans overflow-x-auto max-w-full">
               {showsCompletedNotice ? (
                 <div className="mt-1 py-2 px-3.5 bg-surface-2 border border-border/40 rounded-xl text-xs font-medium text-foreground flex items-center gap-2">
                   <Check className="w-4 h-4 text-brand flex-shrink-0" />
