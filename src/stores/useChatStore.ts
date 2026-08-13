@@ -576,6 +576,21 @@ export const useChatStore = create<ChatState>()(
           set((state) => {
             state.messages = hydrateMessageMetadata(history);
           });
+          return;
+        }
+        // The backend history is in-memory: after an app restart it is
+        // empty and the conversation would silently vanish. Restore the
+        // active (or most recent) saved session from disk instead — it
+        // carries the same messages including plugin-call metadata.
+        const activeId = localStorage.getItem('weave_active_session_id');
+        const sessions = (await invoke('chat_list_sessions')) as {
+          id: string;
+          updated_at: number;
+        }[];
+        const sorted = [...sessions].sort((a, b) => b.updated_at - a.updated_at);
+        const target = sorted.find((s) => s.id === activeId) ?? sorted[0];
+        if (target) {
+          await get().loadSession(target.id);
         }
       } catch (err) {
         toast.error(extractError(err));
