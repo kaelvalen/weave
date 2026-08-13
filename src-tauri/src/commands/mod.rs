@@ -1,5 +1,4 @@
 pub mod chat;
-pub mod local;
 pub mod mcp;
 pub mod models;
 pub mod plugin;

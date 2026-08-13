@@ -22,7 +22,6 @@ export interface LocalConfig {
   context_length: number;
   temperature: number;
   api_url?: string;
-  use_native_tools: boolean;
 }
 
 import type { Provider } from './chat';

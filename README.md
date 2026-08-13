@@ -17,8 +17,9 @@ decisions.
 
 - **Backend agent loop** - `src-tauri/src/agent/mod.rs` continues provider
   turns until no further native tool calls are returned.
-- **Native tool calling** - OpenAI-shaped providers, Anthropic, and Ollama use
-  structured tool calls rather than XML or JSON parsing from assistant prose.
+- **Native tool calling** - OpenAI-shaped providers, Anthropic, Ollama, and
+  llama-server-backed GGUF models use structured tool calls rather than XML or
+  JSON parsing from assistant prose.
 - **Approval policy** - sensitive reads, network requests, and destructive
   operations are gated in the backend. The frontend policy copy is display-only.
 - **Plugin system** - built-in Rust executors plus Python and WASM plugin
@@ -39,17 +40,24 @@ tool-call ID:
 - OpenAI-shaped providers use `assistant.tool_calls` and `role: "tool"` results.
 - Anthropic uses `tool_use` and `tool_result` content blocks.
 - Ollama uses its native `/api/chat` `tools` and `message.tool_calls` fields.
+- GGUF models started by Weave's `llama-server` use the OpenAI-compatible
+  `/v1/chat/completions` path.
 
 If a provider or model does not support native tools, set
 `ai.local.use_native_tools` to `false`. This is a static configuration choice,
 not a runtime guess: a model returning text instead of a tool call cannot be
 distinguished from a model legitimately deciding not to call a tool.
 
-The Ollama/Qwen3.5 native-tool-calling leg was verified on 2026-08-13 against
-a real local server (Ollama 0.32.7, `qwen3.5:9b`) with the transcript
-committed at `docs/probes/ollama-native-tools-2026-08-13/`. Models that reply
-with XML text instead of tool calls (e.g. qwen2.5-coder-7b) must set
-`use_native_tools` to `false`.
+The local probe performed on 2026-08-11 produced these results:
+
+- `Qwen3.5-9B-Q4_K_M.gguf` through `llama-server`: native streaming
+  `tool_calls` and `finish_reason: "tool_calls"` confirmed.
+- `qwen2.5-coder-7b-instruct-q4_k_m.gguf`: tools were accepted but the model
+  returned XML text and no native `tool_calls`; use the static flag accordingly.
+- Ollama 0.32.6 was also started with the same Qwen3.5 GGUF: both
+  `stream:false` and `stream:true` requests to `/api/chat` returned native
+  `message.tool_calls` with the expected `probe-ok` argument. The temporary
+  probe model was removed after the test.
 
 The Ollama/Qwen3.5 leg was independently re-run and verified on 2026-08-13
 against a real local server (Ollama 0.32.7, `qwen3.5:9b`) with the
@@ -68,7 +76,7 @@ Rust AgentLoop
   |-- AiBridge
   |     |-- OpenAI-shaped providers
   |     |-- Anthropic
-  |     |-- Ollama
+  |     |-- Ollama / llama-server
   |-- capability_policy (backend approval source of truth)
   |-- PluginManager
         |-- Built-in Rust plugins
@@ -111,7 +119,7 @@ badges and filters; a Rust test fails if the mirror drifts.
 | Frontend | React 18, TypeScript, Tailwind CSS, shadcn/ui |
 | State | Zustand + Immer |
 | Backend | Tauri v2 + Rust |
-| Providers | OpenAI, Anthropic, Kimi, OpenCode, Ollama |
+| Providers | OpenAI, Anthropic, Kimi, OpenCode, Ollama, llama-server |
 | Plugin runtimes | Built-in Rust, Python/PyO3, WASM |
 | Tests | Rust unit/integration tests + Vitest |
 
@@ -171,9 +179,8 @@ settings include:
 ```
 
 Set `use_native_tools` to `false` for a local model/template that does not
-return structured native tool calls. Local models are managed in
-Settings → Local LLMs: server start/stop, installed models, and `ollama pull`
-from the Ollama registry.
+return structured native tool calls. Weave's GGUF path starts `llama-server`
+itself and uses its OpenAI-compatible endpoint.
 
 ## Adding Plugins
 

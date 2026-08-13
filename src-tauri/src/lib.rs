@@ -40,8 +40,6 @@ pub struct AppState {
     /// Auto-Approve mode: when true the agent loop skips the approval gate
     /// (set by `chat_set_approval_mode`; frontend "Auto-Approve" toggle).
     pub approval_auto: Arc<AtomicBool>,
-    /// Weave-managed `ollama serve` child, if any (commands/local.rs).
-    pub local_server: Arc<tokio::sync::Mutex<Option<tokio::process::Child>>>,
     pub canvas_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub model_telemetry: Arc<parking_lot::Mutex<ModelTelemetry>>,
 }
@@ -116,7 +114,6 @@ impl AppState {
             chat_history,
             abort_generation,
             approval_auto,
-            local_server: Arc::new(tokio::sync::Mutex::new(None)),
             canvas_tx,
             model_telemetry,
         })

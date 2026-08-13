@@ -34,9 +34,24 @@ impl ModelTelemetry {
     }
 }
 
+/// A running llama-server child plus usage bookkeeping, so the idle reaper can
+/// unload the model (freeing RAM/VRAM) once work with it is done.
+pub struct LlamaServerHandle {
+    model: String,
+    child: tokio::process::Child,
+    last_used: std::time::Instant,
+    in_flight: usize,
+}
+
+/// Unload the local model after this much inactivity — the server must not sit
+/// in RAM/VRAM forever once its work is done.
+const LLAMA_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+const LLAMA_REAPER_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub struct AiBridge {
     client: reqwest::Client,
     pub config: Arc<RwLock<AiConfig>>,
+    pub llama_server: Arc<tokio::sync::Mutex<Option<LlamaServerHandle>>>,
     observability: Arc<Observability>,
     telemetry: Arc<Mutex<ModelTelemetry>>,
 }
@@ -288,11 +303,140 @@ impl AiBridge {
             .build()
             .unwrap_or_default();
 
+        let llama_server: Arc<tokio::sync::Mutex<Option<LlamaServerHandle>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
+
+        // Idle reaper: once work with a model is done and it has been quiet for
+        // LLAMA_IDLE_TIMEOUT, kill its server so RAM/VRAM is released.
+        {
+            let llama_server = llama_server.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(LLAMA_REAPER_INTERVAL).await;
+                    let mut guard = llama_server.lock().await;
+                    if let Some(handle) = guard.as_mut() {
+                        if handle.in_flight == 0 && handle.last_used.elapsed() > LLAMA_IDLE_TIMEOUT
+                        {
+                            tracing::info!("llama-server idle — unloading model {}", handle.model);
+                            let _ = handle.child.kill().await;
+                            *guard = None;
+                        }
+                    }
+                }
+            });
+        }
+
         Self {
             client,
             config,
+            llama_server,
             observability,
             telemetry,
+        }
+    }
+
+    pub fn get_local_models_dir() -> std::path::PathBuf {
+        dirs::home_dir()
+            .map(|h| h.join("Models").join("llama.cpp"))
+            .unwrap_or_else(|| std::path::PathBuf::from("./models"))
+    }
+
+    /// Locate a matching multimodal projector (`mmproj*.gguf`) next to the models for
+    /// vision-capable GGUFs so they can accept image input. Returns None when no matching
+    /// projector is present or when the model is pure text (to avoid dimension mismatch errors).
+    fn find_mmproj(models_dir: &std::path::Path, model_name: &str) -> Option<std::path::PathBuf> {
+        let model_lower = model_name.to_lowercase();
+        let model_stem = model_name
+            .strip_suffix(".gguf")
+            .unwrap_or(model_name)
+            .to_lowercase();
+
+        let entries = std::fs::read_dir(models_dir).ok()?;
+        let mut candidates: Vec<std::path::PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| {
+                        let lower = n.to_lowercase();
+                        lower.contains("mmproj") && lower.ends_with(".gguf")
+                    })
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if candidates.is_empty() {
+            return None;
+        }
+
+        // 1. Exact or stem match in mmproj filename (e.g. mmproj-qwen2.5-coder.gguf)
+        for cand in &candidates {
+            if let Some(name) = cand.file_name().and_then(|n| n.to_str()) {
+                let lower = name.to_lowercase();
+                if lower.contains(&model_stem) {
+                    return Some(cand.clone());
+                }
+            }
+        }
+
+        // 2. Vision model heuristic: only attach mmproj if the model filename indicates it's a vision/multimodal model.
+        let vision_keywords = [
+            "llava",
+            "moondream",
+            "minicpm",
+            "-vl",
+            "_vl",
+            "vision",
+            "pixtral",
+            "qvq",
+            "mllama",
+            "bakllava",
+            "obsidian",
+            "internvl",
+        ];
+        let is_vision_model = vision_keywords.iter().any(|&kw| model_lower.contains(kw));
+
+        if !is_vision_model {
+            // Text-only models (e.g. Qwen2.5-Coder, Llama-3-8B, Mistral) must NOT use mmproj.
+            // Passing an arbitrary mmproj causes llama-server to fail loading with a dimension mismatch error.
+            return None;
+        }
+
+        // 3. For vision models, prefer an mmproj sharing a keyword with the model name.
+        for cand in &candidates {
+            if let Some(name) = cand.file_name().and_then(|n| n.to_str()) {
+                let lower = name.to_lowercase();
+                for kw in vision_keywords {
+                    if model_lower.contains(kw) && lower.contains(kw) {
+                        return Some(cand.clone());
+                    }
+                }
+            }
+        }
+
+        // Fallback for vision model: sort candidates and pick the first available projector.
+        candidates.sort();
+        candidates.into_iter().next()
+    }
+
+    /// Best-effort kill of whatever holds the llama-server port. `fuser` does
+    /// not exist on every distro (e.g. NixOS), so fall back to lsof + kill.
+    async fn kill_port_occupants(port: u16) {
+        let _ = tokio::process::Command::new("fuser")
+            .arg("-k")
+            .arg(format!("{port}/tcp"))
+            .output()
+            .await;
+
+        if let Ok(out) = tokio::process::Command::new("lsof")
+            .arg("-t")
+            .arg(format!("-i:{port}"))
+            .output()
+            .await
+        {
+            for pid in String::from_utf8_lossy(&out.stdout).split_whitespace() {
+                let _ = tokio::process::Command::new("kill").arg(pid).output().await;
+            }
         }
     }
 
@@ -578,6 +722,7 @@ impl AiBridge {
     ) -> Result<tokio::sync::mpsc::Receiver<AgentStreamEvent>, WeaveError> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let client = self.client.clone();
+        let llama_server = self.llama_server.clone();
         let observability = self.observability.clone();
         let telemetry = self.telemetry.clone();
 
@@ -652,6 +797,7 @@ impl AiBridge {
                 Provider::Local => {
                     Self::stream_local_agent(
                         client,
+                        llama_server,
                         native_messages,
                         &model,
                         api_url.as_deref(),
@@ -1238,7 +1384,17 @@ impl AiBridge {
     ) -> Vec<serde_json::Value> {
         match provider {
             Provider::Anthropic => Self::build_anthropic_messages(&messages),
-            Provider::Local => Self::build_ollama_messages(&messages),
+            Provider::Local => {
+                if model.contains(".gguf") {
+                    // llama.cpp serves an OpenAI-compatible endpoint.
+                    Self::build_openai_messages(&messages, model, api_url)
+                        .into_iter()
+                        .map(|m| serde_json::to_value(&m).unwrap_or_default())
+                        .collect()
+                } else {
+                    Self::build_ollama_messages(&messages)
+                }
+            }
             _ => Self::build_openai_messages(&messages, model, api_url)
                 .into_iter()
                 .map(|m| serde_json::to_value(&m).unwrap_or_default())
@@ -1539,6 +1695,7 @@ impl AiBridge {
 
     async fn stream_local_agent(
         client: reqwest::Client,
+        llama_server: Arc<tokio::sync::Mutex<Option<LlamaServerHandle>>>,
         native_messages: Vec<serde_json::Value>,
         model: &str,
         api_url: Option<&str>,
@@ -1548,6 +1705,124 @@ impl AiBridge {
         observability: Arc<Observability>,
         telemetry: Arc<Mutex<ModelTelemetry>>,
     ) -> Result<(), WeaveError> {
+        if model.contains(".gguf") {
+            let mut server_guard = llama_server.lock().await;
+
+            // Swap: a different model (or a dead server) — the old one dies first.
+            let needs_restart = match &mut *server_guard {
+                Some(handle) => {
+                    if handle.model != model {
+                        tracing::info!(
+                            "model swap: unloading {} → loading {}",
+                            handle.model,
+                            model
+                        );
+                        let _ = handle.child.kill().await;
+                        true
+                    } else {
+                        // Check if it's still running
+                        matches!(handle.child.try_wait(), Ok(Some(_)))
+                    }
+                }
+                None => true,
+            };
+
+            if needs_restart {
+                let model_path = Self::get_local_models_dir().join(model);
+
+                // Kill any lingering process using port 8080 first
+                Self::kill_port_occupants(8080).await;
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+                // Start new server — attach the multimodal projector when one is
+                // present so vision-capable models accept image input.
+                use tokio::process::Command;
+                let mut cmd = Command::new("llama-server");
+                cmd.arg("-m")
+                    .arg(&model_path)
+                    .arg("--port")
+                    .arg("8080")
+                    .arg("-c")
+                    .arg("32768") // Large context window - no cost for local models
+                    .arg("-n")
+                    .arg("-1"); // No output token limit
+                if let Some(mmproj) = Self::find_mmproj(&Self::get_local_models_dir(), model) {
+                    tracing::info!("llama-server vision enabled via {}", mmproj.display());
+                    cmd.arg("--mmproj").arg(mmproj);
+                }
+                let child = cmd.kill_on_drop(true).spawn().map_err(|e| {
+                    WeaveError::LocalLlmNotAvailable(format!("Failed to start llama-server: {}", e))
+                })?;
+
+                *server_guard = Some(LlamaServerHandle {
+                    model: model.to_string(),
+                    child,
+                    last_used: std::time::Instant::now(),
+                    in_flight: 0,
+                });
+
+                // Active health check polling loop (up to 6s). If our child died
+                // instantly (e.g. a stale server still holds the port), fail loudly
+                // instead of silently proxying to that stale, mmproj-less server.
+                let health_url = "http://localhost:8080/health";
+                let mut ready = false;
+                for _ in 0..20 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                    if let Some(handle) = server_guard.as_mut() {
+                        if let Ok(Some(status)) = handle.child.try_wait() {
+                            return Err(WeaveError::LocalLlmNotAvailable(format!(
+                                "llama-server exited immediately ({status}). Another process may hold port 8080 — stop it and try again."
+                            )));
+                        }
+                    }
+                    if let Ok(resp) = client.get(health_url).send().await {
+                        if resp.status().is_success() {
+                            ready = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !ready {
+                    tracing::warn!("llama-server started but health check timed out on port 8080");
+                }
+            }
+
+            // Mark the request in-flight so the idle reaper cannot kill the
+            // server mid-stream; released right after the stream completes.
+            if let Some(handle) = server_guard.as_mut() {
+                handle.in_flight += 1;
+                handle.last_used = std::time::Instant::now();
+            }
+            drop(server_guard);
+
+            let result = Self::stream_openai_agent(
+                client,
+                native_messages,
+                model,
+                Some("dummy_key".to_string()),
+                Some("http://localhost:8080/v1/chat/completions"),
+                temperature,
+                0, // No token limit for local models
+                tools,
+                tx,
+                observability,
+            )
+            .await;
+
+            // Work with the model is done — the idle reaper may now unload it
+            // after LLAMA_IDLE_TIMEOUT to free RAM/VRAM.
+            let mut server_guard = llama_server.lock().await;
+            if let Some(handle) = server_guard.as_mut() {
+                handle.in_flight = handle.in_flight.saturating_sub(1);
+                handle.last_used = std::time::Instant::now();
+            }
+            drop(server_guard);
+
+            return result;
+        }
+
         let url = api_url.unwrap_or("http://localhost:11434/api/chat");
 
         let ollama_messages: Vec<OllamaMessage> = native_messages
@@ -1625,21 +1900,22 @@ impl AiBridge {
             }
         }
 
-        // Record usage and throughput from the final chunk (best-effort).
-        let (prompt_tokens, completion_tokens, duration_ns) = (
-            final_prompt_eval_count.unwrap_or(0),
-            final_eval_count.unwrap_or(0),
-            final_eval_duration.unwrap_or(0),
-        );
-        observability.record_tokens(prompt_tokens + completion_tokens);
-        let mut t = telemetry.lock();
-        t.last_model = Some(model.to_string());
-        let tps = (completion_tokens as f64) / (duration_ns as f64 / 1_000_000_000.0).max(0.001);
-        t.record_tps(tps);
-        let _ = saw_tool_call;
+        // Record token consumption and throughput from the final chunk.
+        let prompt_tokens = final_prompt_eval_count.unwrap_or(0);
+        let eval_tokens = final_eval_count.unwrap_or(0);
+        if prompt_tokens + eval_tokens > 0 {
+            observability.record_tokens(prompt_tokens + eval_tokens);
+        }
+        if let (Some(eval_count), Some(eval_duration)) = (final_eval_count, final_eval_duration) {
+            if eval_duration > 0 {
+                let tps = eval_count as f64 / (eval_duration as f64 / 1e9);
+                telemetry.lock().record_tps(tps);
+            }
+        }
+
+        let _ = tx.send(AgentStreamEvent::Finish { tool_calls: saw_tool_call }).await;
         Ok(())
     }
-
 
     pub async fn list_models(&self, provider: Provider) -> Result<Vec<String>, WeaveError> {
         let config = self.config.read().clone();
@@ -1808,6 +2084,42 @@ impl AiBridge {
                 }
 
                 // 2. Scan ~/Models/llama.cpp for .gguf files (including subdirectories)
+                let gguf_root = Self::get_local_models_dir();
+                if let Ok(entries) = std::fs::read_dir(&gguf_root) {
+                    for entry in entries.filter_map(Result::ok) {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            // Recurse one level into subdirectories
+                            if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                                let dir_name = entry.file_name();
+                                for sub_entry in sub_entries.filter_map(Result::ok) {
+                                    let sub_path = sub_entry.path();
+                                    if sub_path.extension().map(|e| e == "gguf").unwrap_or(false) {
+                                        if let Some(file_name) =
+                                            sub_path.file_name().and_then(|n| n.to_str())
+                                        {
+                                            if let Some(dir) = dir_name.to_str() {
+                                                models.push(format!("{}/{}", dir, file_name));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if path.extension().map(|e| e == "gguf").unwrap_or(false) {
+                            if let Some(name) = entry.file_name().to_str() {
+                                models.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+
+                if models.is_empty() {
+                    return Err(WeaveError::LocalLlmNotAvailable(
+                        "No local models found (checked Ollama and local models directory)"
+                            .to_string(),
+                    ));
+                }
+
                 Ok(models)
             }
         }
@@ -1817,5 +2129,59 @@ impl AiBridge {
         let mut config = self.config.write();
         *config = new_config;
         info!("AI configuration updated");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_mmproj_rejects_text_model() {
+        let temp_dir = std::env::temp_dir().join(format!("weave_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create dummy mmproj-BF16.gguf
+        let mmproj_path = temp_dir.join("mmproj-BF16.gguf");
+        std::fs::File::create(&mmproj_path).unwrap();
+
+        // Qwen2.5 Coder is a pure text model -> must return None
+        let result = AiBridge::find_mmproj(&temp_dir, "qwen2.5-coder-7b-instruct-q4_k_m.gguf");
+        assert!(
+            result.is_none(),
+            "Text model should not attach unrelated mmproj"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_mmproj_accepts_vision_model() {
+        let temp_dir = std::env::temp_dir().join(format!("weave_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mmproj_path = temp_dir.join("mmproj-BF16.gguf");
+        std::fs::File::create(&mmproj_path).unwrap();
+
+        // Qwen2-VL is a vision model -> should return mmproj
+        let result = AiBridge::find_mmproj(&temp_dir, "qwen2-vl-7b-instruct-q4_k_m.gguf");
+        assert_eq!(result, Some(mmproj_path));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_mmproj_matches_stem() {
+        let temp_dir = std::env::temp_dir().join(format!("weave_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let specific_mmproj = temp_dir.join("mmproj-qwen2.5-coder-7b.gguf");
+        std::fs::File::create(&specific_mmproj).unwrap();
+
+        // Model with explicit model-specific mmproj -> should return specific mmproj
+        let result = AiBridge::find_mmproj(&temp_dir, "qwen2.5-coder-7b.gguf");
+        assert_eq!(result, Some(specific_mmproj));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

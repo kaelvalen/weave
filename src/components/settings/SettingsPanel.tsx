@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ViewHeader } from '@/components/ui/ViewHeader';
-import { LocalModelsSection } from '@/components/settings/LocalModelsSection';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
@@ -415,7 +414,7 @@ export function SettingsPanel() {
 
                 <SectionCard
                   title="Local LLMs"
-                  desc="Connect to a local inference server (Ollama) and manage its models."
+                  desc="Configure your local models (Ollama/Llama.cpp)."
                 >
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium">Enable Local Models</span>
@@ -429,87 +428,21 @@ export function SettingsPanel() {
                       }
                     />
                   </div>
-                  <div className="space-y-4">
-                    <FieldLabel label="API URL">
-                      <Input
-                        value={config.ai.local.api_url || ''}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            ai: {
-                              ...config.ai,
-                              local: { ...config.ai.local, api_url: e.target.value },
-                            },
-                          })
-                        }
-                        placeholder="http://localhost:11434"
-                      />
-                    </FieldLabel>
-                    <LocalModelsSection onModelsChanged={() => useAppStore.getState().refreshConfig()} />
-                    <div className="grid grid-cols-2 gap-4">
-                      <FieldLabel label="Temperature">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="2"
-                          value={String(config.ai.local.temperature)}
-                          onChange={(e) =>
-                            setConfig({
-                              ...config,
-                              ai: {
-                                ...config.ai,
-                                local: {
-                                  ...config.ai.local,
-                                  temperature: parseFloat(e.target.value) || 0,
-                                },
-                              },
-                            })
-                          }
-                        />
-                      </FieldLabel>
-                      <FieldLabel label="Context Length">
-                        <Input
-                          type="number"
-                          min="512"
-                          value={String(config.ai.local.context_length)}
-                          onChange={(e) =>
-                            setConfig({
-                              ...config,
-                              ai: {
-                                ...config.ai,
-                                local: {
-                                  ...config.ai.local,
-                                  context_length: parseInt(e.target.value, 10) || 0,
-                                },
-                              },
-                            })
-                          }
-                        />
-                      </FieldLabel>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">Native Tool Calling</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          Send native tools to the local endpoint (verified for Qwen3.5 on
-                          Ollama). Disable for models that reply with XML text instead.
-                        </p>
-                      </div>
-                      <Switch
-                        checked={config.ai.local.use_native_tools}
-                        onCheckedChange={(c) =>
-                          setConfig({
-                            ...config,
-                            ai: {
-                              ...config.ai,
-                              local: { ...config.ai.local, use_native_tools: c },
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+                  <FieldLabel label="API URL">
+                    <Input
+                      value={config.ai.local.api_url || ''}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          ai: {
+                            ...config.ai,
+                            local: { ...config.ai.local, api_url: e.target.value },
+                          },
+                        })
+                      }
+                      placeholder="http://localhost:11434/api/generate"
+                    />
+                  </FieldLabel>
                 </SectionCard>
               </TabsContent>
 
