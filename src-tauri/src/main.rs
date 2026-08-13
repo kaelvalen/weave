@@ -75,6 +75,11 @@ fn main() {
             weave::commands::runtime::trace_get,
             weave::commands::runtime::runtime_get_model_stats,
             weave::commands::models::get_system_stats,
+            weave::commands::local::local_server_status,
+            weave::commands::local::local_server_start,
+            weave::commands::local::local_server_stop,
+            weave::commands::local::local_list_models,
+            weave::commands::local::local_pull_model,
             weave::commands::models::local_model_switch,
         ])
         .run(tauri::generate_context!())

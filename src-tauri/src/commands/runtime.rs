@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
 use crate::utils::config::OLLAMA_DEFAULT_URL;
+use crate::commands::local::ollama_base_url;
 use crate::utils::errors::WeaveError;
 use crate::AppState;
 use runtime_kernel::observability::ObservabilityMetrics;
@@ -171,20 +172,6 @@ pub fn trace_get(app: AppHandle, goal_id: String) -> Result<Vec<RuntimeEvent>, W
         .into_iter()
         .filter(|e| e.goal_id.as_deref() == Some(goal_id.as_str()))
         .collect())
-}
-
-fn ollama_base_url(raw_url: &str) -> String {
-    let trimmed = raw_url.trim_end_matches('/');
-    if trimmed.ends_with("/api/chat") {
-        return trimmed.trim_end_matches("/api/chat").to_string();
-    }
-    if trimmed.ends_with("/api/generate") {
-        return trimmed.trim_end_matches("/api/generate").to_string();
-    }
-    if trimmed.ends_with("/api") {
-        return trimmed.trim_end_matches("/api").to_string();
-    }
-    trimmed.to_string()
 }
 
 #[tauri::command]
