@@ -483,9 +483,12 @@ export const ChatMessage = React.memo(function ChatMessage({
       )}
 
       {/* Execution section — live plan + step timeline sourced from runtime events.
-          Only rendered when the message actually executed tools; plain-chat
-          turns must not show an empty "No execution steps yet" trace box. */}
-      {(hasPluginCalls || hasRuntimeExecution) && (
+          Mutually exclusive with the metadata accordion below: the trace box
+          only renders when runtime events exist for this goal, otherwise the
+          empty "No execution steps yet" box appeared next to the accordion
+          (events are in-memory, so after a restart or before the first event
+          arrives they are absent and the box was pure noise). */}
+      {hasRuntimeExecution && (
         <div className="my-3">
           <GoalTrace goalId={message.id} defaultOpen={isStreaming} />
         </div>
