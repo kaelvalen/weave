@@ -38,6 +38,12 @@ pub async fn chat_send_message(
 ) -> Result<String, WeaveError> {
     info!("Chat message received: {} (model: {:?})", message, model);
 
+    // A previous Stop (chat_abort_generation) leaves the shared abort flag
+    // set; it must be cleared for THIS generation or the agent loop and the
+    // event-forwarding loop below both break immediately and the chat goes
+    // permanently silent after the first interrupt.
+    app_state.abort_generation.store(false, Ordering::SeqCst);
+
     let mut user_msg = ChatMessage::new_user(message.clone());
     user_msg.images = images.clone();
     let _msg_id = user_msg.id.clone();
