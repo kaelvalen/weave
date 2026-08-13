@@ -104,6 +104,10 @@ pub struct McpServerConfig {
     pub authorization_endpoint: Option<String>,
     #[serde(default)]
     pub token_endpoint: Option<String>,
+    /// OAuth scopes advertised by the protected resource. The authorization
+    /// URL requests these instead of inventing a provider-specific scope.
+    #[serde(default)]
+    pub oauth_scopes: Vec<String>,
     #[serde(default)]
     pub access_token: Option<String>,
     #[serde(default)]

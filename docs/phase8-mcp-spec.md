@@ -28,11 +28,12 @@ document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 > the browser opens, state round-trip verified, code exchanged at the token
 > endpoint, tokens persisted to `~/.weave/config.json`, tools re-listed and
 > re-registered with the access token. `mcp_oauth_refresh` covers the
-> refresh-token grant. Hermetic tests in `mcp_client.rs` (RFC 7636 shape,
-> header parsing, discovery, code/refresh exchanges against a one-shot mock
-> AS). Not yet wired: automatic refresh-on-401 inside `tools/call` (the
-> synchronous executor has no config/AS handle), and self-hosting of the
-> CIMD document (env override `WEAVE_CIMD_CLIENT_ID` for now).
+> refresh-token grant. Protected-resource `scopes_supported` are preserved
+> and requested instead of hardcoding `scope=mcp`. Hermetic tests in
+> `mcp_client.rs` (RFC 7636 shape, header parsing, discovery, scope selection,
+> code/refresh exchanges against a one-shot mock AS). Not yet wired:
+> automatic refresh-on-401 inside `tools/call` (the synchronous executor has
+> no config/AS handle), and self-hosting of the CIMD document.
 >
 > **Addendum 2026-08-13 — RFC 9728 resolution bug found & fixed via live
 > failure:** the first real OAuth-requiring connection (Puter MCP) blew up
@@ -66,11 +67,14 @@ document is explicitly approved**, same discipline as `phase1-spine-spec.md`
 > a registered client:** the authorize URL GitHub produced 404'd — GitHub's
 > AS does not implement CIMD and rejects URL-style `client_id`s, and its
 > consent flow requires an OAuth App whose callback URL matches exactly.
-> The client identity and redirect URI are now overridable
-> (`WEAVE_CIMD_CLIENT_ID`, `WEAVE_OAUTH_REDIRECT_URI`); the loopback
-> listener binds the redirect URI's own port instead of a hardcoded one,
-> so a registered GitHub OAuth App (callback `http://127.0.0.1:34987/
-> callback`) works end to end. Setup steps: README "GitHub-specific OAuth".
+> Weave now resolves provider-aware credentials: GitHub client ID and
+> secret are injected at build time with `WEAVE_GITHUB_OAUTH_CLIENT_ID` /
+> `WEAVE_GITHUB_OAUTH_CLIENT_SECRET` and can be overridden at runtime only
+> for local development. The token exchange sends `client_secret` and
+> `Accept: application/json`, and the loopback listener binds the redirect
+> URI's own port. End users therefore only click **Authorize**; they never
+> configure env vars. The release pipeline still needs a registered Weave
+> OAuth App (README "GitHub-specific OAuth").
 
 Phase 8.0 (Ollama `use_native_tools` probe) close-out: see
 `phase1-spine-spec.md` §8. The 2026-08-11 probe result was re-verified on

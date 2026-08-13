@@ -275,20 +275,27 @@ double-`.well-known` bug (2026-08-13). Token refresh
 tool call is not yet wired. Note: Weave does not yet host its CIMD
 metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and see
 `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite for
-servers that strictly validate CIMD.
+servers that strictly validate CIMD. Protected-resource `scopes_supported`
+are carried into the authorization request; Weave no longer invents a
+provider scope such as `mcp` when the server advertises real scopes.
 
 **GitHub-specific OAuth:** GitHub's authorization server does **not**
-implement CIMD — it rejects URL-style `client_id`s (the authorize URL
-404s) and requires a registered OAuth App whose callback URL matches
-exactly. To authorize a server backed by GitHub's AS (e.g. GitHub MCP):
+implement CIMD — it rejects URL-style `client_id`s — and requires a
+registered OAuth App whose callback URL matches exactly. A release build
+must embed Weave's own GitHub OAuth App credentials at build time:
 
-1. `github.com → Settings → Developer settings → OAuth Apps → New OAuth App`
-   with Authorization callback URL `http://127.0.0.1:34987/callback`
-   (or your `WEAVE_OAUTH_REDIRECT_URI`).
-2. Start Weave with the app's client id (e.g. `Iv1.xxxx`):
-   `WEAVE_CIMD_CLIENT_ID=Iv1.xxxx WEAVE_OAUTH_REDIRECT_URI=http://127.0.0.1:34987/callback`.
-   The loopback listener binds whatever port the redirect URI declares.
-3. Add the server and click **Authorize** (card or dialog).
+```sh
+WEAVE_GITHUB_OAUTH_CLIENT_ID=Iv1.xxxx \
+WEAVE_GITHUB_OAUTH_CLIENT_SECRET=... \
+npm run tauri:build
+```
+
+`option_env!` embeds these values in the release artifact, matching the
+official GitHub MCP server's distribution model. Runtime env overrides are
+kept only for local developer builds. End users do **not** set env vars or
+create OAuth Apps: they add the server and click **Authorize**. The loopback
+callback defaults to `http://127.0.0.1:34987/callback`; the OAuth App must
+register that exact callback.
 
 **Every MCP-sourced capability requires approval by default**, the same as
 builtin `SENSITIVE_CAPS`/`DESTRUCTIVE_CAPS`, but for a different reason:
@@ -302,9 +309,11 @@ Server connection state — URL, discovered auth endpoints, tokens, and the
 allowlist — lives in `~/.weave/config.json` alongside the existing provider
 API keys: same plaintext-file storage this project already uses (no OS
 keychain integration), extended rather than duplicated into a second store.
-OAuth 2.1/Client ID Metadata Document (CIMD) authorization is scoped for a
-follow-up — Weave does not yet run the CIMD flow, so only MCP servers that
-require no authentication are connectable today.
+OAuth 2.1/CIMD authorization and the browser callback flow are implemented.
+The release pipeline still needs a registered Weave GitHub OAuth App to
+populate the build-time credentials above; a source build without those
+credentials fails with an actionable configuration error instead of opening
+a guaranteed GitHub 404 page.
 
 Full design record: `docs/phase8-mcp-spec.md`.
 
@@ -318,8 +327,9 @@ Full design record: `docs/phase8-mcp-spec.md`.
 - [x] Frontend Vitest scaffolding and security regression coverage
 - [ ] Phase 6 UX audit with live screens and reproduction evidence
 - [x] MCP (2026-07-28) integration: registry, default-gated approvals, single-round-trip tool calls
-- [ ] MCP real-server validation against a live 2026-07-28 server (Phase 8.4 — not yet run)
-- [ ] MCP OAuth 2.1/CIMD authorization flow (unauthenticated servers only today)
+- [x] MCP real-server validation against a live 2026-07-28 server (Phase 8.4)
+- [x] MCP OAuth 2.1/CIMD authorization flow and browser callback
+- [ ] Release artifact with Weave's registered GitHub OAuth App credentials
 
 ## Contributing
 

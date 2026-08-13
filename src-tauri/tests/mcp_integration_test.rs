@@ -327,14 +327,14 @@ async fn live_oauth_challenge_resolution_against_puter_mcp() {
     let as_base = mcp_client::resolve_authorization_server(&challenge)
         .await
         .expect("RFC 9728 metadata must yield an authorization server");
-    println!("resolved AS base: {}", as_base);
+    println!("resolved AS base: {}", as_base.base_url);
     assert!(
-        as_base.contains("puter"),
+        as_base.base_url.contains("puter"),
         "authorization_servers[0] should name Puter's AS, got: {}",
-        as_base
+        as_base.base_url
     );
 
-    let md = mcp_client::discover_authorization_server(&as_base)
+    let md = mcp_client::discover_authorization_server(&as_base.base_url)
         .await
         .expect("RFC 8414 discovery on the resolved AS base");
     println!("discovered: {:?}", md);

@@ -230,15 +230,25 @@ fn auth_challenge_from_headers(
     None
 }
 
-/// Fetches an RFC 9728 protected-resource metadata document and returns the
-/// first authorization-server identifier it declares. Per RFC 9728 §3,
-/// `authorization_servers` is an array of AS identifiers (strings); a
-/// server may also be bare (no `authorization_servers`) — then it must be
-/// readable via RFC 8414 at its own `/.well-known/oauth-authorization-server`,
-/// so the metadata URL itself is returned.
+#[derive(Debug, Clone, Default)]
+pub struct ProtectedResourceMetadata {
+    pub authorization_servers: Vec<String>,
+    pub scopes_supported: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedAuthorizationServer {
+    pub base_url: String,
+    pub scopes_supported: Vec<String>,
+}
+
+/// Fetches an RFC 9728 protected-resource metadata document. Per RFC 9728
+/// §3, `authorization_servers` is an array of AS identifiers (strings), and
+/// `scopes_supported` describes the scopes the resource expects from the
+/// resulting access token.
 pub async fn fetch_protected_resource_metadata(
     metadata_url: &str,
-) -> Result<String, WeaveError> {
+) -> Result<ProtectedResourceMetadata, WeaveError> {
     let client = build_client()?;
     let response = client
         .get(metadata_url)
@@ -257,7 +267,7 @@ pub async fn fetch_protected_resource_metadata(
         .await
         .map_err(|e| WeaveError::Http(format!("protected-resource metadata at {} was not JSON: {}", metadata_url, e)))?;
 
-    let mut servers: Vec<String> = payload
+    let servers: Vec<String> = payload
         .get("authorization_servers")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -266,12 +276,19 @@ pub async fn fetch_protected_resource_metadata(
                 .collect()
         })
         .unwrap_or_default();
-    if let Some(first) = servers.first() {
-        return Ok(first.clone());
-    }
-    // RFC 9728: an empty/absent authorization_servers means the resource
-    // server itself serves AS metadata at its own discovery endpoint.
-    Ok(metadata_url.to_string())
+    let scopes_supported = payload
+        .get("scopes_supported")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ProtectedResourceMetadata {
+        authorization_servers: servers,
+        scopes_supported,
+    })
 }
 
 /// Resolves an `AuthChallenge` to the authorization-server base URL:
@@ -279,11 +296,24 @@ pub async fn fetch_protected_resource_metadata(
 /// first (RFC 9728), and the declared authorization server is used.
 pub async fn resolve_authorization_server(
     challenge: &AuthChallenge,
-) -> Result<String, WeaveError> {
+) -> Result<ResolvedAuthorizationServer, WeaveError> {
     match challenge {
-        AuthChallenge::Direct(url) => Ok(url.clone()),
+        AuthChallenge::Direct(url) => Ok(ResolvedAuthorizationServer {
+            base_url: url.clone(),
+            scopes_supported: Vec::new(),
+        }),
         AuthChallenge::ResourceMetadata(metadata_url) => {
-            fetch_protected_resource_metadata(metadata_url).await
+            let metadata = fetch_protected_resource_metadata(metadata_url).await?;
+            Ok(ResolvedAuthorizationServer {
+                // RFC 9728 permits the resource server to serve its own
+                // authorization metadata when this list is omitted.
+                base_url: metadata
+                    .authorization_servers
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| metadata_url.to_string()),
+                scopes_supported: metadata.scopes_supported,
+            })
         }
     }
 }
@@ -475,17 +505,91 @@ pub fn oauth_redirect_uri() -> String {
         .unwrap_or_else(|_| DEFAULT_OAUTH_REDIRECT_URI.to_string())
 }
 
+const BUILTIN_GITHUB_OAUTH_CLIENT_ID: Option<&str> =
+    option_env!("WEAVE_GITHUB_OAUTH_CLIENT_ID");
+const BUILTIN_GITHUB_OAUTH_CLIENT_SECRET: Option<&str> =
+    option_env!("WEAVE_GITHUB_OAUTH_CLIENT_SECRET");
+
 /// Default CIMD client identity: `client_id` as an HTTPS URL pointing at a
 /// static metadata document, per draft-ietf-oauth-client-id-metadata-document.
 /// Weave does not yet host this document — per phase8-mcp-spec.md Part 2 §5
 /// it is a documented manual prerequisite for servers that strictly validate
-/// CIMD. Override with `WEAVE_CIMD_CLIENT_ID` when hosting your own — or
-/// when the authorization server does not support CIMD at all and requires
-/// a registered plain client_id (e.g. GitHub: register an OAuth App whose
-/// redirect URI equals `oauth_redirect_uri()` and put its client id here).
+/// CIMD. GitHub is handled separately by `oauth_client_config`: its official
+/// authorization server requires a registered OAuth App client.
 pub fn cimd_client_id() -> String {
     std::env::var("WEAVE_CIMD_CLIENT_ID")
         .unwrap_or_else(|_| "https://weave.app/mcp/client-metadata.json".to_string())
+}
+
+#[derive(Debug, Clone)]
+pub struct OAuthClientConfig {
+    pub client_id: String,
+    pub client_secret: Option<String>,
+}
+
+fn configured_credential(runtime_name: &str, built_in: Option<&str>) -> Option<String> {
+    std::env::var(runtime_name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| built_in.map(str::to_string))
+}
+
+fn is_github_authorization_server(md: &AuthorizationServerMetadata) -> bool {
+    [
+        md.issuer.as_deref(),
+        md.authorization_endpoint.as_deref(),
+        md.token_endpoint.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(|value| reqwest::Url::parse(value).ok())
+    .any(|url| url.host_str() == Some("github.com"))
+}
+
+/// Resolves credentials for the authorization server. GitHub credentials
+/// are build-time inputs for release artifacts, not runtime inputs for end
+/// users. Runtime env overrides remain available for local development.
+pub fn oauth_client_config(
+    md: &AuthorizationServerMetadata,
+) -> Result<OAuthClientConfig, WeaveError> {
+    if is_github_authorization_server(md) {
+        let client_id = configured_credential(
+            "WEAVE_GITHUB_OAUTH_CLIENT_ID",
+            BUILTIN_GITHUB_OAUTH_CLIENT_ID,
+        )
+        .or_else(|| configured_credential("WEAVE_CIMD_CLIENT_ID", None))
+        .ok_or_else(|| {
+            WeaveError::ConfigError(
+                "Weave was built without GitHub OAuth credentials. The release must embed a registered GitHub OAuth App client ID via WEAVE_GITHUB_OAUTH_CLIENT_ID; users should only need to click Authorize.".to_string(),
+            )
+        })?;
+        let client_secret = configured_credential(
+            "WEAVE_GITHUB_OAUTH_CLIENT_SECRET",
+            BUILTIN_GITHUB_OAUTH_CLIENT_SECRET,
+        )
+        .or_else(|| configured_credential("WEAVE_OAUTH_CLIENT_SECRET", None))
+        .ok_or_else(|| {
+            WeaveError::ConfigError(
+                "Weave was built without the GitHub OAuth App client secret. Embed WEAVE_GITHUB_OAUTH_CLIENT_SECRET in the release build; do not ask end users for it.".to_string(),
+            )
+        })?;
+        return Ok(OAuthClientConfig {
+            client_id,
+            client_secret: Some(client_secret),
+        });
+    }
+
+    Ok(OAuthClientConfig {
+        client_id: cimd_client_id(),
+        client_secret: configured_credential(
+            "WEAVE_OAUTH_CLIENT_SECRET",
+            option_env!("WEAVE_OAUTH_CLIENT_SECRET"),
+        ),
+    })
+}
+
+pub fn oauth_client_id(md: &AuthorizationServerMetadata) -> Result<String, WeaveError> {
+    Ok(oauth_client_config(md)?.client_id)
 }
 
 /// PKCE (RFC 7636) pair, S256 challenge.
@@ -650,11 +754,17 @@ pub fn authorization_url(
     })?;
     let mut url = reqwest::Url::parse(endpoint)
         .map_err(|e| WeaveError::Http(format!("invalid authorization endpoint: {}", e)))?;
+    let client = oauth_client_config(md)?;
+    let scope = if md.scopes_supported.is_empty() {
+        "mcp".to_string()
+    } else {
+        md.scopes_supported.join(" ")
+    };
     url.query_pairs_mut()
         .append_pair("response_type", "code")
-        .append_pair("client_id", &cimd_client_id())
+        .append_pair("client_id", &client.client_id)
         .append_pair("redirect_uri", &oauth_redirect_uri())
-        .append_pair("scope", "mcp")
+        .append_pair("scope", &scope)
         .append_pair("state", state)
         .append_pair("code_challenge", &pkce.code_challenge)
         .append_pair("code_challenge_method", "S256");
@@ -675,15 +785,21 @@ pub struct TokenSet {
 
 async fn token_request(
     md: &AuthorizationServerMetadata,
+    client: &OAuthClientConfig,
     form: &[(&str, &str)],
 ) -> Result<TokenSet, WeaveError> {
     let endpoint = md.token_endpoint.as_deref().ok_or_else(|| {
         WeaveError::Http("token endpoint not discovered".to_string())
     })?;
-    let client = build_client()?;
-    let response = client
+    let mut fields = form.to_vec();
+    if let Some(secret) = client.client_secret.as_deref() {
+        fields.push(("client_secret", secret));
+    }
+    let http_client = build_client()?;
+    let response = http_client
         .post(endpoint)
-        .form(form)
+        .header("Accept", "application/json")
+        .form(&fields)
         .send()
         .await
         .map_err(|e| WeaveError::Http(format!("token request to {} failed: {}", endpoint, e)))?;
@@ -708,13 +824,15 @@ pub async fn exchange_code(
     code: &str,
     pkce: &PkcePair,
 ) -> Result<TokenSet, WeaveError> {
+    let client = oauth_client_config(md)?;
     token_request(
         md,
+        &client,
         &[
             ("grant_type", "authorization_code"),
             ("code", code),
             ("redirect_uri", &oauth_redirect_uri()),
-            ("client_id", &cimd_client_id()),
+            ("client_id", &client.client_id),
             ("code_verifier", &pkce.code_verifier),
         ],
     )
@@ -726,12 +844,14 @@ pub async fn refresh_access_token(
     md: &AuthorizationServerMetadata,
     refresh_token: &str,
 ) -> Result<TokenSet, WeaveError> {
+    let client = oauth_client_config(md)?;
     token_request(
         md,
+        &client,
         &[
             ("grant_type", "refresh_token"),
             ("refresh_token", refresh_token),
-            ("client_id", &cimd_client_id()),
+            ("client_id", &client.client_id),
         ],
     )
     .await
@@ -976,6 +1096,23 @@ mod tests {
     }
 
     #[test]
+    fn authorization_url_uses_protected_resource_scopes() {
+        let md = AuthorizationServerMetadata {
+            issuer: Some("https://as.example".into()),
+            authorization_endpoint: Some("https://as.example/authorize".into()),
+            token_endpoint: Some("https://as.example/token".into()),
+            scopes_supported: vec!["repo".into(), "read:org".into()],
+        };
+        let url = authorization_url(&md, "state-42", &new_pkce()).unwrap();
+        let parsed = reqwest::Url::parse(&url).unwrap();
+        let scope = parsed
+            .query_pairs()
+            .find(|(key, _)| key == "scope")
+            .map(|(_, value)| value.to_string());
+        assert_eq!(scope.as_deref(), Some("repo read:org"));
+    }
+
+    #[test]
     fn auth_challenge_parses_mcp_authorization_header() {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("mcp-authorization", "https://auth.example/oauth".parse().unwrap());
@@ -1057,7 +1194,8 @@ mod tests {
                 200,
                 serde_json::json!({
                     "resource": "https://rs.example/",
-                    "authorization_servers": ["https://as.example"]
+                    "authorization_servers": ["https://as.example"],
+                    "scopes_supported": ["repo", "read:org"]
                 }),
             )
         })
@@ -1065,16 +1203,17 @@ mod tests {
         let as_url = fetch_protected_resource_metadata(&format!("{}/protected-resource-metadata", base))
             .await
             .unwrap();
-        assert_eq!(as_url, "https://as.example");
+        assert_eq!(as_url.authorization_servers, vec!["https://as.example"]);
+        assert_eq!(as_url.scopes_supported, vec!["repo", "read:org"]);
     }
 
     #[tokio::test]
     async fn fetch_protected_resource_metadata_falls_back_to_bare_server() {
         let base = spawn_mock(|_, _| (200, serde_json::json!({"resource": "https://rs.example/"}))).await;
-        let as_url = fetch_protected_resource_metadata(&base).await.unwrap();
+        let metadata = fetch_protected_resource_metadata(&base).await.unwrap();
         // No authorization_servers declared: RFC 9728 bare-server form —
         // the resource server itself serves AS metadata.
-        assert_eq!(as_url, base);
+        assert!(metadata.authorization_servers.is_empty());
     }
 
     #[tokio::test]
@@ -1088,19 +1227,19 @@ mod tests {
         ))
         .await
         .unwrap();
-        assert_eq!(direct, "https://as.example");
+        assert_eq!(direct.base_url, "https://as.example");
         let via_metadata = resolve_authorization_server(&AuthChallenge::ResourceMetadata(
             format!("{}/meta", meta_base),
         ))
         .await
         .unwrap();
-        assert_eq!(via_metadata, "https://as.example");
+        assert_eq!(via_metadata.base_url, "https://as.example");
     }
 
     /// One-shot mock HTTP server for the RFC 8414 / token-endpoint tests.
     /// Returns the base URL; the spawned task handles exactly one request.
     async fn spawn_mock(
-        mut respond: impl Fn(reqwest::Method, &str) -> (u16, Value) + Send + 'static,
+        respond: impl Fn(reqwest::Method, &str) -> (u16, Value) + Send + 'static,
     ) -> String {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

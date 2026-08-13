@@ -105,20 +105,28 @@ pub async fn mcp_add_server(
         Err(e) => return Err(e),
     };
 
-    let (issuer, authorization_endpoint, token_endpoint) = match &auth_required {
+    let (issuer, authorization_endpoint, token_endpoint, oauth_scopes) = match &auth_required {
         Some(challenge) => {
             // RFC 9728: a resource_metadata URL is a metadata *document*,
             // not the AS base — resolve it before RFC 8414 discovery.
-            let auth_server =
+            let resolved =
                 mcp_client::resolve_authorization_server(challenge).await?;
-            let md = mcp_client::discover_authorization_server(&auth_server).await?;
+            let mut md = mcp_client::discover_authorization_server(&resolved.base_url).await?;
+            if md.scopes_supported.is_empty() {
+                md.scopes_supported = resolved.scopes_supported;
+            }
             info!(
                 "MCP server {} requires OAuth; discovered authorization server {:?}",
                 display_name, md.issuer
             );
-            (md.issuer, md.authorization_endpoint, md.token_endpoint)
+            (
+                md.issuer,
+                md.authorization_endpoint,
+                md.token_endpoint,
+                md.scopes_supported,
+            )
         }
-        None => (None, None, None),
+        None => (None, None, None, Vec::new()),
     };
 
     let base_id = slugify(&display_name);
@@ -160,6 +168,7 @@ pub async fn mcp_add_server(
                 issuer,
                 authorization_endpoint,
                 token_endpoint,
+                oauth_scopes,
                 ..Default::default()
             },
         );
@@ -341,11 +350,25 @@ pub async fn mcp_oauth_authorize(
             cfg.name
         )));
     }
+    // Older config entries were created before protected-resource scopes
+    // were persisted. Re-probe once so an already-added server (including
+    // the current GitHub entry) does not fall back to the invented `mcp`
+    // scope after the app is upgraded.
+    let mut oauth_scopes = cfg.oauth_scopes.clone();
+    if oauth_scopes.is_empty() {
+        if let Err(WeaveError::AuthRequired(challenge)) =
+            mcp_client::discover(&cfg.url, None).await
+        {
+            oauth_scopes = mcp_client::resolve_authorization_server(&challenge)
+                .await?
+                .scopes_supported;
+        }
+    }
     let md = mcp_client::AuthorizationServerMetadata {
         issuer: cfg.issuer.clone(),
         authorization_endpoint: cfg.authorization_endpoint.clone(),
         token_endpoint: cfg.token_endpoint.clone(),
-        scopes_supported: Vec::new(),
+        scopes_supported: oauth_scopes.clone(),
     };
 
     let pkce = mcp_client::new_pkce();
@@ -382,7 +405,7 @@ pub async fn mcp_oauth_authorize(
     info!(
         "Opening OAuth authorization page for {} (client_id={}): {}",
         cfg.name,
-        mcp_client::cimd_client_id(),
+        mcp_client::oauth_client_id(&md)?,
         authorization_url
     );
     app.shell().open(&authorization_url, None).map_err(|e| {
@@ -402,7 +425,7 @@ pub async fn mcp_oauth_authorize(
     .await
     .map_err(|_| {
         WeaveError::PluginError(format!(
-            "OAuth authorization timed out after 120s — no redirect received. If the browser showed an error (e.g. GitHub 404), verify the client_id in the opened URL matches a registered OAuth App (WEAVE_CIMD_CLIENT_ID): {}",
+            "OAuth authorization timed out after 120s — no redirect received. If the browser showed an error, the release may lack its built-in OAuth client credentials: {}",
             authorization_url
         ))
     })??;
@@ -419,6 +442,7 @@ pub async fn mcp_oauth_authorize(
     {
         let mut config = app_state.config.write();
         if let Some(server) = config.mcp_servers.get_mut(&server_id) {
+            server.oauth_scopes = oauth_scopes.clone();
             server.access_token = Some(tokens.access_token.clone());
             server.refresh_token = tokens.refresh_token.clone();
             server.token_expires_at = tokens
@@ -476,7 +500,7 @@ pub async fn mcp_oauth_refresh(
         issuer: cfg.issuer.clone(),
         authorization_endpoint: cfg.authorization_endpoint.clone(),
         token_endpoint: cfg.token_endpoint.clone(),
-        scopes_supported: Vec::new(),
+        scopes_supported: cfg.oauth_scopes.clone(),
     };
 
     let tokens = mcp_client::refresh_access_token(&md, &refresh_token).await?;
