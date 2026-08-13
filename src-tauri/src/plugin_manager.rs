@@ -21,6 +21,7 @@ use crate::plugins::sqlite_plugin::SqlitePlugin;
 use crate::plugins::sys_plugin::SysPlugin;
 use crate::plugins::web_plugin::WebPlugin;
 use crate::plugins::workflow_plugin::WorkflowPlugin;
+use crate::utils::config::McpServerConfig;
 use crate::utils::errors::WeaveError;
 
 pub struct PluginManager {
@@ -167,6 +168,64 @@ impl PluginManager {
 
     pub fn mcp_tool_cache(&self) -> Arc<McpToolCache> {
         self.mcp_tool_cache.clone()
+    }
+
+    /// Re-register configured MCP servers after a restart. `add_mcp_server`
+    /// is otherwise only reachable through the `mcp_add_server` Tauri
+    /// command, so without this the backend registry has no MCP plugin,
+    /// executor, or tools after an app restart — the model silently loses
+    /// its whole MCP tool surface and falls back to builtins.
+    ///
+    /// Best-effort per server, on a dedicated thread (network call): a
+    /// server whose tool list can't be fetched (no network, expired token)
+    /// registers with zero tools and stays re-authorizable/refreshable.
+    pub fn restore_mcp_servers(self: &Arc<Self>, servers: &HashMap<String, McpServerConfig>) {
+        for (server_id, cfg) in servers {
+            if !cfg.enabled {
+                continue;
+            }
+            let this = self.clone();
+            let server_id = server_id.clone();
+            let name = cfg.name.clone();
+            let url = cfg.url.clone();
+            let token = cfg.access_token.clone();
+            std::thread::spawn(move || {
+                let rt = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        warn!("MCP restore: cannot build runtime for {}: {}", server_id, e);
+                        return;
+                    }
+                };
+                let listed = match &token {
+                    Some(t) => rt.block_on(mcp_client::list_tools(&url, Some(t))),
+                    None => Ok(mcp_client::ToolsListResult {
+                        tools: Vec::new(),
+                        ttl_ms: None,
+                    }),
+                };
+                let listed = match listed {
+                    Ok(l) => l,
+                    Err(e) => {
+                        warn!(
+                            "MCP restore: could not list tools for {} ({}): {} — registering with zero tools",
+                            name, url, e
+                        );
+                        mcp_client::ToolsListResult {
+                            tools: Vec::new(),
+                            ttl_ms: None,
+                        }
+                    }
+                };
+                this.mcp_tool_cache
+                    .store(&server_id, listed.clone());
+                this.add_mcp_server(&server_id, &name, &url, token, listed.tools);
+                info!("Restored MCP server: {} ({})", name, server_id);
+            });
+        }
     }
 
     pub fn plugin_dir(&self) -> PathBuf {

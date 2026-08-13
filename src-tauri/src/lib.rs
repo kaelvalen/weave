@@ -95,6 +95,7 @@ impl AppState {
         });
 
         let _ = plugin_manager.discover();
+        plugin_manager.restore_mcp_servers(&config.mcp_servers);
 
         info!("Weave AI Execution Kernel Platform state initialized successfully");
 
