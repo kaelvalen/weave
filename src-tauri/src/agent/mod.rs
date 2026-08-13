@@ -30,6 +30,7 @@ use runtime_kernel::event_bus::EventBus;
 use runtime_kernel::event_store::EventSourcingStore;
 use runtime_kernel::execution_context::ExecutionContext;
 use runtime_kernel::observability::Observability;
+use runtime_kernel::runtime_event::{RuntimeEvent, RuntimeEventKind};
 
 /// Registry of tool calls currently awaiting user approval. The agent loop
 /// registers a oneshot receiver per pending call; `chat_approve_tool_call`
@@ -391,7 +392,7 @@ impl AgentLoop {
                         }
                         ApprovalDecision::Approved => {
                             info!("User approved tool call {}", call.call_id);
-                            self.execute_call(plugin_id.clone(), call, &session_id)
+                            self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id)
                         }
                     };
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
@@ -411,7 +412,7 @@ impl AgentLoop {
                         .await;
                     outcomes.push(outcome);
                 } else {
-                    let outcome = self.execute_call(plugin_id.clone(), call, &session_id);
+                    let outcome = self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id);
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
                     let _ = event_tx
                         .send(AgentEvent::ToolCall {
@@ -456,12 +457,58 @@ impl AgentLoop {
         plugin_id: String,
         call: &AgentToolCall,
         session_id: &str,
+        goal_id: &str,
     ) -> CallOutcome {
+        // Publish runtime step events (StepStarted/StepSucceeded/Failed) so
+        // chat-driven tool calls show up in the execution trace — the
+        // standalone plugin_execute path already does this, the agent loop
+        // did not, which left the GoalTrace "STEPS" section permanently
+        // empty for chat turns.
+        let step_id = call.call_id.clone();
+        let mut start = RuntimeEvent::new(
+            RuntimeEventKind::StepStarted,
+            step_id.clone(),
+            format!("Executing {}::{}", plugin_id, call.capability),
+        );
+        start.goal_id = Some(goal_id.to_string());
+        start.plugin_id = Some(plugin_id.clone());
+        start.capability = Some(call.capability.clone());
+        start.params = Some(truncate_value(&call.args));
+        self.event_bus.publish_runtime(start);
+
+        let started = std::time::Instant::now();
         let ctx = self.create_execution_context(session_id);
-        match self
+        let result = self
             .plugin_manager
-            .execute_capability(&plugin_id, &call.capability, call.args.clone(), &ctx)
-        {
+            .execute_capability(&plugin_id, &call.capability, call.args.clone(), &ctx);
+        let latency_ms = started.elapsed().as_millis() as u64;
+
+        self.observability
+            .record_tool_execution(&call.capability, latency_ms, result.is_ok());
+
+        let mut end = RuntimeEvent::new(
+            if result.is_ok() {
+                RuntimeEventKind::StepSucceeded
+            } else {
+                RuntimeEventKind::StepFailed
+            },
+            step_id.clone(),
+            match &result {
+                Ok(_) => format!("Executed {}::{}", plugin_id, call.capability),
+                Err(e) => format!("Failed {}::{}: {}", plugin_id, call.capability, e),
+            },
+        );
+        end.goal_id = Some(goal_id.to_string());
+        end.plugin_id = Some(plugin_id.clone());
+        end.capability = Some(call.capability.clone());
+        end.latency_ms = Some(latency_ms);
+        match &result {
+            Ok(output) => end.output = Some(truncate_value(output)),
+            Err(e) => end.error = Some(e.to_string()),
+        }
+        self.event_bus.publish_runtime(end);
+
+        match result {
             Ok(result) => CallOutcome::Success(result),
             Err(e) => {
                 warn!("Tool call {} ({}) failed: {}", call.call_id, call.capability, e);
@@ -523,6 +570,24 @@ fn outcome_to_result(outcome: &CallOutcome) -> Option<Value> {
         CallOutcome::Error(e) => Some(json!({"error": e})),
         CallOutcome::Rejected => Some(json!({"error": "User rejected the operation."})),
     }
+}
+
+/// Cap a tool input/output payload before publishing it as a runtime event,
+/// mirroring the standalone plugin_execute path's truncation.
+fn truncate_value(value: &Value) -> Value {
+    const MAX_BYTES: usize = 32 * 1024;
+    let text = match value {
+        Value::String(s) => s.clone(),
+        other => serde_json::to_string(other).unwrap_or_default(),
+    };
+    if text.len() <= MAX_BYTES {
+        return value.clone();
+    }
+    Value::String(format!(
+        "{}… [truncated {} bytes]",
+        &text[..MAX_BYTES],
+        text.len() - MAX_BYTES
+    ))
 }
 
 fn outcome_content(outcome: &CallOutcome) -> String {
