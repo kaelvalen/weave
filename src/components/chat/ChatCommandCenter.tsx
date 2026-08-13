@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChatStream } from '@/hooks/useChatStream';
+import { ApprovalBanner } from './ApprovalBanner';
 import { ExecutionPanel } from '@/components/execution/ExecutionPanel';
 import {
   PlusCircle,
@@ -370,6 +371,7 @@ export function ChatCommandCenter() {
         {/* Composer — pinned to the bottom once a conversation exists */}
         {hasMessages && (
           <div className="flex-shrink-0">
+            <ApprovalBanner />
             <ChatInput />
           </div>
         )}
