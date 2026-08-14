@@ -209,10 +209,18 @@ impl ShellPlugin {
             }
         }
         cmd.args(["--tmpfs", "/tmp"]);
-        // Scratch home inside the writable tmpfs: tools that need a
-        // writable $HOME get one that is ephemeral and never touches the
-        // host (the real $HOME is absent from the namespace by design).
-        cmd.args(["--setenv", "HOME", "/tmp"]);
+        // $HOME decision (recorded 2026-08-14): pinned to a real directory
+        // inside the workspace bind — /workspace/.weave-home — so the
+        // sandbox's writable surface has NO second "succeeds but does not
+        // persist" zone. Everything a command writes via $HOME lands under
+        // the workspace, host-visible and persistent across sessions
+        // (tool caches included). Rejected: /tmp scratch — it silently
+        // created an ephemeral illusion surface for $HOME-relative writes.
+        // Known tradeoff of this choice: the directory appears in `git
+        // status` / `ls -a` of the workspace. The only other writable
+        // place is the /tmp tmpfs, which is convention ephemeral scratch
+        // (never host-visible).
+        cmd.args(["--setenv", "HOME", "/workspace/.weave-home"]);
         cmd.args([
             "--bind",
             &workspace.to_string_lossy().to_string(),
@@ -347,6 +355,41 @@ mod tests {
             "failure must come from the OS (stderr), not a Weave-level check"
         );
         assert!(!outside.exists(), "directory must not exist on the host");
+    }
+
+    #[test]
+    fn sandbox_home_lives_under_workspace_and_persists() {
+        if !bwrap_available() {
+            eprintln!("skipped: bubblewrap not installed");
+            return;
+        }
+        // Recorded decision (2026-08-14): $HOME is /workspace/.weave-home —
+        // a real, persistent location inside the workspace bind, never an
+        // ephemeral /tmp scratch. Writes through $HOME must land on the
+        // host.
+        let res = run("mkdir -p \"$HOME/sub\" && echo \"$HOME\" && test -d \"$HOME/sub\"");
+        assert_eq!(
+            res["success"], true,
+            "HOME writes must succeed inside the sandbox (got: {})",
+            res
+        );
+        assert!(
+            res["stdout"]
+                .as_str()
+                .unwrap_or("")
+                .contains("/workspace/.weave-home"),
+            "HOME must resolve to /workspace/.weave-home (got: {})",
+            res
+        );
+        let workspace = std::env::current_dir()
+            .expect("cargo test runs from the workspace root")
+            .canonicalize()
+            .unwrap();
+        assert!(
+            workspace.join(".weave-home").join("sub").is_dir(),
+            "sandbox HOME writes must persist on the host workspace"
+        );
+        let _ = std::fs::remove_dir_all(workspace.join(".weave-home"));
     }
 
     #[test]
