@@ -148,14 +148,21 @@ impl ShellPlugin {
         })?;
 
         // The one read-write directory the command is meant to touch: the
-        // workspace root (the folder the File Manager selected). Everything
-        // else — notably ~/.weave (API keys, MCP tokens) and the rest of
-        // /home — is genuinely absent from the mount namespace.
+        // workspace root (the folder the File Manager selected). It is bound
+        // at a FIXED sandbox-internal path (`/workspace`) — never at its
+        // host path. Binding at the host path made bwrap auto-create empty
+        // writable parent dirs (e.g. /home/kael), so `mkdir /home/kael/x &&
+        // ls -ld /home/kael/x` "succeeded" inside the sandbox: a lie, since
+        // nothing ever touched the host. With a fixed /workspace mount the
+        // rest of the host tree is never materialized, and the whole rootfs
+        // is remounted read-only after the binds — writes anywhere but
+        // /workspace and /tmp fail with a real OS error, and verification
+        // inside the same command cannot fool anyone.
         let workspace = fs_security::canonicalize_path(".")?;
-        let workspace_str = workspace.to_string_lossy().to_string();
 
-        // `cwd` must resolve inside the workspace root; absent → workspace.
-        let cwd_resolved = match cwd {
+        // `cwd` (host path) must resolve inside the workspace root; it is
+        // mapped into the sandbox as /workspace[/rel]. Absent → /workspace.
+        let sandbox_cwd = match cwd {
             Some(dir) => {
                 let resolved = fs_security::canonicalize_path(dir)?;
                 if !resolved.starts_with(&workspace) {
@@ -164,15 +171,28 @@ impl ShellPlugin {
                         resolved.display()
                     )));
                 }
-                resolved
+                if !resolved.is_dir() {
+                    return Err(WeaveError::PluginError(format!(
+                        "Working directory not found: {}",
+                        dir
+                    )));
+                }
+                let rel = resolved
+                    .strip_prefix(&workspace)
+                    .map(|r| r.to_path_buf())
+                    .unwrap_or_default();
+                if rel.as_os_str().is_empty() {
+                    "/workspace".to_string()
+                } else {
+                    format!("/workspace/{}", rel.to_string_lossy())
+                }
             }
-            None => workspace.clone(),
+            None => "/workspace".to_string(),
         };
-        let cwd_str = cwd_resolved.to_string_lossy().to_string();
 
         info!(
-            "Executing shell command in bubblewrap sandbox: {} (timeout: {}s, cwd: {})",
-            command_str, timeout_secs, cwd_str
+            "Executing shell command in bubblewrap sandbox: {} (timeout: {}s, sandbox cwd: {})",
+            command_str, timeout_secs, sandbox_cwd
         );
 
         let mut cmd = Command::new(&bwrap);
@@ -189,8 +209,20 @@ impl ShellPlugin {
             }
         }
         cmd.args(["--tmpfs", "/tmp"]);
-        cmd.args(["--bind", &workspace_str, &workspace_str]);
-        cmd.args(["--chdir", &cwd_str]);
+        // Scratch home inside the writable tmpfs: tools that need a
+        // writable $HOME get one that is ephemeral and never touches the
+        // host (the real $HOME is absent from the namespace by design).
+        cmd.args(["--setenv", "HOME", "/tmp"]);
+        cmd.args([
+            "--bind",
+            &workspace.to_string_lossy().to_string(),
+            "/workspace",
+        ]);
+        // Binds first (bwrap creates their mount points), then the whole
+        // rootfs turns read-only: the only writable places left are the
+        // /workspace bind and the /tmp tmpfs.
+        cmd.args(["--remount-ro", "/"]);
+        cmd.args(["--chdir", &sandbox_cwd]);
         cmd.args(["--", &sh.to_string_lossy().to_string(), "-c", command_str]);
 
         // Execute with timeout using a thread
@@ -318,6 +350,51 @@ mod tests {
     }
 
     #[test]
+    fn reported_illusion_scenario_fails_honestly() {
+        if !bwrap_available() {
+            eprintln!("skipped: bubblewrap not installed");
+            return;
+        }
+        // The exact reported scenario: `mkdir -p /home/<user>/test-ai &&
+        // ls -ld /home/<user>/test-ai` chained in one command. With the
+        // workspace bound at the fixed /workspace path and a read-only
+        // rootfs, the real home is never materialized — both steps fail
+        // with a real OS error, so the "verification" cannot lie, and
+        // nothing exists on the host. (deliberately NOT dirs::home_dir():
+        // nix-shell sets $HOME to a /tmp dir, which is writable scratch
+        // inside the sandbox.)
+        let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
+        let target = std::path::Path::new("/home").join(&user).join("test-ai");
+        let workspace = std::env::current_dir()
+            .expect("cargo test runs from the workspace root")
+            .canonicalize()
+            .unwrap();
+        if target.starts_with(&workspace) {
+            eprintln!("skipped: /home/<user> is the workspace itself");
+            return;
+        }
+        let res = run(&format!(
+            "mkdir -p {} && ls -ld {}",
+            target.display(),
+            target.display()
+        ));
+        assert!(
+            res["success"] == false,
+            "the reported mkdir+verify scenario must fail with a real OS error (got: {})",
+            res
+        );
+        assert!(
+            !res["stderr"].as_str().unwrap_or("").is_empty(),
+            "failure must come from the OS (got: {})",
+            res
+        );
+        assert!(
+            !target.exists(),
+            "the scenario must never materialize anything on the host"
+        );
+    }
+
+    #[test]
     fn reading_file_outside_workspace_fails_with_os_error() {
         if !bwrap_available() {
             eprintln!("skipped: bubblewrap not installed");
@@ -369,6 +446,8 @@ mod tests {
             .join("target")
             .join(format!("weave_sandbox_ok_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
+        // cwd is passed as a host path and mapped into the sandbox; pwd
+        // must reflect the fixed /workspace mount.
         let res = run_json(json!({
             "command": "mkdir subdir && test -d subdir && pwd",
             "cwd": dir.to_string_lossy(),
@@ -379,12 +458,13 @@ mod tests {
             res
         );
         assert!(
-            res["stdout"]
-                .as_str()
-                .unwrap_or("")
-                .contains(&dir.to_string_lossy().to_string()),
-            "pwd must resolve to the sandbox cwd (got: {})",
+            res["stdout"].as_str().unwrap_or("").contains("/workspace"),
+            "pwd must resolve to the sandbox /workspace mount (got: {})",
             res
+        );
+        assert!(
+            std::fs::metadata(dir.join("subdir")).is_ok(),
+            "writes through /workspace must land on the host workspace"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
