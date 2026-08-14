@@ -102,55 +102,7 @@ async fn file_list_round_trips_with_gate() {
 }
 
 #[tokio::test]
-async fn file_path_outside_workspace_round_trips_with_approval() {
-    // New escape contract: an approved call may reach outside the workspace
-    // root — consent is explicit, so execution proceeds (and the paired
-    // tool result carries the real content).
-    let outside = std::env::temp_dir().join(format!("weave_escape_read_{}", uuid::Uuid::new_v4()));
-    std::fs::write(&outside, "escape marker").unwrap();
-
-    let rt = round_trip(
-        "file.read",
-        &format!(r#"{{"path":"{}"}}"#, outside.display()),
-        ApprovalDecision::Approved,
-    )
-    .await;
-    let _ = std::fs::remove_file(&outside);
-
-    assert!(saw_approval(&rt.events, "file.read"), "file.read is sensitive");
-    let second = second_request_body(&rt);
-    assert!(
-        second.contains("escape marker"),
-        "approved escape must execute and return content (got: {})",
-        second
-    );
-}
-
-#[tokio::test]
-async fn file_path_outside_workspace_denied_without_approval() {
-    let outside = std::env::temp_dir().join(format!("weave_escape_read_{}", uuid::Uuid::new_v4()));
-    std::fs::write(&outside, "escape marker").unwrap();
-
-    let rt = round_trip(
-        "file.read",
-        &format!(r#"{{"path":"{}"}}"#, outside.display()),
-        ApprovalDecision::Rejected,
-    )
-    .await;
-    let _ = std::fs::remove_file(&outside);
-
-    let second = second_request_body(&rt);
-    assert!(
-        second.contains("User denied") && !second.contains("escape marker"),
-        "rejected escape must not execute (got: {})",
-        second
-    );
-}
-
-#[tokio::test]
-async fn file_deny_list_paths_stay_blocked_even_after_approval() {
-    // The deny list is unconditional — approval grants escape, never
-    // access to /etc/passwd-class secrets.
+async fn file_path_outside_workspace_is_denied_and_still_paired() {
     let rt = round_trip(
         "file.read",
         r#"{"path":"/etc/passwd"}"#,
@@ -160,7 +112,7 @@ async fn file_deny_list_paths_stay_blocked_even_after_approval() {
     let second = second_request_body(&rt);
     assert!(
         second.contains("[Error]") && second.contains("denied"),
-        "deny-listed paths must stay blocked even when approved (got: {})",
+        "workspace confinement must reject /etc/passwd even when approved (got: {})",
         second
     );
 }
@@ -189,8 +141,7 @@ async fn git_status_and_log_round_trip_with_gate() {
 }
 
 #[tokio::test]
-async fn git_directory_outside_workspace_round_trips_with_approval() {
-    // Escape contract: approval lets the call run outside the workspace.
+async fn git_directory_outside_workspace_is_denied_and_still_paired() {
     let rt = round_trip(
         "git.status",
         r#"{"directory":"/tmp"}"#,
@@ -199,24 +150,8 @@ async fn git_directory_outside_workspace_round_trips_with_approval() {
     .await;
     let second = second_request_body(&rt);
     assert!(
-        second.contains("is_repo") && !second.contains("[Error]"),
-        "approved escape must run git.status on /tmp (got: {})",
-        second
-    );
-}
-
-#[tokio::test]
-async fn git_directory_outside_workspace_denied_without_approval() {
-    let rt = round_trip(
-        "git.status",
-        r#"{"directory":"/tmp"}"#,
-        ApprovalDecision::Rejected,
-    )
-    .await;
-    let second = second_request_body(&rt);
-    assert!(
-        second.contains("User denied") && !second.contains("is_repo"),
-        "rejected escape must not run git.status on /tmp (got: {})",
+        second.contains("[Error]") && second.contains("workspace"),
+        "git confinement must reject /tmp even when approved (got: {})",
         second
     );
 }

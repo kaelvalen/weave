@@ -14,6 +14,7 @@ pkgs.mkShell {
   ];
 
   buildInputs = with pkgs; [
+    bubblewrap
     librsvg
     webkitgtk_4_1
     libsoup_3

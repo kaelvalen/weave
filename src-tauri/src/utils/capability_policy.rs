@@ -58,29 +58,6 @@ pub fn is_sensitive(capability: &str) -> bool {
     SENSITIVE_CAPS.contains(&capability)
 }
 
-/// Canonicalized path parameters (path/directory/db_path/file) that reach
-/// outside the workspace base roots — touching any of them is an "escape"
-/// and must sit behind explicit user approval, even if the capability's
-/// static classification would allow it ungated. Runs on canonical paths so
-/// `..`/symlink tricks surface here too.
-pub fn escaped_path_params(args: &serde_json::Value) -> Vec<std::path::PathBuf> {
-    use crate::utils::fs_security;
-    let roots = fs_security::base_roots();
-    let mut out: Vec<std::path::PathBuf> = Vec::new();
-    for key in ["path", "directory", "db_path", "file"] {
-        if let Some(value) = args.get(key).and_then(|v| v.as_str()) {
-            if let Ok(canonical) = fs_security::canonicalize_path(value) {
-                if !fs_security::is_within_any(&canonical, &roots)
-                    && !out.iter().any(|p| p == &canonical)
-                {
-                    out.push(canonical);
-                }
-            }
-        }
-    }
-    out
-}
-
 pub const DESTRUCTIVE_CAPS: &[&str] = &[
     "file.write",
     "file.delete",

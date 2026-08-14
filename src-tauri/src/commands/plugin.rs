@@ -208,12 +208,6 @@ pub async fn plugin_execute(
     );
     let ctx = app_state.create_execution_context("ipc_session");
 
-    // Manual execution IS the consent: the user clicked the capability, so
-    // any path escaping the workspace root is approved for this session.
-    for escape in crate::utils::capability_policy::escaped_path_params(&params) {
-        crate::utils::fs_security::approve_escape(&escape);
-    }
-
     // Candidate artifact reference, detectable from params alone.
     let artifact_ref = params
         .get("path")

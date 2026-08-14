@@ -12,8 +12,6 @@ export interface PluginCall {
   params: Record<string, unknown>;
   result?: Record<string, unknown>;
   status: CallStatus;
-  /** True when the call's paths reach outside the workspace root. */
-  outside_workspace?: boolean;
 }
 
 export interface IntentResult {
@@ -96,6 +94,4 @@ export interface ToolCallDetected {
   params: unknown;
   status: 'pending' | 'pending_approval' | 'success' | 'error';
   result?: unknown;
-  /** True when the call's paths reach outside the workspace root. */
-  outside_workspace?: boolean;
 }

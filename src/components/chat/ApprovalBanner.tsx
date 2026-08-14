@@ -39,11 +39,7 @@ export function ApprovalBanner() {
           {pendingApprovals.length > 1 ? 's' : ''}.
         </span>
         <span className="text-muted-foreground text-xs ml-1 hidden sm:inline">
-          {pendingApprovals.some((p) => p.call.outside_workspace) ? (
-            <>Outside workspace root — paths reach beyond the selected folder.</>
-          ) : (
-            '(File, network, or system changes)'
-          )}
+          (File, network, or system changes)
         </span>
       </div>
       <div className="flex gap-2 flex-shrink-0">
