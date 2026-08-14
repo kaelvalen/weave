@@ -113,6 +113,10 @@ struct OpenAiStreamChoice {
 #[derive(Debug, Clone, Deserialize, Default)]
 struct OpenAiDelta {
     content: Option<String>,
+    /// Reasoning/thinking tokens (DeepSeek-R1/V4, Qwen3, Kimi K2 — emitted
+    /// before `content`; OpenAI ignores the field for non-reasoning models).
+    #[serde(default)]
+    reasoning_content: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<OpenAiToolCallDelta>>,
 }
@@ -191,6 +195,9 @@ struct AnthropicDelta {
     partial_json: Option<String>,
     /// Present on `message_delta` events (`stop_reason: "tool_use"`).
     stop_reason: Option<String>,
+    /// Thinking-token fragments (`thinking_delta` events) from extended
+    /// thinking models.
+    thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -240,6 +247,10 @@ struct OllamaStreamResponse {
 #[derive(Debug, Clone, Deserialize, Default)]
 struct OllamaResponseMessage {
     content: Option<String>,
+    /// Thinking/reasoning tokens (qwen3, deepseek-r1, etc. — Ollama exposes
+    /// them separately from `content` on the message).
+    #[serde(default)]
+    reasoning_content: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<OllamaToolCall>>,
 }
@@ -262,6 +273,11 @@ struct OllamaToolCallFunction {
 pub enum AgentStreamEvent {
     /// A piece of assistant text.
     Text(String),
+    /// A piece of the model's reasoning/thinking (streamed before content
+    /// for reasoning families — DeepSeek, Qwen3, Kimi, thinking-enabled
+    /// Claude). Rendered as an expandable "thinking" trace, never as
+    /// assistant output.
+    Reasoning(String),
     /// A tool-call delta: `index` identifies the call (accumulate fragments
     /// by index; `id`/`name` arrive on the first delta), `args_fragment` is
     /// an incremental JSON string to be concatenated.
@@ -1392,6 +1408,13 @@ impl AiBridge {
                             last_usage = Some(usage);
                         }
                         if let Some(delta) = json.choices.get(0) {
+                            if let Some(reasoning) = &delta.delta.reasoning_content {
+                                if !reasoning.is_empty() {
+                                    let _ = tx
+                                        .send(AgentStreamEvent::Reasoning(reasoning.clone()))
+                                        .await;
+                                }
+                            }
                             if let Some(content) = &delta.delta.content {
                                 let _ = tx.send(AgentStreamEvent::Text(content.clone())).await;
                             }
@@ -1558,6 +1581,16 @@ impl AiBridge {
                                         if let Some(fragment) = &delta.partial_json {
                                             partial_json.push(fragment.clone());
                                         }
+                                    } else if delta.delta_type.as_deref() == Some("thinking_delta") {
+                                        if let Some(fragment) = &delta.thinking {
+                                            if !fragment.is_empty() {
+                                                let _ = tx
+                                                    .send(AgentStreamEvent::Reasoning(
+                                                        fragment.clone(),
+                                                    ))
+                                                    .await;
+                                            }
+                                        }
                                     } else if let Some(text_delta) = &delta.text {
                                         let _ = tx
                                             .send(AgentStreamEvent::Text(text_delta.clone()))
@@ -1665,6 +1698,11 @@ impl AiBridge {
 
                 if let Ok(json) = serde_json::from_str::<OllamaStreamResponse>(line) {
                     if !json.done {
+                        if let Some(reasoning) = json.message.reasoning_content {
+                            if !reasoning.is_empty() {
+                                let _ = tx.send(AgentStreamEvent::Reasoning(reasoning)).await;
+                            }
+                        }
                         if let Some(content) = json.message.content {
                             let _ = tx.send(AgentStreamEvent::Text(content)).await;
                         }

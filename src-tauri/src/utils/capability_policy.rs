@@ -115,6 +115,7 @@ pub const SENSITIVE_CAPS: &[&str] = &[
     "db.query",
     "db.tables",
     "web.fetch",
+    "web.search",
     "http.request",
     "note.list",
     "note.get",

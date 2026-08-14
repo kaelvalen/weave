@@ -1,50 +1,53 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, Sparkles } from 'lucide-react';
-import type { PluginCall } from '@/types/chat';
-import { ToolCallCard } from './ToolCallCard';
-
-interface ToolCallBatchProps {
-  calls: PluginCall[];
-  messageId: string;
-  /** Auto-opens while the turn is still streaming, collapses when done. */
-  live?: boolean;
-}
 
 /**
- * Trace-styled group of the tool calls that ran at one point in the stream.
- * Rendered inline between text slices in true chronological order — a
- * compact sparkle header ("Running tools" → "Ran N tools") that expands
- * into a fade-up tool trace.
+ * Expandable reasoning trace — the design's "Reasoning" variant, backed by
+ * the provider's real thinking tokens (streamed via chat-reasoning-chunk).
+ *
+ * While the model thinks the header shimmers "Thinking" and the trace stays
+ * open; once the reasoning phase settles it collapses to "Thought for Ns"
+ * and stays manually expandable.
  */
-export function ToolCallBatch({ calls, messageId, live }: ToolCallBatchProps) {
+export function ReasoningTrace({
+  text,
+  active,
+  seconds,
+}: {
+  text: string;
+  active: boolean;
+  seconds?: number;
+}) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const expanded = manualOpen ?? active;
 
-  if (calls.length === 0) return null;
+  // One row per paragraph — prose that reads like the model's internal notes.
+  const rows = useMemo(
+    () =>
+      text
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    [text]
+  );
 
-  const pending = calls.some((c) => c.status === 'pending' || c.status === 'pending_approval');
-  const failed = calls.filter((c) => c.status === 'error').length;
-  const expanded = manualOpen ?? (live && pending);
-
-  const doneLabel =
-    failed > 0
-      ? `Ran ${calls.length} tool${calls.length > 1 ? 's' : ''} · ${calls.length - failed} ok · ${failed} failed`
-      : `Ran ${calls.length} tool${calls.length > 1 ? 's' : ''}`;
+  if (rows.length === 0 && !active) return null;
 
   return (
     <div className="flex flex-col gap-1">
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setManualOpen((current) => !(current ?? (live && pending)))}
+        onClick={() => setManualOpen((current) => !(current ?? active))}
         className="-mx-1.5 flex w-fit items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-100 hover:bg-muted/50"
       >
         <Sparkles
           size={16}
           strokeWidth={1.5}
           fill="currentColor"
-          className={pending ? 'text-muted-foreground' : 'text-muted-foreground/60'}
+          className={active ? 'text-muted-foreground' : 'text-muted-foreground/60'}
         />
-        {pending ? (
+        {active ? (
           <span
             className="bg-clip-text text-[13px] font-medium whitespace-nowrap text-transparent"
             style={{
@@ -54,14 +57,14 @@ export function ToolCallBatch({ calls, messageId, live }: ToolCallBatchProps) {
               animation: 'shimmer-text 1.4s linear infinite',
             }}
           >
-            Running tools
+            Thinking
           </span>
         ) : (
           <span
             className="text-[13px] font-medium whitespace-nowrap text-muted-foreground"
             style={{ animation: 'fade-in 350ms ease-out both' }}
           >
-            {doneLabel}
+            {seconds ? `Thought for ${seconds}s` : 'Reasoning'}
           </span>
         )}
         <ChevronDown
@@ -82,12 +85,18 @@ export function ToolCallBatch({ calls, messageId, live }: ToolCallBatchProps) {
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 py-1">
-            {calls.map((call) => (
-              <ToolCallCard
-                key={call.call_id ?? call.capability}
-                call={call}
-                messageId={messageId}
-              />
+            {rows.map((row, i) => (
+              <div
+                key={i}
+                className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left"
+                style={{
+                  animation: `fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${i * 120}ms both`,
+                }}
+              >
+                <span className="whitespace-normal text-[12.5px] leading-relaxed text-muted-foreground">
+                  {row}
+                </span>
+              </div>
             ))}
           </div>
         </div>

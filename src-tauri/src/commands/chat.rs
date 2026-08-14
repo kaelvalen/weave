@@ -16,6 +16,20 @@ struct StreamChunk {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct ReasoningChunk {
+    chunk: String,
+    message_id: String,
+    done: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct QuestionsAskedPayload {
+    question_id: String,
+    message_id: String,
+    questions: Vec<crate::agent::AgentQuestion>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct ToolCallDetected {
     call_id: String,
     message_id: String,
@@ -60,6 +74,9 @@ pub async fn chat_send_message(
         plugin_calls: Vec::new(),
         intent: None,
         is_hidden: None,
+        reasoning: None,
+        reasoning_done: None,
+        reasoning_seconds: None,
     });
     let assistant_id = assistant_msg.id.clone();
 
@@ -187,11 +204,44 @@ pub async fn chat_send_message(
             .await
     });
 
+    // Reasoning is open from the first reasoning token until ReasoningDone,
+    // the first content token, or the end of the run — every terminal path
+    // below closes it so the UI never leaves a trace shimmering forever.
+    let mut reasoning_open = false;
+    let close_reasoning = |reasoning_open: &mut bool| {
+        if *reasoning_open {
+            *reasoning_open = false;
+            let _ = app_handle.emit(
+                "chat-reasoning-chunk",
+                ReasoningChunk {
+                    chunk: String::new(),
+                    message_id: assistant_id.clone(),
+                    done: true,
+                },
+            );
+        }
+    };
+
     while let Some(event) = event_rx.recv().await {
         if abort.load(Ordering::SeqCst) {
+            close_reasoning(&mut reasoning_open);
             break;
         }
         match event {
+            AgentEvent::Reasoning { text } => {
+                reasoning_open = true;
+                let _ = app_handle.emit(
+                    "chat-reasoning-chunk",
+                    ReasoningChunk {
+                        chunk: text,
+                        message_id: assistant_id.clone(),
+                        done: false,
+                    },
+                );
+            }
+            AgentEvent::ReasoningDone {} => {
+                close_reasoning(&mut reasoning_open);
+            }
             AgentEvent::Text { text } => {
                 let mut history = app_state.chat_history.write();
                 if let Some(last) = history.last_mut() {
@@ -248,7 +298,21 @@ pub async fn chat_send_message(
                     },
                 );
             }
+            AgentEvent::QuestionsAsked {
+                question_id,
+                questions,
+            } => {
+                let _ = app_handle.emit(
+                    "chat-questions-asked",
+                    QuestionsAskedPayload {
+                        question_id,
+                        message_id: assistant_id.clone(),
+                        questions,
+                    },
+                );
+            }
             AgentEvent::RunComplete { final_text: _ } => {
+                close_reasoning(&mut reasoning_open);
                 let _ = app_handle.emit(
                     "chat-stream-chunk",
                     StreamChunk {
@@ -260,6 +324,7 @@ pub async fn chat_send_message(
             }
             AgentEvent::RunError { error } => {
                 error!("Agent run error: {}", error);
+                close_reasoning(&mut reasoning_open);
                 let _ = app_handle.emit(
                     "chat-stream-chunk",
                     StreamChunk {
@@ -276,6 +341,7 @@ pub async fn chat_send_message(
         Ok(Ok(())) => {}
         Ok(Err(e)) => {
             error!("Agent loop error: {}", e);
+            close_reasoning(&mut reasoning_open);
             let _ = app_handle.emit(
                 "chat-stream-chunk",
                 StreamChunk {
@@ -287,6 +353,7 @@ pub async fn chat_send_message(
         }
         Err(e) => {
             error!("Agent loop task panicked: {}", e);
+            close_reasoning(&mut reasoning_open);
             let _ = app_handle.emit(
                 "chat-stream-chunk",
                 StreamChunk {
@@ -321,6 +388,24 @@ pub fn chat_approve_tool_call(
         if approved { "approved" } else { "rejected" }
     );
     app_state.approvals.resolve(&call_id, decision)
+}
+
+/// Submit the user's answers to a human-in-the-loop question batch. The
+/// agent loop paused on the `<questions>` block and only continues once
+/// every question here has an answer (or the batch is dismissed with an
+/// empty list).
+#[tauri::command]
+pub fn chat_submit_answers(
+    question_id: String,
+    answers: Vec<String>,
+    app_state: State<'_, AppState>,
+) -> Result<(), WeaveError> {
+    info!(
+        "Submitting {} answer(s) for question batch {}",
+        answers.len(),
+        question_id
+    );
+    app_state.questions.resolve(&question_id, answers)
 }
 
 #[tauri::command]

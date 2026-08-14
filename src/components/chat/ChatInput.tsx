@@ -1,14 +1,15 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAppStore } from '@/stores/useAppStore';
 import { usePluginStore } from '@/stores/usePluginStore';
-import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '@/types/app';
 import type { Provider } from '@/types/chat';
@@ -27,7 +28,13 @@ import {
   Code2,
   FolderOpen,
   Star,
+  Globe,
+  Database,
+  Plus,
+  Mic,
+  Check,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useModelPreferenceStore } from '@/stores/useModelPreferenceStore';
 import { ApprovalModeToggle } from './ApprovalModeToggle';
 import { toast } from 'sonner';
@@ -36,12 +43,68 @@ type ModelOption = { value: string; label: string; provider: Provider };
 
 /** Extensions that are always safe to attach as inline text. */
 const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'markdown', 'json', 'jsonl', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
-  'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
-  'html', 'htm', 'css', 'scss', 'less', 'xml', 'svg', 'yaml', 'yml', 'toml', 'ini',
-  'cfg', 'conf', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'graphql', 'lua', 'r',
-  'vue', 'svelte', 'astro', 'tex', 'csv', 'log', 'diff', 'patch', 'gitignore',
-  'dockerfile', 'makefile', 'cmake', 'gradle', 'lock', 'env', 'editorconfig',
+  'txt',
+  'md',
+  'markdown',
+  'json',
+  'jsonl',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'mjs',
+  'cjs',
+  'py',
+  'rs',
+  'go',
+  'java',
+  'c',
+  'h',
+  'cpp',
+  'hpp',
+  'cs',
+  'rb',
+  'php',
+  'swift',
+  'kt',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'less',
+  'xml',
+  'svg',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'cfg',
+  'conf',
+  'sh',
+  'bash',
+  'zsh',
+  'ps1',
+  'bat',
+  'sql',
+  'graphql',
+  'lua',
+  'r',
+  'vue',
+  'svelte',
+  'astro',
+  'tex',
+  'csv',
+  'log',
+  'diff',
+  'patch',
+  'gitignore',
+  'dockerfile',
+  'makefile',
+  'cmake',
+  'gradle',
+  'lock',
+  'env',
+  'editorconfig',
 ]);
 
 /** Per-file cap so an attachment can't blow up the model context. */
@@ -50,15 +113,27 @@ const MAX_FILE_CHARS = 200_000;
 /** Image extensions — Linux pickers/drag-drop often return an empty MIME type.
     (`svg` deliberately excluded: it is XML, far more useful to the model as text.) */
 const IMAGE_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'ico', 'tif', 'tiff',
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'bmp',
+  'avif',
+  'ico',
+  'tif',
+  'tiff',
 ]);
 
 function isProbablyText(file: File): boolean {
   if (file.type.startsWith('text/')) return true;
   if (
-    ['application/json', 'application/xml', 'application/javascript', 'application/x-yaml'].includes(
-      file.type
-    )
+    [
+      'application/json',
+      'application/xml',
+      'application/javascript',
+      'application/x-yaml',
+    ].includes(file.type)
   ) {
     return true;
   }
@@ -142,9 +217,59 @@ const SLASH_COMMANDS = [
   },
 ];
 
-export function ChatInput() {
+/** @ sources — real capabilities, mentionable like the design's data sources.
+    Selecting one inserts `@Name` into the draft; the attach row opens the picker. */
+const SOURCES = [
+  {
+    key: 'attach',
+    name: 'Add photos & files',
+    desc: 'Upload from your computer',
+    icon: Paperclip,
+    attach: true,
+  },
+  { key: 'web', name: 'Web search', desc: 'Search the web and read sources', icon: Globe },
+  { key: 'files', name: 'Workspace files', desc: 'Read, search, or write files', icon: FolderOpen },
+  { key: 'note', name: 'Notes', desc: 'Create or update scratch notes', icon: StickyNote },
+  { key: 'db', name: 'Database', desc: 'Query and inspect the database', icon: Database },
+];
+
+type MenuRow = { key: string; name: string; desc: string; icon: LucideIcon; attach?: boolean };
+
+type DictationRecognition = {
+  lang: string;
+  interimResults: boolean;
+  onresult:
+    ((event: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+/* the last @word or /word being typed, if any */
+function parseToken(draft: string): { kind: 'at' | 'slash'; query: string; start: number } | null {
+  const match = /(^|\s)([@/])([\w-]*)$/.exec(draft);
+  if (!match) return null;
+  return {
+    kind: match[2] === '@' ? 'at' : 'slash',
+    query: match[3].toLowerCase(),
+    start: match.index + match[1].length,
+  };
+}
+
+export function ChatInput({ variant = 'Rounded' }: { variant?: 'Rounded' | 'Pill' } = {}) {
+  const pill = variant === 'Pill';
   const [input, setInput] = useState('');
-  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const [active, setActive] = useState(0);
+  const [engaged, setEngaged] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [rowBox, setRowBox] = useState<{ top: number; height: number } | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [dictationSupported] = useState(
+    () => typeof window !== 'undefined' && 'webkitSpeechRecognition' in window
+  );
   const [images, setImages] = useState<string[]>([]);
   const [files, setFiles] = useState<{ name: string; content: string }[]>([]);
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
@@ -171,18 +296,18 @@ export function ChatInput() {
       return next;
     });
   };
-  const {
-    sendMessage,
-    isStreaming,
-    isSwitchingModel,
-    selectedModel,
-    setModel,
-  } = useChatStore();
+  const { sendMessage, isStreaming, isSwitchingModel, selectedModel, setModel } = useChatStore();
   const { lastConfigUpdate } = useAppStore();
   const { addRecentModel } = useModelPreferenceStore();
   const { plugins: externalPlugins } = usePluginStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const modelRef = useRef<HTMLDivElement>(null);
+  const approvalRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const recognitionRef = useRef<DictationRecognition | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,6 +356,10 @@ export function ChatInput() {
     }
   }, [models, selectedModel, setModel]);
 
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
+
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if ((!trimmed && images.length === 0 && files.length === 0) || isStreaming) return;
@@ -251,9 +380,6 @@ export function ChatInput() {
     useChatStore.getState().stopStreaming();
   }, []);
 
-  const query = input.trimStart();
-  const isSlashCommandActive = query.startsWith('/') && !query.slice(1).includes(' ');
-  const slashSearch = isSlashCommandActive ? query.toLowerCase() : '';
   const allSlashCommands = useMemo(() => {
     const externalCmds = externalPlugins.map((p) => {
       const shortId = p.id.split('.').pop() || p.id;
@@ -274,75 +400,136 @@ export function ChatInput() {
     return [...SLASH_COMMANDS, ...uniqueExternal];
   }, [externalPlugins]);
 
-  const filteredSlashCommands = useMemo(() => {
-    return isSlashCommandActive
-      ? allSlashCommands.filter(
-          (cmd) =>
-            cmd.command.toLowerCase().startsWith(slashSearch) ||
-            cmd.title.toLowerCase().includes(slashSearch.slice(1)) ||
-            cmd.desc.toLowerCase().includes(slashSearch.slice(1))
-        )
-      : [];
-  }, [isSlashCommandActive, slashSearch, allSlashCommands]);
+  /* the last @word or /word being typed — @ opens the sources menu, / the commands */
+  const token = dismissed ? null : parseToken(input);
+  const menu: 'at' | 'slash' | null = plusOpen ? 'at' : (token?.kind ?? null);
+  const query = plusOpen ? '' : (token?.query ?? '');
 
-  const selectSlashCommand = useCallback((cmd: (typeof SLASH_COMMANDS)[0]) => {
-    setInput(cmd.template);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
+  const menuRows: MenuRow[] = useMemo(
+    () =>
+      menu === 'at'
+        ? SOURCES.filter((s) => s.name.toLowerCase().includes(query))
+        : menu === 'slash'
+          ? allSlashCommands
+              .filter(
+                (c) =>
+                  c.command.slice(1).startsWith(query) ||
+                  c.title.toLowerCase().includes(query) ||
+                  c.desc.toLowerCase().includes(query)
+              )
+              .map((c) => ({ key: c.command, name: c.command, desc: c.title, icon: c.icon }))
+          : [],
+    [menu, query, allSlashCommands]
+  );
+
+  /* a single highlight glides to the active row instead of each row
+     toggling its own background */
+  useLayoutEffect(() => {
+    const target = rowRefs.current[active];
+    if (target) setRowBox({ top: target.offsetTop, height: target.offsetHeight });
+  }, [menu, query, active, menuRows.length]);
+
+  const pick = useCallback(
+    (row: MenuRow) => {
+      if (row.attach) {
+        fileInputRef.current?.click();
+        if (token) setInput(input.slice(0, token.start));
+      } else if (menu === 'at') {
+        setInput(`${token ? input.slice(0, token.start) : input}@${row.name} `);
+      } else {
+        setInput(`${token ? input.slice(0, token.start) : input}${row.name} `);
+      }
+      setPlusOpen(false);
+      setDismissed(false);
+      textareaRef.current?.focus();
+    },
+    [menu, token, input]
+  );
+
+  /* Move wrapped text above the controls, then grow to a compact maximum. */
+  useLayoutEffect(() => {
+    const inputEl = textareaRef.current;
+    const controls = controlsRef.current;
+    const measure = measureRef.current;
+    const modelButton = modelRef.current;
+    const approval = approvalRef.current;
+    if (!inputEl || !controls || !measure || !modelButton || !approval) return;
+
+    const fixedControlsWidth = 28 + approval.offsetWidth + modelButton.offsetWidth + 28 + 28;
+    const inlineGaps = 5 * 4;
+    const inlineInputWidth = controls.clientWidth - fixedControlsWidth - inlineGaps;
+    const needsFullWidth = input.includes('\n') || measure.offsetWidth + 8 > inlineInputWidth;
+    if (needsFullWidth !== expanded) {
+      // Layout-driven measurement: the row reshapes only after we know how
+      // much inline width the text needs — state mirrors a DOM read here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpanded(needsFullWidth);
     }
-  }, []);
+
+    const minHeight = 28;
+    const maxHeight = 100;
+    inputEl.style.height = '0px';
+    const contentHeight = inputEl.scrollHeight;
+    inputEl.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
+    inputEl.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
+  }, [input, expanded]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (isSlashCommandActive && filteredSlashCommands.length > 0) {
-        if (e.key === 'ArrowDown') {
+      if (menu && menuRows.length > 0) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
-          setSlashSelectedIndex((prev) => (prev + 1) % filteredSlashCommands.length);
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setSlashSelectedIndex(
-            (prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length
+          setEngaged(true);
+          setActive(
+            (c) => (c + (e.key === 'ArrowDown' ? 1 : menuRows.length - 1)) % menuRows.length
           );
           return;
         }
-        if (e.key === 'Enter' || e.key === 'Tab') {
+        if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
           e.preventDefault();
-          const selected = filteredSlashCommands[slashSelectedIndex] || filteredSlashCommands[0];
-          if (selected) {
-            selectSlashCommand(selected);
-          }
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setInput('');
+          pick(menuRows[active] ?? menuRows[0]);
           return;
         }
       }
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Escape') {
+        setDismissed(true);
+        setPlusOpen(false);
+        setDropdownOpen(false);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
-        handleSend();
+        void handleSend();
       }
     },
-    [
-      handleSend,
-      isSlashCommandActive,
-      filteredSlashCommands,
-      slashSelectedIndex,
-      selectSlashCommand,
-    ]
+    [menu, menuRows, active, pick, handleSend]
   );
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    setSlashSelectedIndex(0);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+  const startDictation = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
     }
-  }, []);
+    const SR = (window as unknown as { webkitSpeechRecognition?: new () => DictationRecognition })
+      .webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? '';
+      if (transcript) setInput((prev) => (prev ? `${prev.trimEnd()} ${transcript}` : transcript));
+      textareaRef.current?.focus();
+    };
+    rec.onerror = () => {
+      setListening(false);
+      toast.error('Dictation failed — please try again.');
+    };
+    rec.onend = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    rec.start();
+  }, [listening]);
 
   const processFile = (file: File) => {
     // Images keep the vision pipeline (compressed data-URL previews).
@@ -412,6 +599,10 @@ export function ChatInput() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
@@ -434,236 +625,399 @@ export function ChatInput() {
     }
   }, []);
 
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const canSend =
     (!!input.trim() || images.length > 0 || files.length > 0) && !isStreaming && !isSwitchingModel;
 
   return (
     <div className="flex-shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
-      {/* Slash Command Autocomplete Menu */}
-      {isSlashCommandActive && filteredSlashCommands.length > 0 && (
-        <div className="mb-2 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg p-1 animate-in fade-in duration-150 z-50">
-          <div className="px-2 py-1 text-[10px] font-mono text-muted-foreground border-b border-border/50 mb-1">
-            Available Slash Commands
-          </div>
-          {filteredSlashCommands.map((cmd, idx) => {
-            const Icon = cmd.icon;
-            const isSelected = idx === slashSelectedIndex;
-            return (
-              <button
-                key={cmd.command}
-                type="button"
-                onClick={() => selectSlashCommand(cmd)}
-                onMouseEnter={() => setSlashSelectedIndex(idx)}
-                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded text-left font-mono text-xs transition-colors cursor-pointer ${
-                  isSelected ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-semibold">{cmd.command}</span>
-                  <span className="text-[11px] font-sans truncate">{cmd.title}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Tonal composer — the one floating object; focus makes it glow */}
-      <div className="composer elevate rounded-xl bg-surface-1 border border-transparent focus-within:bg-surface-2 p-2 flex flex-col gap-2">
-        {/* Attached image previews */}
-        {images.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-1 pt-1">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative group rounded border border-border overflow-hidden w-12 h-12">
-                <img src={img} alt="attachment" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removeImage(idx)}
-                  className="absolute top-0.5 right-0.5 bg-background/80 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Attached text-file chips — content rides inline with the message */}
-        {files.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-1 pt-1">
-            {files.map((f, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-muted-foreground"
-              >
-                <FileText className="w-3 h-3 shrink-0" />
-                <span className="max-w-[160px] truncate text-foreground">{f.name}</span>
-                <span>{Math.max(1, Math.round(f.content.length / 1000))}k</span>
-                <button
-                  type="button"
-                  onClick={() => removeFile(idx)}
-                  className="hover:text-foreground transition-colors"
-                  title="Remove attachment"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Text area */}
-        <Textarea
-          ref={textareaRef}
-          value={input}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onDrop={handleDrop}
-          placeholder="Ask anything or use / command..."
-          rows={1}
-          className="w-full resize-none bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-1 text-sm font-sans placeholder:text-muted-foreground min-h-[36px] max-h-[160px]"
-        />
-
-        {/* Action Row */}
-        <div className="flex items-center justify-between pt-1 font-mono text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Model Selector */}
-            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-              <DropdownMenuTrigger
-                disabled={modelsLoading || isStreaming || isSwitchingModel}
-                className="h-7 text-xs bg-surface-2 hover:bg-surface-3 px-3 rounded-md gap-1.5 flex items-center outline-none transition-colors text-muted-foreground hover:text-foreground"
-              >
-                <span className="truncate max-w-[240px] font-medium">
-                  {modelsLoading || isSwitchingModel
-                    ? 'Loading...'
-                    : models.find((m) => m.value === selectedModel)?.label || 'Model'}
-                </span>
-                <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 rounded-md bg-popover border border-border p-1 shadow-lg" sideOffset={6}>
-                <div className="flex items-center px-2 py-1 border-b border-border/50 mb-1">
-                  <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search model..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground font-mono"
-                  />
-                </div>
-                <div className="max-h-56 overflow-y-auto font-mono text-xs">
-                  {models
-                    .filter((m) => m.label.toLowerCase().includes(searchQuery.toLowerCase()) || m.provider.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .sort((a, b) => {
-                      const isFavA = favorites.includes(a.value);
-                      const isFavB = favorites.includes(b.value);
-                      if (isFavA && !isFavB) return -1;
-                      if (!isFavA && isFavB) return 1;
-                      return a.label.localeCompare(b.label);
-                    })
-                    .map((m) => {
-                      const isFav = favorites.includes(m.value);
-                      return (
-                        <DropdownMenuItem
-                          key={m.value}
-                          onClick={() => {
-                            void setModel(m.value, m.provider);
-                            setDropdownOpen(false);
-                          }}
-                          className={`px-2 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between group ${
-                            m.value === selectedModel ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          <span className="truncate flex items-center gap-1.5">
-                            {m.provider === 'llama-swap' && (
-                              <span
-                                title={
-                                  llamaSwapActive
-                                    ? 'llama-swap router aktif'
-                                    : 'llama-swap router kapalı — seçilince otomatik başlar'
-                                }
-                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  llamaSwapActive
-                                    ? 'bg-emerald-500'
-                                    : llamaSwapActive === null
-                                      ? 'bg-muted-foreground/40'
-                                      : 'bg-amber-500'
-                                }`}
-                              />
-                            )}
-                            {m.label}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => toggleFavorite(m.value, e)}
-                            title={isFav ? 'Remove favorite' : 'Add to favorites'}
-                            className="p-0.5 rounded hover:bg-background/80 transition-colors"
-                          >
-                            <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-foreground text-foreground' : 'text-muted-foreground/40 group-hover:text-muted-foreground'}`} />
-                          </button>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Approval mode (Ask / Auto-Approve) — next to the model selector */}
-            <ApprovalModeToggle />
-          </div>
-
-          {/* Right side: attachments + send */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <input
-              type="file"
-              ref={fileInputRef}
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) Array.from(e.target.files).forEach(processFile);
-                e.target.value = '';
+      <div className="relative">
+        {/* ── @ sources / / commands menu — grows up from the composer's top edge ── */}
+        {menu && (
+          <div
+            onMouseLeave={() => setEngaged(false)}
+            className="absolute inset-x-0 bottom-full z-10 mb-2 rounded-[10px] bg-popover p-1 elevate"
+            style={{
+              animation: 'pop-in 180ms cubic-bezier(0.23,1,0.32,1) both',
+              transformOrigin: 'bottom center',
+            }}
+          >
+            {/* single gliding highlight — appears once a row is engaged */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-1 rounded-[6px] bg-muted"
+              style={{
+                top: rowBox?.top ?? 0,
+                height: rowBox?.height ?? 0,
+                opacity: rowBox && engaged && menuRows.length > 0 ? 1 : 0,
+                transition:
+                  'top 220ms cubic-bezier(0.23,1,0.32,1), height 220ms cubic-bezier(0.23,1,0.32,1), opacity 150ms ease',
               }}
             />
-            {/* Paperclip Attach — every file type is visible; text rides inline, images use vision */}
+            {menuRows.map((row, i) => {
+              const Icon = row.icon;
+              return (
+                <button
+                  key={row.key}
+                  type="button"
+                  ref={(el) => {
+                    rowRefs.current[i] = el;
+                  }}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => {
+                    setActive(i);
+                    setEngaged(true);
+                  }}
+                  onClick={() => pick(row)}
+                  className="relative z-10 flex h-9 w-full items-center gap-2.5 rounded-[6px] px-2 text-left"
+                >
+                  <span className="flex w-5 shrink-0 items-center justify-center text-muted-foreground">
+                    <Icon size={15} strokeWidth={1.8} />
+                  </span>
+                  <span className="shrink-0 text-[12.5px] font-medium text-foreground">
+                    {row.name}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground/70">
+                    {row.desc}
+                  </span>
+                </button>
+              );
+            })}
+            {menuRows.length === 0 && (
+              <div className="flex h-9 items-center px-2 text-[12px] text-muted-foreground/70">
+                No matches for “{query}”
+              </div>
+            )}
+            <div className="mt-1 border-t border-border px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground/70">
+              {menu === 'at' ? 'Type to search sources & files' : 'Type to search commands'}
+            </div>
+          </div>
+        )}
+
+        {/* ── composer ── */}
+        <div
+          className={`composer elevate relative isolate flex flex-col gap-1.5 overflow-hidden border bg-surface-1 p-1.5 focus-within:border-border focus-within:bg-surface-2 ${
+            pill
+              ? files.length > 0 || images.length > 0 || expanded
+                ? 'rounded-[24px]'
+                : 'rounded-full'
+              : 'rounded-[14px]'
+          } border-border/50`}
+        >
+          <span
+            ref={measureRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute invisible whitespace-pre text-[13px] leading-[18px]"
+          >
+            {input}
+          </span>
+
+          {/* attached image previews */}
+          {images.length > 0 && (
+            <div className={`flex flex-wrap gap-1.5 pt-0.5 ${pill ? 'px-1' : 'px-0.5'}`}>
+              {images.map((img, idx) => (
+                <div
+                  key={idx}
+                  className="group relative h-9 w-9 overflow-hidden rounded-[8px] border border-border/60"
+                >
+                  <img src={img} alt="attachment" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    aria-label="Remove image"
+                    onClick={() => removeImage(idx)}
+                    className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-[4px] bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <X size={10} strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* attached text-file chips — content rides inline with the message */}
+          {files.length > 0 && (
+            <div className={`flex flex-wrap gap-1.5 pt-0.5 ${pill ? 'px-1' : 'px-0.5'}`}>
+              {files.map((f, idx) => (
+                <span
+                  key={idx}
+                  className={`flex h-[26px] items-center gap-1.5 bg-surface-3 py-1 pr-1 pl-1.5 text-[11.5px] text-muted-foreground ${
+                    pill ? 'rounded-full' : 'rounded-md'
+                  }`}
+                  style={{ animation: 'pop-in 200ms cubic-bezier(0.23,1,0.32,1) both' }}
+                >
+                  <FileText size={12} className="shrink-0" />
+                  <span className="max-w-32 truncate text-foreground">{f.name}</span>
+                  <span className="shrink-0">
+                    {Math.max(1, Math.round(f.content.length / 1000))}k
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() => removeFile(idx)}
+                    className={`flex size-4 items-center justify-center text-muted-foreground/60 transition-colors duration-100 hover:bg-border/60 hover:text-foreground ${
+                      pill ? 'rounded-full' : 'rounded-[4px]'
+                    }`}
+                  >
+                    <X size={10} strokeWidth={2.5} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div
+            ref={controlsRef}
+            className="grid items-end gap-x-1 gap-y-1.5 grid-cols-[28px_minmax(0,1fr)_auto_auto_28px_28px]"
+          >
+            {/* attach & sources — opens the @ menu */}
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Attach file (text or image)"
+              aria-label="Add attachments and sources"
+              aria-expanded={plusOpen}
+              onClick={() => {
+                setDropdownOpen(false);
+                setPlusOpen((current) => !current);
+                setActive(0);
+                setEngaged(false);
+                textareaRef.current?.focus();
+              }}
+              className={`flex size-7 shrink-0 items-center justify-center justify-self-start text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground active:scale-[0.94] ${
+                pill ? 'rounded-full' : 'rounded-[8px]'
+              } ${plusOpen ? 'bg-muted text-foreground' : ''} ${
+                expanded ? 'col-start-1 row-start-2' : 'col-start-1 row-start-1'
+              }`}
             >
-              <Paperclip className="w-3.5 h-3.5" />
+              <Plus size={16} strokeWidth={2} />
             </button>
 
-            {/* Send / Stop Button */}
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(event) => {
+                setInput(event.target.value);
+                setDismissed(false);
+                setPlusOpen(false);
+                setActive(0);
+                setEngaged(false);
+              }}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onDrop={handleDrop}
+              placeholder={listening ? 'Listening…' : 'Ask anything or use / command…'}
+              aria-label="Prompt"
+              className={`min-h-7 min-w-0 w-full resize-none bg-transparent px-1 py-[5px] text-[13px] leading-[18px] text-foreground outline-none [overflow-wrap:anywhere] placeholder:text-muted-foreground/70 ${
+                expanded ? 'col-span-full row-start-1' : 'col-start-2 row-start-1'
+              }`}
+            />
+
+            {/* approval mode (Ask / Auto-Approve) */}
+            <div
+              ref={approvalRef}
+              className={`flex h-7 shrink-0 items-center ${expanded ? 'col-start-2 row-start-2' : 'col-start-3 row-start-1'}`}
+            >
+              <ApprovalModeToggle />
+            </div>
+
+            {/* model picker */}
+            <div
+              ref={modelRef}
+              className={`flex min-w-0 shrink-0 items-center ${expanded ? 'col-start-3 row-start-2' : 'col-start-4 row-start-1'}`}
+            >
+              <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                <DropdownMenuTrigger
+                  disabled={modelsLoading || isStreaming || isSwitchingModel}
+                  className={`flex h-7 max-w-[180px] shrink-0 items-center gap-1 whitespace-nowrap px-1.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-150 hover:bg-muted hover:text-foreground ${
+                    pill ? 'rounded-full' : 'rounded-[8px]'
+                  }`}
+                >
+                  <span className="truncate">
+                    {modelsLoading || isSwitchingModel
+                      ? 'Loading...'
+                      : models.find((m) => m.value === selectedModel)?.label || 'Model'}
+                  </span>
+                  <ChevronDown size={11} className="shrink-0 opacity-60" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="top"
+                  align="end"
+                  sideOffset={6}
+                  className="elevate w-64 rounded-[10px] border border-border bg-popover p-1"
+                >
+                  <div className="mb-1 flex items-center border-b border-border/50 px-2 py-1">
+                    <Search size={14} className="mr-1.5 shrink-0 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search model..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="flex-1 bg-transparent text-xs outline-none font-mono placeholder:text-muted-foreground"
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {models
+                      .filter(
+                        (m) =>
+                          m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          m.provider.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .sort((a, b) => {
+                        const isFavA = favorites.includes(a.value);
+                        const isFavB = favorites.includes(b.value);
+                        if (isFavA && !isFavB) return -1;
+                        if (!isFavA && isFavB) return 1;
+                        return a.label.localeCompare(b.label);
+                      })
+                      .map((m) => {
+                        const isFav = favorites.includes(m.value);
+                        return (
+                          <DropdownMenuItem
+                            key={m.value}
+                            onClick={() => {
+                              void setModel(m.value, m.provider);
+                              setDropdownOpen(false);
+                            }}
+                            className={`flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-1.5 text-xs group ${
+                              m.value === selectedModel
+                                ? 'bg-muted text-foreground font-semibold'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-1.5 truncate">
+                              {m.provider === 'llama-swap' && (
+                                <span
+                                  title={
+                                    llamaSwapActive
+                                      ? 'llama-swap router aktif'
+                                      : 'llama-swap router kapalı — seçilince otomatik başlar'
+                                  }
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    llamaSwapActive
+                                      ? 'bg-emerald-500'
+                                      : llamaSwapActive === null
+                                        ? 'bg-muted-foreground/40'
+                                        : 'bg-amber-500'
+                                  }`}
+                                />
+                              )}
+                              <span className="truncate">{m.label}</span>
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1">
+                              {m.value === selectedModel && (
+                                <Check size={12} strokeWidth={2.5} className="text-foreground" />
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => toggleFavorite(m.value, e)}
+                                title={isFav ? 'Remove favorite' : 'Add to favorites'}
+                                className="rounded p-0.5 transition-colors hover:bg-background/80"
+                              >
+                                <Star
+                                  size={14}
+                                  className={
+                                    isFav
+                                      ? 'fill-foreground text-foreground'
+                                      : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                                  }
+                                />
+                              </button>
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* dictation */}
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={listening ? 'Stop dictation' : 'Start dictation'}
+                    aria-pressed={listening}
+                    disabled={!dictationSupported}
+                    onClick={startDictation}
+                    className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-150 active:scale-[0.94] ${
+                      pill ? 'rounded-full' : 'rounded-[8px]'
+                    } ${
+                      listening
+                        ? 'bg-brand/15 text-brand'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    } ${!dictationSupported ? 'cursor-not-allowed opacity-40' : ''} ${
+                      expanded ? 'col-start-4 row-start-2' : 'col-start-5 row-start-1'
+                    }`}
+                  >
+                    {listening ? (
+                      <span className="flex h-3.5 items-center gap-[2.5px]">
+                        {[0, 1, 2].map((i) => (
+                          <span
+                            key={i}
+                            className="w-[2.5px] rounded-full bg-current"
+                            style={{
+                              height: '100%',
+                              animation: `eq-bounce 900ms ease-in-out ${i * 150}ms infinite`,
+                            }}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <Mic size={15} strokeWidth={2} />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {!dictationSupported && (
+                  <TooltipContent side="top">
+                    Dictation isn&apos;t supported in this browser
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* send / stop — tactile square (round in the pill variant) */}
             {isStreaming ? (
               <button
                 type="button"
+                aria-label="Stop generating"
                 onClick={handleStop}
-                className="flex items-center gap-1.5 px-3 py-1 bg-destructive text-destructive-foreground font-semibold rounded text-xs hover:bg-destructive/90 transition-colors"
+                className={`flex size-7 shrink-0 items-center justify-center bg-destructive text-destructive-foreground transition-transform active:scale-[0.94] ${
+                  pill ? 'rounded-full' : 'rounded-[8px]'
+                } ${expanded ? 'col-start-5 row-start-2' : 'col-start-6 row-start-1'}`}
               >
-                <Square className="w-3 h-3 fill-current" />
-                <span>Stop</span>
+                <Square size={14} className="fill-current" />
               </button>
             ) : (
               <button
                 type="button"
-                onClick={handleSend}
+                aria-label="Send"
                 disabled={!canSend}
-                className="flex items-center gap-1 px-3 py-1 bg-brand text-brand-foreground font-semibold rounded-md text-xs hover:bg-brand/90 disabled:opacity-40 transition-all cursor-pointer"
+                onClick={() => void handleSend()}
+                className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.94] ${
+                  pill ? 'rounded-full' : 'rounded-[8px]'
+                } ${expanded ? 'col-start-5 row-start-2' : 'col-start-6 row-start-1'}`}
+                style={{
+                  background: canSend ? 'hsl(var(--foreground))' : 'hsl(var(--surface-3))',
+                  color: canSend ? 'hsl(var(--surface-1))' : 'hsl(var(--muted-foreground))',
+                }}
               >
-                <span>Send</span>
-                <ArrowUp className="w-3.5 h-3.5" />
+                <ArrowUp size={16} strokeWidth={2.4} />
               </button>
             )}
           </div>
         </div>
       </div>
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) Array.from(e.target.files).forEach(processFile);
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }

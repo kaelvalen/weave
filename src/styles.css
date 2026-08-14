@@ -184,6 +184,73 @@
     }
   }
 
+  /* ─── Composer pop-ins (menus, attachment chips) ─── */
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* ─── Mic dictation equalizer — animated bars in the composer's mic button ─── */
+  @keyframes eq-bounce {
+    0%,
+    100% {
+      transform: scaleY(0.35);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  /* ─── Trace header shimmer — active agent-process label sweeps a light band ─── */
+  @keyframes shimmer-text {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  /* ─── Trace rows — gentle rise + fade, staggered per row ─── */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ─── Streaming words — resolve out of blur as they arrive ─── */
+  @keyframes stream-in {
+    from {
+      opacity: 0.35;
+      filter: blur(3px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  /* ─── Soft fade — settled trace labels, chips, and menus ─── */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
   /* ─── Selection ─── */
   ::selection {
     background: hsl(var(--brand) / 0.35);
@@ -207,7 +274,8 @@
     transition:
       box-shadow 0.25s ease,
       background-color 0.2s ease,
-      border-color 0.2s ease;
+      border-color 0.2s ease,
+      border-radius 0.15s ease;
   }
   .composer:focus-within {
     box-shadow:

@@ -47,6 +47,7 @@ fn main() {
             weave::commands::chat::chat_abort_generation,
             weave::commands::chat::chat_set_approval_mode,
             weave::commands::chat::chat_approve_tool_call,
+            weave::commands::chat::chat_submit_answers,
             weave::commands::session::chat_list_sessions,
             weave::commands::session::chat_load_session,
             weave::commands::session::chat_save_session,

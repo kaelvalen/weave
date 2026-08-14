@@ -11,13 +11,21 @@ import { Copy, Check, Brain, Edit2, RefreshCw, Loader2, FileCode } from 'lucide-
 import { ToolCallCard } from './ToolCallCard';
 import { ToolCallBatch } from './ToolCallBatch';
 import { AgentActivityAccordion } from './AgentActivityAccordion';
+import { ReasoningTrace } from './ReasoningTrace';
+import { StreamingText } from './StreamingText';
+import { StreamingExtras } from './StreamingExtras';
+import { QuestionsCard } from './QuestionsCard';
 import { ArtifactCard } from './ArtifactCard';
 import { useAppStore, ActiveArtifact } from '@/stores/useAppStore';
 import { Textarea } from '@/components/ui/textarea';
 import { GoalCard } from '@/components/workspace/GoalCard';
 import { GoalTrace } from '@/components/execution/GoalTrace';
 import { TraceBox } from '@/components/execution/TraceBox';
-import { usePlanForGoal, useStepsForGoal, useGoalStats } from '@/components/workspace/runtimeSelectors';
+import {
+  usePlanForGoal,
+  useStepsForGoal,
+  useGoalStats,
+} from '@/components/workspace/runtimeSelectors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -55,6 +63,8 @@ function cleanSlice(text: string): string {
     .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
     .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
     .replace(/<\/?(?:call|think|thought)[^>]*$/gi, '')
+    .replace(/<\s*questions[\s\S]*?(?:<\/\s*questions\s*>|$)/gi, '')
+    .replace(/<\/?\s*questions?[^>]*$/gi, '')
     .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
     .replace(/\\\((.*?)\)/g, '$$$1$$');
 }
@@ -65,7 +75,12 @@ interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 // Custom code block component for ReactMarkdown
-const CodeBlock = React.memo(function CodeBlock({ inline, className, children, ...props }: CodeBlockProps) {
+const CodeBlock = React.memo(function CodeBlock({
+  inline,
+  className,
+  children,
+  ...props
+}: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
@@ -78,11 +93,20 @@ const CodeBlock = React.memo(function CodeBlock({ inline, className, children, .
 
   const handleSaveAsArtifact = async () => {
     const codeContent = String(children).replace(/\n$/, '');
-    const ext = lang === 'python' ? 'py' : lang === 'rust' ? 'rs' : lang === 'typescript' || lang === 'tsx' ? 'ts' : lang || 'txt';
+    const ext =
+      lang === 'python'
+        ? 'py'
+        : lang === 'rust'
+          ? 'rs'
+          : lang === 'typescript' || lang === 'tsx'
+            ? 'ts'
+            : lang || 'txt';
     const conversationId = useChatStore.getState().conversationId || 'default';
     const filename = `code_artifact_${Date.now().toString().slice(-4)}.${ext}`;
     const artifactPath = `artifacts/${conversationId}/${filename}`;
-    const pluginId = usePluginStore.getState().getPluginIdForCapability('coder.write_file') || 'com.weave.builtin.coder';
+    const pluginId =
+      usePluginStore.getState().getPluginIdForCapability('coder.write_file') ||
+      'com.weave.builtin.coder';
     try {
       await invoke('plugin_execute', {
         pluginId,
@@ -246,19 +270,16 @@ function HoverActions({
   );
 }
 
-export const ChatMessage = React.memo(function ChatMessage({
-  message,
-  isLast: _isLast,
-}: ChatMessageProps) {
+export const ChatMessage = React.memo(function ChatMessage({ message, isLast }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
 
-  const isStreaming = useChatStore((s) => (_isLast ? s.isStreaming : false));
+  const isStreaming = useChatStore((s) => (isLast ? s.isStreaming : false));
   const editAndResend = useChatStore((s) => s.editAndResend);
   const regenerateResponse = useChatStore((s) => s.regenerateResponse);
   const isAssistant = message.role === 'assistant';
-  const showCursor = _isLast && isStreaming && isAssistant;
+  const showCursor = isLast && isStreaming && isAssistant;
 
   // Runtime events for this goal. goalId === this assistant message's id: it is
   // the traceId passed to plugin_execute, so runtime events carry it as goal_id.
@@ -275,7 +296,7 @@ export const ChatMessage = React.memo(function ChatMessage({
     }
     return null;
   });
-  
+
   const statsTargetId = pairedMessageId ?? message.id;
   const stats = useGoalStats(statsTargetId);
 
@@ -284,6 +305,8 @@ export const ChatMessage = React.memo(function ChatMessage({
       .replace(/<\s*(?:think|thought)\s*>[\s\S]*?(?:<\/\s*(?:think|thought)\s*>|$)/gi, '')
       .replace(/<\s*call[\s\S]*?(?:<\/\s*call\s*>|$)/gi, '')
       .replace(/<\/?(?:call|think|thought)[^>]*$/gi, '')
+      .replace(/<\s*questions[\s\S]*?(?:<\/\s*questions\s*>|$)/gi, '')
+      .replace(/<\/?\s*questions?[^>]*$/gi, '')
       .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
       .replace(/\\\((.*?)\)/g, '$$$1$$');
   }, [message.content]);
@@ -305,6 +328,12 @@ export const ChatMessage = React.memo(function ChatMessage({
   const hasPluginCalls = (message.metadata?.plugin_calls?.length ?? 0) > 0;
   const intent = message.metadata?.intent;
 
+  // Human-in-the-loop: this message asked clarifying questions and the
+  // agent's turn is paused until the card is answered.
+  const pendingQuestions = useChatStore((s) =>
+    isAssistant ? s.pendingQuestions.find((q) => q.messageId === message.id) : undefined
+  );
+
   // Stream-order interleave: text slices and tool-call batches rendered at
   // the positions they actually occurred. Absent for history loaded before
   // segments existed — those fall back to the grouped layout below.
@@ -319,6 +348,12 @@ export const ChatMessage = React.memo(function ChatMessage({
         const slice = message.content.slice(offset, offset + seg.len);
         offset += seg.len;
         if (!slice.trim()) return null;
+        // The slice still growing: words resolve out of blur, inline URLs
+        // become citation chips. The settled markdown takes over on the
+        // next render once streaming stops.
+        if (isStreaming && i === segments.length - 1) {
+          return <StreamingText key={i} text={cleanSlice(slice)} />;
+        }
         return (
           <div
             key={i}
@@ -338,14 +373,7 @@ export const ChatMessage = React.memo(function ChatMessage({
         .map((id) => message.metadata!.plugin_calls.find((c) => c.call_id === id))
         .filter((c): c is PluginCall => Boolean(c));
       if (calls.length === 0) return null;
-      return (
-        <ToolCallBatch
-          key={i}
-          calls={calls}
-          messageId={message.id}
-          live={isStreaming}
-        />
-      );
+      return <ToolCallBatch key={i} calls={calls} messageId={message.id} live={isStreaming} />;
     });
   };
 
@@ -434,7 +462,6 @@ export const ChatMessage = React.memo(function ChatMessage({
 
   // ── User message → GOAL card ──
   if (!isAssistant) {
-
     return (
       <div className="group px-4 sm:px-6 py-1.5">
         <GoalCard
@@ -525,6 +552,18 @@ export const ChatMessage = React.memo(function ChatMessage({
         />
       </div>
 
+      {/* Reasoning trace — the model's thinking tokens (DeepSeek, Qwen3,
+          Kimi, thinking-enabled Claude), expandable and persisted. */}
+      {message.metadata?.reasoning && (
+        <div className="mb-2">
+          <ReasoningTrace
+            text={message.metadata.reasoning}
+            active={isStreaming && !message.metadata.reasoningDone}
+            seconds={message.metadata.reasoningSeconds}
+          />
+        </div>
+      )}
+
       {/* Intent chip — hidden when the backend reports no intent */}
       {intent && intent.confidence > 0.4 && (
         <div className="flex flex-wrap gap-1.5 mb-2.5">
@@ -538,10 +577,7 @@ export const ChatMessage = React.memo(function ChatMessage({
       {/* Stream-order interleave: text and tool calls rendered where they
           actually happened, each batch a compact click-to-expand row. */}
       {hasSegments ? (
-        <div className="mt-2 space-y-3">
-          {renderInterleaved()}
-          {isStreaming && <span className="streaming-cursor" />}
-        </div>
+        <div className="mt-2 space-y-3">{renderInterleaved()}</div>
       ) : (
         <>
           {/* Execution section — live plan + step timeline sourced from runtime events.
@@ -561,7 +597,10 @@ export const ChatMessage = React.memo(function ChatMessage({
               event-backed traces. */}
           {hasPluginCalls && !hasRuntimeExecution && (
             <div className="my-3">
-              <TraceBox goalId={message.id} defaultOpen={isStreaming}>
+              <TraceBox
+                defaultOpen={isStreaming}
+                title={`Ran ${message.metadata!.plugin_calls.length} tool${message.metadata!.plugin_calls.length === 1 ? '' : 's'}`}
+              >
                 <AgentActivityAccordion calls={message.metadata!.plugin_calls} />
               </TraceBox>
             </div>
@@ -603,7 +642,9 @@ export const ChatMessage = React.memo(function ChatMessage({
       {(() => {
         let thinkingText = '';
 
-        const thinkMatch = message.content.match(/<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i);
+        const thinkMatch = message.content.match(
+          /<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i
+        );
         if (thinkMatch) {
           thinkingText = thinkMatch[1].trim();
         }
@@ -645,26 +686,39 @@ export const ChatMessage = React.memo(function ChatMessage({
               <span>Executing...</span>
               {showCursor && <span className="streaming-cursor" />}
             </div>
+          ) : showsCompletedNotice ? (
+            <div className="mt-1 py-2 px-3.5 bg-surface-2 border border-border/40 rounded-xl text-xs font-medium text-foreground flex items-center gap-2">
+              <Check className="w-4 h-4 text-brand flex-shrink-0" />
+              <span>Autonomous task execution completed successfully.</span>
+            </div>
+          ) : isStreaming && isLast ? (
+            /* still growing — words resolve out of blur, URLs become chips */
+            <StreamingText text={cleanSlice(message.content)} />
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:m-0 break-words font-sans overflow-x-auto max-w-full">
-              {showsCompletedNotice ? (
-                <div className="mt-1 py-2 px-3.5 bg-surface-2 border border-border/40 rounded-xl text-xs font-medium text-foreground flex items-center gap-2">
-                  <Check className="w-4 h-4 text-brand flex-shrink-0" />
-                  <span>Autonomous task execution completed successfully.</span>
-                </div>
-              ) : (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                  components={{ code: CodeBlock }}
-                >
-                  {cleanedMarkdown}
-                </ReactMarkdown>
-              )}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{ code: CodeBlock }}
+              >
+                {cleanedMarkdown}
+              </ReactMarkdown>
             </div>
           )}
-          {showCursor && !showsExecutingPlaceholder && <span className="streaming-cursor" />}
+          {showCursor && !showsExecutingPlaceholder && !(isStreaming && isLast) && (
+            <span className="streaming-cursor" />
+          )}
         </div>
+      )}
+      {isLast && !isStreaming && isAssistant && <StreamingExtras message={message} />}
+
+      {/* Human-in-the-loop questions — the agent paused its turn until
+          this card is answered. */}
+      {pendingQuestions && (
+        <QuestionsCard
+          questionId={pendingQuestions.questionId}
+          questions={pendingQuestions.questions}
+        />
       )}
     </div>
   );

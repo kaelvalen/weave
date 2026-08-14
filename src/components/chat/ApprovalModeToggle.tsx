@@ -18,7 +18,7 @@ export function ApprovalModeToggle() {
   return (
     <>
       <div
-        className="flex items-center bg-surface-2 rounded-lg p-0.5 border border-border/40 font-mono"
+        className="flex items-center bg-surface-3 rounded-lg p-0.5 border border-border/40 font-mono"
         title={
           isAuto
             ? 'The approval gate is bypassed: sensitive reads, network requests, and destructive operations run without confirmation until you switch back to Ask.'
@@ -30,7 +30,7 @@ export function ApprovalModeToggle() {
           onClick={() => setApprovalMode('ask')}
           className={`px-2 py-1 rounded-md text-[11px] transition-colors ${
             !isAuto
-              ? 'bg-surface-3 text-foreground font-semibold'
+              ? 'bg-surface-1 text-foreground font-semibold'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >

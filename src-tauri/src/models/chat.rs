@@ -32,6 +32,15 @@ pub struct MessageMetadata {
     pub intent: Option<IntentResult>,
     #[serde(rename = "isHidden", skip_serializing_if = "Option::is_none")]
     pub is_hidden: Option<bool>,
+    /// The model's reasoning/thinking trace, streamed before content
+    /// (DeepSeek, Qwen3, Kimi, thinking-enabled Claude). Rendered as an
+    /// expandable trace; persisted so reloaded sessions keep it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+    #[serde(rename = "reasoningDone", skip_serializing_if = "Option::is_none")]
+    pub reasoning_done: Option<bool>,
+    #[serde(rename = "reasoningSeconds", skip_serializing_if = "Option::is_none")]
+    pub reasoning_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +112,9 @@ impl ChatMessage {
                 plugin_calls: Vec::new(),
                 intent: None,
                 is_hidden: None,
+                reasoning: None,
+                reasoning_done: None,
+                reasoning_seconds: None,
             }),
             images: None,
         }

@@ -70,6 +70,7 @@ export const SENSITIVE_CAPS: ReadonlySet<string> = new Set([
   'db.query',
   'db.tables',
   'web.fetch',
+  'web.search',
   'http.request',
   'note.list',
   'note.get',

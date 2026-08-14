@@ -21,12 +21,27 @@ export interface IntentResult {
   params: Record<string, unknown>;
 }
 
+/** One structured clarifying question from the agent (human-in-the-loop).
+ *  Parsed by the backend from the model's `<questions>` block. */
+export interface AgentQuestion {
+  /** "radio" (single choice), "check" (multi choice), "text" (free form). */
+  type: 'radio' | 'check' | 'text';
+  question: string;
+  options?: string[];
+}
+
+/** Backend payload for `chat-questions-asked` — the turn is paused until
+ *  the user submits answers via `chat_submit_answers`. */
+export interface QuestionsAskedPayload {
+  question_id: string;
+  message_id: string;
+  questions: AgentQuestion[];
+}
+
 /** One chronologically-ordered block of an assistant turn: either a slice
  *  of streamed text or the tool calls that ran at that point in the stream.
  *  Lets the UI interleave text and executions in their true order. */
-export type MessageSegment =
-  | { t: 'text'; len: number }
-  | { t: 'tools'; calls: string[] };
+export type MessageSegment = { t: 'text'; len: number } | { t: 'tools'; calls: string[] };
 
 export interface MessageMetadata {
   model?: string;
@@ -37,6 +52,13 @@ export interface MessageMetadata {
   /** Stream-order segments (text slices + tool call ids). Absent for
    *  messages built before segments existed (e.g. loaded history). */
   segments?: MessageSegment[];
+  /** The model's reasoning/thinking trace (DeepSeek, Qwen3, Kimi,
+   *  thinking-enabled Claude), streamed before the answer. */
+  reasoning?: string;
+  /** True once the reasoning phase ended (first content token / stream end). */
+  reasoningDone?: boolean;
+  /** How long the reasoning phase took, seconds. */
+  reasoningSeconds?: number;
 }
 
 export interface ChatMessage {

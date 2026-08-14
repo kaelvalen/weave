@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
+use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -79,6 +80,152 @@ impl ApprovalRegistry {
     }
 }
 
+/// Registry of question batches the agent loop is waiting on. The loop
+/// registers a oneshot receiver per batch; `chat_submit_answers` resolves
+/// it with the user's answers. Answers are free-form strings — a radio
+/// holds one, a check holds the joined selections, a text holds the input.
+#[derive(Default)]
+pub struct QuestionsRegistry {
+    pending: parking_lot::Mutex<HashMap<String, tokio::sync::oneshot::Sender<Vec<String>>>>,
+}
+
+impl QuestionsRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn register(&self, id: String) -> tokio::sync::oneshot::Receiver<Vec<String>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.pending.lock().insert(id, tx);
+        rx
+    }
+
+    pub fn resolve(&self, id: &str, answers: Vec<String>) -> Result<(), WeaveError> {
+        let tx = self
+            .pending
+            .lock()
+            .remove(id)
+            .ok_or_else(|| {
+                WeaveError::PluginError(format!("No question batch awaiting answers for '{}'", id))
+            })?;
+        tx.send(answers)
+            .map_err(|_| WeaveError::PluginError(format!("Questions channel closed for '{}'", id)))
+    }
+}
+
+/// One structured clarifying question from the model, parsed from the
+/// `<questions>` block it emitted instead of acting on ambiguous parameters.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentQuestion {
+    /// "radio" (single choice), "check" (multi choice), or "text" (free form).
+    #[serde(rename = "type")]
+    pub qtype: String,
+    pub question: String,
+    pub options: Vec<String>,
+}
+
+/// Parse a `<questions>…</questions>` block out of the model's text. Shape:
+///
+/// ```xml
+/// <questions>
+///   <question type="radio">How many flavors?<options>Three, Five</options></question>
+///   <question type="check">Which mix-ins?<options>Chips, Sprinkles</options></question>
+///   <question type="text">Anything else?</question>
+/// </questions>
+/// ```
+fn parse_questions(text: &str) -> Vec<AgentQuestion> {
+    let Some(open) = text.find("<questions") else {
+        return Vec::new();
+    };
+    let body_start = text[open..].find('>').map(|i| open + i + 1).unwrap_or(text.len());
+    let body_end = text[body_start..]
+        .find("</questions")
+        .map(|i| body_start + i)
+        .unwrap_or(text.len());
+    let body = &text[body_start..body_end];
+
+    let mut questions = Vec::new();
+    let mut rest = body;
+    while let Some(start) = rest.find("<question") {
+        let block = &rest[start..];
+        let tag_end = match block.find('>') {
+            Some(i) => i,
+            None => break,
+        };
+        let open_tag = &block[..tag_end];
+        let qtype = if open_tag.contains("type=\"check\"") || open_tag.contains("type='check'") {
+            "check".to_string()
+        } else if open_tag.contains("type=\"text\"") || open_tag.contains("type='text'") {
+            "text".to_string()
+        } else {
+            "radio".to_string()
+        };
+        let content_end = block[tag_end..]
+            .find("</question")
+            .map(|i| tag_end + i)
+            .unwrap_or(block.len());
+        let content = &block[tag_end + 1..content_end];
+        if content_end == block.len() {
+            break; // unclosed <question> — nothing more to parse
+        }
+        rest = &block[content_end + 10..]; // "</question>"
+
+        let question = content
+            .split("<options>")
+            .next()
+            .unwrap_or(content)
+            .trim()
+            .to_string();
+        let options: Vec<String> = content
+            .split("<options>")
+            .nth(1)
+            .and_then(|part| part.split("</options>").next())
+            .map(|raw| {
+                raw.split(',')
+                    .map(|o| o.trim().to_string())
+                    .filter(|o| !o.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if question.is_empty() || questions.len() >= 3 {
+            continue;
+        }
+        questions.push(AgentQuestion {
+            qtype,
+            question,
+            options,
+        });
+    }
+    questions
+}
+
+/// Remove `<questions>` blocks from assistant text so history and the
+/// final answer stay clean (the block is protocol, not content).
+fn strip_questions_blocks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    loop {
+        match rest.find("<questions") {
+            Some(open) => {
+                out.push_str(&rest[..open]);
+                let after_open = &rest[open..];
+                let body_start = after_open.find('>').map(|i| open + i + 1).unwrap_or(open);
+                let close = rest[body_start..]
+                    .find("</questions")
+                    .map(|i| body_start + i + 12)
+                    .unwrap_or(rest.len());
+                rest = &rest[close.min(rest.len())..];
+            }
+            None => {
+                out.push_str(rest);
+                break;
+            }
+        }
+    }
+    out.trim().to_string()
+}
+
 /// A fully-assembled native tool call from the provider stream.
 #[derive(Debug, Clone)]
 pub struct AgentToolCall {
@@ -101,6 +248,12 @@ pub enum CallOutcome {
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
     Text { text: String },
+    /// A piece of the model's reasoning/thinking, streamed before content.
+    /// The frontend renders it as an expandable trace — it is never part of
+    /// the assistant's final text.
+    Reasoning { text: String },
+    /// Reasoning has finished (first content token or end of stream).
+    ReasoningDone {},
     /// A tool call was detected / executed. `status`: pending | success | error.
     ToolCall {
         call_id: String,
@@ -116,6 +269,13 @@ pub enum AgentEvent {
         plugin_id: String,
         capability: String,
         params: Value,
+    },
+    /// The model asked structured clarifying questions instead of acting —
+    /// the frontend renders them as an approval-style card and the turn
+    /// pauses until `chat_submit_answers` resolves the batch.
+    QuestionsAsked {
+        question_id: String,
+        questions: Vec<AgentQuestion>,
     },
     RunComplete { final_text: String },
     RunError { error: String },
@@ -136,6 +296,9 @@ pub struct AgentLoop {
     /// and MCP-sourced calls execute without a PendingApproval event
     /// (frontend "Auto-Approve" mode).
     pub approval_auto: Arc<AtomicBool>,
+    /// Human-in-the-loop clarifying questions — the loop pauses on a
+    /// `<questions>` block and waits for `chat_submit_answers`.
+    pub questions: Arc<QuestionsRegistry>,
     pub event_bus: Arc<EventBus>,
     pub observability: Arc<Observability>,
     pub event_store: Arc<EventSourcingStore>,
@@ -307,13 +470,24 @@ impl AgentLoop {
             let mut round_text = String::new();
             let mut pending: Vec<PendingCall> = Vec::new();
             let mut finish_seen = false;
+            let mut saw_reasoning = false;
 
             while let Some(event) = rx.recv().await {
                 if self.abort.load(Ordering::SeqCst) {
                     break;
                 }
                 match event {
+                    AgentStreamEvent::Reasoning(text) => {
+                        saw_reasoning = true;
+                        let _ = event_tx.send(AgentEvent::Reasoning { text }).await;
+                    }
                     AgentStreamEvent::Text(text) => {
+                        // Reasoning families stream thinking first, then the
+                        // answer — the first content token closes the trace.
+                        if saw_reasoning {
+                            saw_reasoning = false;
+                            let _ = event_tx.send(AgentEvent::ReasoningDone {}).await;
+                        }
                         round_text.push_str(&text);
                         let _ = event_tx
                             .send(AgentEvent::Text { text })
@@ -347,6 +521,10 @@ impl AgentLoop {
                         }
                     }
                     AgentStreamEvent::Finish { tool_calls } => {
+                        if saw_reasoning {
+                            saw_reasoning = false;
+                            let _ = event_tx.send(AgentEvent::ReasoningDone {}).await;
+                        }
                         finish_seen = true;
                         if !tool_calls {
                             break;
@@ -358,6 +536,67 @@ impl AgentLoop {
             if !finish_seen && pending.is_empty() {
                 // Stream ended without completion signal (error text path).
                 break;
+            }
+
+            // ---- Human-in-the-loop: structured clarifying questions ----
+            // The model may emit a <questions> block instead of acting on
+            // ambiguous parameters. Pause the turn, show the card, and only
+            // continue once the user's answers come back (or the turn is
+            // aborted / the card dismissed without answers).
+            let parsed_questions = parse_questions(&round_text);
+            if pending.is_empty() && !parsed_questions.is_empty() {
+                let questions = parsed_questions;
+                let cleaned_round = strip_questions_blocks(&round_text);
+                round_text = cleaned_round;
+                final_text.push_str(&round_text);
+                self.update_assistant_text(&assistant_id, &final_text);
+
+                let question_id = format!("questions_{}", uuid::Uuid::new_v4());
+                let _ = event_tx
+                    .send(AgentEvent::QuestionsAsked {
+                        question_id: question_id.clone(),
+                        questions: questions.clone(),
+                    })
+                    .await;
+
+                let mut answers_rx = self.questions.register(question_id.clone());
+                // Wait for the user's answers, polling the abort flag so
+                // Stop still interrupts a paused turn.
+                let answers: Vec<String> = loop {
+                    if self.abort.load(Ordering::SeqCst) {
+                        break Vec::new();
+                    }
+                    match answers_rx.try_recv() {
+                        Ok(answers) => break answers,
+                        Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                        }
+                        Err(tokio::sync::oneshot::error::TryRecvError::Closed) => break Vec::new(),
+                    }
+                };
+                if self.abort.load(Ordering::SeqCst) {
+                    // Drop the registry entry so a late submit doesn't error.
+                    let _ = self.questions.resolve(&question_id, Vec::new());
+                    break;
+                }
+
+                // Feed the answers back as a user message so the model can
+                // proceed with the clarified parameters (provider-agnostic —
+                // user role works on every backend).
+                if !answers.is_empty() {
+                    let mut qa = String::new();
+                    for (i, (q, a)) in questions.iter().zip(answers.iter()).enumerate() {
+                        qa.push_str(&format!("Q{} — {}\nA: {}\n", i + 1, q.question, a));
+                    }
+                    native.push(json!({
+                        "role": "user",
+                        "content": format!(
+                            "[Answers to your clarifying questions]\n{}\nProceed with the task.",
+                            qa
+                        ),
+                    }));
+                }
+                continue;
             }
 
             final_text.push_str(&round_text);
@@ -607,6 +846,9 @@ impl AgentLoop {
                 plugin_calls: Vec::new(),
                 intent: None,
                 is_hidden: None,
+                reasoning: None,
+                reasoning_done: None,
+                reasoning_seconds: None,
             });
             metadata.plugin_calls.push(PluginCall {
                 call_id: Some(call.call_id.clone()),
@@ -917,5 +1159,68 @@ mod budget_tests {
         let mut native = vec![mk("system"), mk("user"), mk("assistant")];
         trim_history_to_budget(&mut native, 100_000);
         assert_eq!(native.len(), 3);
+    }
+
+    // ─── Human-in-the-loop questions parsing ───
+
+    #[test]
+    fn parses_mixed_question_types_and_options() {
+        let text = concat!(
+            "I need some details first.\n",
+            "<questions>\n",
+            "  <question type=\"radio\">How many flavors?<options>Three, Five, One hero</options></question>\n",
+            "  <question type=\"check\">Which mix-ins?<options>Chips, Sprinkles</options></question>\n",
+            "  <question type=\"text\">Anything else?</question>\n",
+            "</questions>\n",
+            "Thanks!"
+        );
+        let qs = parse_questions(text);
+
+        assert_eq!(qs.len(), 3);
+        assert_eq!(qs[0].qtype, "radio");
+        assert_eq!(qs[0].question, "How many flavors?");
+        assert_eq!(qs[0].options, vec!["Three", "Five", "One hero"]);
+        assert_eq!(qs[1].qtype, "check");
+        assert_eq!(qs[1].options, vec!["Chips", "Sprinkles"]);
+        assert_eq!(qs[2].qtype, "text");
+        assert!(qs[2].options.is_empty());
+    }
+
+    #[test]
+    fn no_questions_block_yields_empty() {
+        assert!(parse_questions("plain answer, no markup").is_empty());
+    }
+
+    #[test]
+    fn unclosed_questions_block_is_tolerated() {
+        let qs = parse_questions("<questions>\n<question type=\"text\">Budget?</question>");
+        assert_eq!(qs.len(), 1);
+        assert_eq!(qs[0].question, "Budget?");
+    }
+
+    #[test]
+    fn strips_questions_blocks_from_text() {
+        let text = concat!(
+            "Let me ask.\n",
+            "<questions><question type=\"radio\">A?<options>x, y</options></question></questions>\n",
+            "Done asking."
+        );
+        let cleaned = strip_questions_blocks(text);
+        assert!(!cleaned.contains("<questions"));
+        assert!(cleaned.contains("Let me ask."));
+        assert!(cleaned.contains("Done asking."));
+    }
+
+    #[test]
+    fn caps_question_batch_at_three() {
+        let mut text = String::from("<questions>");
+        for i in 0..6 {
+            text.push_str(&format!(
+                "<question type=\"text\">Q{}?</question>",
+                i
+            ));
+        }
+        text.push_str("</questions>");
+        assert_eq!(parse_questions(&text).len(), 3);
     }
 }

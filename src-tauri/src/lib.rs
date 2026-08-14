@@ -14,7 +14,7 @@ pub mod plugins;
 pub mod runtime;
 pub mod utils;
 
-use agent::{AgentLoop, ApprovalRegistry};
+use agent::{AgentLoop, ApprovalRegistry, QuestionsRegistry};
 use ai_bridge::{AiBridge, ModelTelemetry};
 use models::chat::ChatMessage;
 use plugin_manager::PluginManager;
@@ -31,6 +31,9 @@ pub struct AppState {
     pub ai_bridge: Arc<AiBridge>,
     pub agent_loop: Arc<AgentLoop>,
     pub approvals: Arc<ApprovalRegistry>,
+    /// Human-in-the-loop clarifying questions (the agent pauses its turn
+    /// until the user answers; resolved via `chat_submit_answers`).
+    pub questions: Arc<QuestionsRegistry>,
     pub event_bus: Arc<EventBus>,
     pub event_store: Arc<EventSourcingStore>,
     pub observability: Arc<Observability>,
@@ -84,6 +87,7 @@ impl AppState {
             model_telemetry.clone(),
         ));
         let approvals = Arc::new(ApprovalRegistry::new());
+        let questions = Arc::new(QuestionsRegistry::new());
         let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
         let abort_generation = Arc::new(AtomicBool::new(false));
         let approval_auto = Arc::new(AtomicBool::new(false));
@@ -95,6 +99,7 @@ impl AppState {
             chat_history: chat_history.clone(),
             abort: abort_generation.clone(),
             approval_auto: approval_auto.clone(),
+            questions: questions.clone(),
             event_bus: event_bus.clone(),
             observability: observability.clone(),
             event_store: event_store.clone(),
@@ -110,6 +115,7 @@ impl AppState {
             ai_bridge,
             agent_loop,
             approvals,
+            questions,
             event_bus,
             event_store,
             observability,

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import type { ChatMessage, PluginCall, ToolCallDetected } from '@/types/chat';
+import type { ChatMessage, PluginCall, ToolCallDetected, AgentQuestion } from '@/types/chat';
 import { usePluginStore } from './usePluginStore';
 import { useAppStore } from './useAppStore';
 import { extractError } from '@/lib/errors';
@@ -17,6 +17,13 @@ interface ChatState {
   conversationId: string;
   conversationTitle: string;
   sessions: { id: string; title: string; updated_at: number; pinned?: boolean; folder?: string }[];
+  /** Transient start times of live reasoning phases (never persisted). */
+  reasoningClock: Record<string, number>;
+  pendingQuestions: {
+    questionId: string;
+    messageId: string;
+    questions: AgentQuestion[];
+  }[];
 
   sendMessage: (content: string, images?: string[]) => Promise<void>;
   editAndResend: (messageId: string, newContent: string) => Promise<void>;
@@ -27,6 +34,16 @@ interface ChatState {
   executeToolCall: (messageId: string, capName: string, isApproved: boolean) => Promise<void>;
   /** Backend-driven tool-call lifecycle events (chat-tool-call-detected). */
   handleToolCallEvent: (payload: ToolCallDetected) => void;
+  /** Backend-driven reasoning trace (chat-reasoning-chunk). */
+  handleReasoningChunk: (chunk: string, messageId: string, done: boolean) => void;
+  /** Question batches the agent is waiting on (chat-questions-asked). */
+  handleQuestionsAsked: (payload: {
+    question_id: string;
+    message_id: string;
+    questions: AgentQuestion[];
+  }) => void;
+  submitAnswers: (questionId: string, answers: string[]) => Promise<void>;
+  clearQuestions: (questionId: string) => void;
   clearChat: () => void;
   setModel: (model: string, provider?: string) => Promise<void>;
   setError: (error: string | null) => void;
@@ -91,6 +108,8 @@ export const useChatStore = create<ChatState>()(
     conversationId: generateId(),
     conversationTitle: 'New Chat',
     sessions: [],
+    reasoningClock: {},
+    pendingQuestions: [],
 
     sendMessage: async (content: string, images?: string[]) => {
       const state = get();
@@ -108,6 +127,8 @@ export const useChatStore = create<ChatState>()(
         state.messages.push(userMessage);
         state.isStreaming = true;
         state.error = null;
+        // A new turn supersedes any stale question card (abort mid-pause).
+        state.pendingQuestions = [];
       });
 
       const uiContext = getUiContext();
@@ -394,6 +415,8 @@ export const useChatStore = create<ChatState>()(
       // overwrites a good session file.
       set((state) => {
         state.isStreaming = false;
+        // The turn ended — any card still open was orphaned (abort).
+        state.pendingQuestions = [];
       });
       await maybeSaveSession();
     },
@@ -451,6 +474,82 @@ export const useChatStore = create<ChatState>()(
             segments.push({ t: 'tools', calls: [payload.call_id] });
           }
         }
+      });
+    },
+
+    /** Backend-driven reasoning trace (chat-reasoning-chunk). Reasoning
+     *  streams before content on reasoning families; chunks accumulate into
+     *  the message's `metadata.reasoning` (persisted with the session). */
+    handleReasoningChunk: (chunk, messageId, done) => {
+      set((state) => {
+        let msg = state.messages.find((m) => m.id === messageId);
+        if (!msg) {
+          // Reasoning can arrive before the first content chunk creates the
+          // assistant message — create it here so the trace has a home.
+          msg = {
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+          };
+          state.messages.push(msg);
+        }
+        if (!msg.metadata) msg.metadata = { plugin_calls: [] };
+        const meta = msg.metadata;
+        if (chunk) {
+          if (!meta.reasoning) {
+            meta.reasoning = chunk;
+            if (!state.reasoningClock[messageId]) {
+              state.reasoningClock[messageId] = Date.now();
+            }
+          } else {
+            meta.reasoning += chunk;
+          }
+        }
+        if (done) {
+          const started = state.reasoningClock[messageId];
+          if (started) {
+            meta.reasoningSeconds = Math.max(1, Math.round((Date.now() - started) / 1000));
+            delete state.reasoningClock[messageId];
+          }
+          meta.reasoningDone = true;
+        }
+      });
+    },
+
+    /** Human-in-the-loop questions (chat-questions-asked): the agent loop
+     *  paused its turn and waits for `chat_submit_answers`. */
+    handleQuestionsAsked: (payload) => {
+      set((state) => {
+        const existing = state.pendingQuestions.find((q) => q.questionId === payload.question_id);
+        if (existing) {
+          existing.questions = payload.questions;
+          existing.messageId = payload.message_id;
+        } else {
+          state.pendingQuestions.push({
+            questionId: payload.question_id,
+            messageId: payload.message_id,
+            questions: payload.questions,
+          });
+        }
+      });
+    },
+
+    submitAnswers: async (questionId, answers) => {
+      // The card owns the entry's lifecycle: it shows a brief "Answers
+      // sent" beat and then clears itself via clearQuestions — a cleared
+      // card means the loop already resumed, so nothing happens here.
+      try {
+        await invoke('chat_submit_answers', { questionId, answers });
+      } catch (err) {
+        toast.error(`Failed to submit answers: ${extractError(err)}`);
+        throw err;
+      }
+    },
+
+    clearQuestions: (questionId) => {
+      set((state) => {
+        state.pendingQuestions = state.pendingQuestions.filter((q) => q.questionId !== questionId);
       });
     },
 
