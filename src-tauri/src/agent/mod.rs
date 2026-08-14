@@ -26,6 +26,7 @@ use crate::plugin_manager::PluginManager;
 use crate::utils::capability_policy;
 use crate::utils::config::AppConfig;
 use crate::utils::errors::WeaveError;
+use crate::utils::fs_security;
 
 use runtime_kernel::event_bus::EventBus;
 use runtime_kernel::event_store::EventSourcingStore;
@@ -269,6 +270,9 @@ pub enum AgentEvent {
         plugin_id: String,
         capability: String,
         params: Value,
+        /// True when the call's paths reach outside the workspace root —
+        /// the UI surfaces it so the approval is an informed one.
+        outside_workspace: bool,
     },
     /// The model asked structured clarifying questions instead of acting —
     /// the frontend renders them as an approval-style card and the turn
@@ -674,9 +678,15 @@ impl AgentLoop {
                     ),
                     None => capability_policy::requires_approval(&call.capability),
                 };
+                // Paths reaching outside the workspace root are an escape:
+                // they must sit behind the same gate regardless of the
+                // capability's static classification.
+                let escapes = capability_policy::escaped_path_params(&call.args);
+                let outside_workspace = !escapes.is_empty();
                 // Auto-Approve (frontend toggle) bypasses the gate entirely —
-                // no PendingApproval event, no banner, no wait.
-                let gated = gated && !self.approval_auto.load(Ordering::SeqCst);
+                // no PendingApproval event, no banner, no wait. Consent is
+                // implicit, so any escape the call makes is approved too.
+                let gated = (gated || outside_workspace) && !self.approval_auto.load(Ordering::SeqCst);
                 if gated {
                     let receiver = self.approvals.register(call.call_id.clone());
                     let _ = event_tx
@@ -685,10 +695,16 @@ impl AgentLoop {
                             plugin_id: plugin_id.clone(),
                             capability: call.capability.clone(),
                             params: call.args.clone(),
+                            outside_workspace,
                         })
                         .await;
 
-                    info!("Awaiting approval for {} ({})", call.capability, call.call_id);
+                    info!(
+                        "Awaiting approval for {} ({}){}",
+                        call.capability,
+                        call.call_id,
+                        if outside_workspace { " — OUTSIDE WORKSPACE" } else { "" }
+                    );
                     let decision = match receiver.await {
                         Ok(decision) => decision,
                         Err(_) => {
@@ -704,6 +720,11 @@ impl AgentLoop {
                         }
                         ApprovalDecision::Approved => {
                             info!("User approved tool call {}", call.call_id);
+                            // The user consented to the escape — record the
+                            // canonical paths so execution may proceed.
+                            for escape in &escapes {
+                                fs_security::approve_escape(escape);
+                            }
                             self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id)
                         }
                     };
@@ -724,6 +745,11 @@ impl AgentLoop {
                         .await;
                     outcomes.push(outcome);
                 } else {
+                    // Ungated (or auto-approved): implicit consent covers
+                    // any escape the call makes.
+                    for escape in &escapes {
+                        fs_security::approve_escape(escape);
+                    }
                     let outcome = self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id);
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
                     let _ = event_tx

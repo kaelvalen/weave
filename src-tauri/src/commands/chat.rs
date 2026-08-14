@@ -38,6 +38,9 @@ struct ToolCallDetected {
     params: serde_json::Value,
     status: String,
     result: Option<serde_json::Value>,
+    /// True when the call's paths reach outside the workspace root.
+    #[serde(default)]
+    outside_workspace: bool,
 }
 
 #[tauri::command]
@@ -276,6 +279,7 @@ pub async fn chat_send_message(
                         params,
                         status,
                         result,
+                        outside_workspace: false,
                     },
                 );
             }
@@ -284,6 +288,7 @@ pub async fn chat_send_message(
                 plugin_id,
                 capability,
                 params,
+                outside_workspace,
             } => {
                 let _ = app_handle.emit(
                     "chat-tool-call-detected",
@@ -295,6 +300,7 @@ pub async fn chat_send_message(
                         params,
                         status: "pending_approval".to_string(),
                         result: None,
+                        outside_workspace,
                     },
                 );
             }

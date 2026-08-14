@@ -73,6 +73,20 @@ impl AppState {
         let config_arc = Arc::new(RwLock::new(config.clone()));
         let ai_config_arc = Arc::new(RwLock::new(config.ai.clone()));
 
+        // Restore the workspace root the user last selected in the File
+        // Manager: the AI's working directory (and the sandbox root) must
+        // follow it, not the directory the app was launched from.
+        if let Some(root) = config.workspace_root.clone() {
+            match std::env::set_current_dir(&root) {
+                Ok(()) => info!("Restored workspace root: {}", root),
+                Err(e) => tracing::warn!(
+                    "Workspace root {} no longer valid ({}); keeping launch directory",
+                    root,
+                    e
+                ),
+            }
+        }
+
         let (canvas_tx, _) = tokio::sync::broadcast::channel(100);
 
         let event_bus = Arc::new(EventBus::new(1000));

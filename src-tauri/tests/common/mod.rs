@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 
-use weave::agent::{AgentEvent, AgentLoop, ApprovalRegistry};
+use weave::agent::{AgentEvent, AgentLoop, ApprovalRegistry, QuestionsRegistry};
 use weave::ai_bridge::{AiBridge, ModelTelemetry};
 use weave::models::chat::{ChatMessage, ChatRole, ModelConfig, Provider};
 pub use weave::plugin_manager::PluginManager;
@@ -220,6 +220,7 @@ impl Harness {
         let plugin_manager = Arc::new(PluginManager::new(temp_dir, canvas_tx));
 
         let approvals = Arc::new(ApprovalRegistry::new());
+        let questions = Arc::new(QuestionsRegistry::new());
         let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
         let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -231,6 +232,7 @@ impl Harness {
             chat_history: chat_history.clone(),
             abort,
             approval_auto: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            questions,
             event_bus,
             observability,
             event_store,

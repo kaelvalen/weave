@@ -18,6 +18,10 @@ pub struct AppConfig {
     /// provider API keys above, same inherited caveat (no OS keychain).
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
+    /// The workspace root the File Manager selected (persisted so the AI's
+    /// working directory survives restarts; see `system_set_cwd`).
+    #[serde(default)]
+    pub workspace_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,6 +216,7 @@ impl Default for AppConfig {
                 font_size: 14,
             },
             mcp_servers: HashMap::new(),
+            workspace_root: None,
         }
     }
 }

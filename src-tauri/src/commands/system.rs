@@ -54,9 +54,20 @@ pub fn system_get_version() -> String {
 }
 
 #[tauri::command]
-pub fn system_set_cwd(path: String) -> Result<(), WeaveError> {
+pub fn system_set_cwd(path: String, _app_state: tauri::State<'_, AppState>) -> Result<(), WeaveError> {
     std::env::set_current_dir(&path)
         .map_err(|e| WeaveError::Io(format!("Failed to set CWD to {}: {}", path, e)))?;
     info!("Changed working directory to: {}", path);
+
+    // Persist the workspace root so the AI sees the same folder after a
+    // restart — the File Manager syncs it, but the backend must own it too.
+    if let Ok(mut config) = AppConfig::load() {
+        if config.workspace_root.as_deref() != Some(path.as_str()) {
+            config.workspace_root = Some(path.clone());
+            if let Err(e) = config.save() {
+                tracing::warn!("Failed to persist workspace root: {}", e);
+            }
+        }
+    }
     Ok(())
 }

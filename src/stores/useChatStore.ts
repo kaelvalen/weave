@@ -430,6 +430,7 @@ export const useChatStore = create<ChatState>()(
         params: (payload.params as Record<string, unknown>) || {},
         result: payload.result as PluginCall['result'],
         status: payload.status as PluginCall['status'],
+        outside_workspace: payload.outside_workspace,
       };
       set((state) => {
         let msg = state.messages.find((m) => m.id === payload.message_id);
