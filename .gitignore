@@ -51,3 +51,5 @@ external_plugins/**/.venv/
 
 # Rust
 target/
+# Shell sandbox HOME (bwrap /workspace/.weave-home) — must never be committed
+.weave-home/
