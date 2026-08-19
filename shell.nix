@@ -8,6 +8,8 @@ pkgs.mkShell {
     gobject-introspection
     cargo
     cargo-tauri
+    clippy
+    rustfmt
     nodejs
     python313
     rustc

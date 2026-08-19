@@ -120,6 +120,11 @@ pub struct McpServerConfig {
     pub authorization_endpoint: Option<String>,
     #[serde(default)]
     pub token_endpoint: Option<String>,
+    /// Negotiated MCP protocol version at add time. `None` or `"2026-07-28"`
+    /// → stateless transport; `"2025-06-18"` → legacy session-based transport
+    /// (drives `mcp_client::call_tool_sync_negotiated` and session-aware list).
+    #[serde(default)]
+    pub protocol_version: Option<String>,
     /// OAuth scopes advertised by the protected resource. The authorization
     /// URL requests these instead of inventing a provider-specific scope.
     #[serde(default)]

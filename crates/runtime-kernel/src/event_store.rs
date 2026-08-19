@@ -141,7 +141,7 @@ impl EventSourcingStore {
         event_bus: &Arc<EventBus>,
     ) {
         self.append(event.clone(), metadata.clone());
-        let _ = event_bus.publish(SystemEvent::TaskStatusChanged {
+        event_bus.publish(SystemEvent::TaskStatusChanged {
             task_id: uuid::Uuid::new_v4().to_string(),
             status: format!("{:?}", event),
         });
@@ -234,5 +234,11 @@ impl EventSourcingStore {
 
     pub fn replay_events(&self) -> Vec<AuditRecord> {
         self.list_records()
+    }
+}
+
+impl Default for EventSourcingStore {
+    fn default() -> Self {
+        Self::new()
     }
 }

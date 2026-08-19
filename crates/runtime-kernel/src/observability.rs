@@ -69,3 +69,9 @@ impl Observability {
         self.metrics.read().clone()
     }
 }
+
+impl Default for Observability {
+    fn default() -> Self {
+        Self::new()
+    }
+}

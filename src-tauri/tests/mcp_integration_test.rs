@@ -169,6 +169,7 @@ async fn mcp_tool_call_round_trips_through_agent_loop() {
         &mcp_url,
         None,
         listed.tools,
+        None,
     );
     assert_eq!(plugin.id, "com.weave.mcp.weather");
 
@@ -225,7 +226,7 @@ async fn mcp_tool_call_rejected_still_pairs_result() {
     harness
         .loop_
         .plugin_manager
-        .add_mcp_server("weather", "Weather", &mcp_url, None, listed.tools);
+        .add_mcp_server("weather", "Weather", &mcp_url, None, listed.tools, None);
 
     let (_final_text, events) = harness.run_loop(ApprovalDecision::Rejected).await;
     assert!(saw_approval(&events, &capability));
@@ -434,6 +435,30 @@ async fn legacy_session_based_server_negotiates_and_roundtrips() {
     );
 }
 
+/// The executor runtime path for a legacy server: `call_tool_sync_negotiated`
+/// (what `McpExecutor::execute` routes through once a server is registered
+/// with a `2025-06-18` protocol version) establishes a fresh initialize
+/// session per call and drives `tools/call` over it — the C-tier proof that a
+/// legacy server's tools actually *run*, not just that a session handshake
+/// connects. Hermetic: uses the mock legacy server above.
+#[test]
+fn legacy_executor_negotiates_session_and_calls_tool() {
+    let (url, _seen) = spawn_mock_legacy_mcp_server();
+    let result = mcp_client::call_tool_sync_negotiated(
+        &url,
+        Some(mcp_client::LEGACY_PROTOCOL_VERSION),
+        "get_forecast",
+        serde_json::json!({"city": "Ankara"}),
+        None,
+        None,
+    )
+    .expect("legacy tools/call must run through a negotiated session");
+    assert!(
+        serde_json::to_string(&result).unwrap().contains("legacy-sunny"),
+        "legacy tool call should return the server content, got: {:?}",
+        result
+    );
+}
 
 /// Phase 8.4 — live-server round trip. Proves the client talks to a real
 /// 2026-07-28 MCP server over real HTTP with no mock in the path:

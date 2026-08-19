@@ -62,6 +62,7 @@ Read this before editing. The human maintainer follows the same rules.
 # and bubblewrap for the sandbox tests (headless shells lack them).
 nix-shell shell.nix --run 'cargo test --workspace'
 nix-shell shell.nix --run 'cargo check --workspace --all-targets'   # zero warnings
+nix-shell shell.nix --run 'cargo clippy --workspace --all-targets -- -D clippy::correctness'
 
 # Web
 npm run typecheck && npm run lint && npm test && npm run build

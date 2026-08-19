@@ -50,13 +50,24 @@ machine, stream-order segments, session-persistence guard, and the
 `weave.ask_user` questions card: store/dedupe/submit/clear). Other stores and
 libs (capabilities drift, artifacts, theme, commands) round it out.
 
-### 4. Not-yet-covered / aspirational
+### 4. Status of former "aspirational" items
 
-- Frontend component/UI rendering of the approval card and the ask_user card
-  (store-level contracts are covered; DOM interaction is not).
-- A full-spine *timed-out* tool test (a deliberately hanging executor asserting
-  `TOOL_EXEC_TIMEOUT`).
-- E2E / snapshot / stress tiers (the harness has none; keep tests hermetic).
+The following are now covered:
+
+- **Timed-out tool spine test**: `agent_loop_test.rs::hung_tool_execution_is_timed_out_not_never`
+  registers a deliberately 30s-hanging executor against a shortened
+  (`AgentLoop.tool_timeout_ms`) guard and proves the loop reports "timed out",
+  still pairs a completion-rule result, and completes in <5s.
+- **DOM component tier**: jsdom + `@testing-library/react` + jest-dom
+  (`QuestionsCard.test.tsx`) covering the `weave.ask_user` card render /
+  text-submit / radio-press; the other stores (`useAppStore`,
+  `useRuntimeStore`) now have tests too.
+- **Static analysis gate**: `cargo clippy --workspace --all-targets -- -D clippy::correctness`
+  runs in CI (`shell.nix` ships a matching clippy). The broad style backlog
+  (`-D warnings` — e.g. `too_many_arguments`) is tracked separately.
+
+Still not covered: E2E / snapshot / stress tiers, and the hosted web UI itself
+(the harness has none; keep tests hermetic).
 
 ## How to run
 

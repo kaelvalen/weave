@@ -94,6 +94,7 @@ impl PluginManager {
         base_url: &str,
         access_token: Option<String>,
         tools: Vec<McpTool>,
+        protocol_version: Option<String>,
     ) -> Plugin {
         let id = mcp_client::plugin_id(server_id);
 
@@ -147,6 +148,7 @@ impl PluginManager {
                 base_url: base_url.to_string(),
                 access_token,
                 schemas,
+                protocol_version,
             }),
         );
 
@@ -207,6 +209,7 @@ impl PluginManager {
             let name = cfg.name.clone();
             let url = cfg.url.clone();
             let token = cfg.access_token.clone();
+            let protocol_version = cfg.protocol_version.clone();
             std::thread::spawn(move || {
                 let rt = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -219,7 +222,19 @@ impl PluginManager {
                     }
                 };
                 let listed = match &token {
-                    Some(t) => rt.block_on(mcp_client::list_tools(&url, Some(t))),
+                    Some(t) => {
+                        if protocol_version.as_deref() == Some(mcp_client::LEGACY_PROTOCOL_VERSION) {
+                            rt.block_on(async {
+                                let supported = vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()];
+                                match mcp_client::establish_session(&url, &supported, Some(t)).await {
+                                    Ok(session) => mcp_client::list_tools_with_session(&url, &session, Some(t)).await,
+                                    Err(e) => Err(e),
+                                }
+                            })
+                        } else {
+                            rt.block_on(mcp_client::list_tools(&url, Some(t)))
+                        }
+                    }
                     None => Ok(mcp_client::ToolsListResult {
                         tools: Vec::new(),
                         ttl_ms: None,
@@ -240,7 +255,7 @@ impl PluginManager {
                 };
                 this.mcp_tool_cache
                     .store(&server_id, listed.clone());
-                this.add_mcp_server(&server_id, &name, &url, token, listed.tools);
+                this.add_mcp_server(&server_id, &name, &url, token, listed.tools, protocol_version);
                 info!("Restored MCP server: {} ({})", name, server_id);
             });
         }

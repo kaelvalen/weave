@@ -84,18 +84,44 @@ pub async fn mcp_add_server(
 
     info!("Adding MCP server: {} ({})", display_name, url);
 
-    // Version-scope enforcement point (Part 2 §4): reject anything that
-    // doesn't declare 2026-07-28 support before touching the registry.
-    // A 401 challenge (WeaveError::AuthRequired) is not a protocol failure —
-    // it's the signal that OAuth is required, handled below.
-    let mut auth_required: Option<crate::utils::errors::AuthChallenge> = match mcp_client::discover(&url, None).await {
-        Ok(_) => None,
-        Err(WeaveError::AuthRequired(challenge)) => Some(challenge),
-        Err(e) => return Err(e),
+    // No blanket protocol reject: discovery reports what the server supports
+    // and we negotiate the transport (stateless 2026-07-28 vs legacy
+    // session-based 2025-06-18). A 401 challenge (WeaveError::AuthRequired) is
+    // not a protocol failure — it's the signal that OAuth is required.
+    let mut protocol_versions: Option<Vec<String>> = None;
+    let mut auth_required: Option<crate::utils::errors::AuthChallenge> =
+        match mcp_client::discover(&url, None).await {
+            Ok(info) => {
+                // Negotiated protocol version for the tool-list and executor.
+                protocol_versions = Some(info.protocol_versions);
+                None
+            }
+            Err(WeaveError::AuthRequired(challenge)) => Some(challenge),
+            Err(e) => return Err(e),
+        };
+    let protocol_version = protocol_versions
+        .as_deref()
+        .and_then(mcp_client::choose_session)
+        .map(|s| s.protocol_version);
+
+    let listed_result: Result<mcp_client::ToolsListResult, WeaveError> = if protocol_version
+        .as_deref()
+        == Some(mcp_client::LEGACY_PROTOCOL_VERSION)
+    {
+        // Legacy session-based server: establish an initialize session, then
+        // list tools over it.
+        match mcp_client::establish_session(&url, &vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()], None).await {
+            Ok(session) => mcp_client::list_tools_with_session(&url, &session, None).await,
+            Err(e) => Err(e),
+        }
+    } else {
+        mcp_client::list_tools(&url, None).await
     };
-    let listed = match mcp_client::list_tools(&url, None).await {
+    let listed = match listed_result {
         Ok(l) => l,
         Err(WeaveError::AuthRequired(challenge)) => {
+            // OAuth challenge — not a protocol failure; register unauthenticated
+            // and let the Marketplace offer an Authorize step.
             auth_required.get_or_insert(challenge);
             mcp_client::ToolsListResult {
                 tools: Vec::new(),
@@ -187,6 +213,7 @@ pub async fn mcp_add_server(
         &url,
         registered_token,
         listed.tools,
+        protocol_version.clone(),
     );
 
     {
@@ -210,6 +237,7 @@ pub async fn mcp_add_server(
                 issuer,
                 authorization_endpoint,
                 token_endpoint,
+                protocol_version,
                 oauth_scopes,
                 access_token: existing.as_ref().and_then(|e| e.access_token.clone()),
                 refresh_token: existing.as_ref().and_then(|e| e.refresh_token.clone()),
@@ -480,8 +508,21 @@ pub async fn mcp_oauth_authorize(
     }
 
     // Tools could not be listed without a token; re-list and re-register
-    // them now that the executor carries one.
-    let listed = mcp_client::list_tools(&cfg.url, Some(&tokens.access_token)).await?;
+    // them now that the executor carries one. Legacy session-based servers
+    // need an initialize session for the re-list.
+    let listed = if cfg.protocol_version.as_deref()
+        == Some(mcp_client::LEGACY_PROTOCOL_VERSION)
+    {
+        let session = mcp_client::establish_session(
+            &cfg.url,
+            &vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()],
+            Some(&tokens.access_token),
+        )
+        .await?;
+        mcp_client::list_tools_with_session(&cfg.url, &session, Some(&tokens.access_token)).await?
+    } else {
+        mcp_client::list_tools(&cfg.url, Some(&tokens.access_token)).await?
+    };
     app_state
         .plugin_manager
         .mcp_tool_cache()
@@ -492,6 +533,7 @@ pub async fn mcp_oauth_authorize(
         &cfg.url,
         Some(tokens.access_token),
         listed.tools,
+        cfg.protocol_version.clone(),
     );
 
     Ok(OauthResult {
@@ -554,6 +596,7 @@ pub async fn mcp_oauth_refresh(
             .mcp_tool_cache()
             .get_fresh(&server_id)
             .unwrap_or_default(),
+        cfg.protocol_version.clone(),
     );
 
     Ok(OauthResult {

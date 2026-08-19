@@ -787,6 +787,45 @@ pub fn call_tool_sync(
     .map_err(|_| WeaveError::PluginError("MCP tool-call thread panicked".to_string()))?
 }
 
+/// Synchronous `tools/call` that is protocol-aware: a stateless
+/// (`None`/`2026-07-28`) server uses the plain `call_tool_sync` path; a legacy
+/// session-based server (`protocol_version = "2025-06-18"`) establishes a fresh
+/// `initialize` session per call and drives `call_tool_with_session`. Mirrors
+/// the thread+block_on pattern of `call_tool_sync` (one call = one OS thread
+/// with its own current-thread runtime), and is what the MCP executor routes
+/// through once a legacy server is registered.
+pub fn call_tool_sync_negotiated(
+    base_url: &str,
+    protocol_version: Option<&str>,
+    tool_name: &str,
+    arguments: Value,
+    schema: Option<&Value>,
+    token: Option<&str>,
+) -> Result<Value, WeaveError> {
+    let pv = match protocol_version.filter(|v| *v != MCP_PROTOCOL_VERSION) {
+        None => return call_tool_sync(base_url, tool_name, arguments, schema, token),
+        Some(pv) => pv.to_string(),
+    };
+
+    let base_url = base_url.to_string();
+    let tool_name = tool_name.to_string();
+    let token = token.map(|t| t.to_string());
+
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| WeaveError::PluginError(e.to_string()))?;
+        rt.block_on(async move {
+            let supported = vec![pv.clone()];
+            let session = establish_session(&base_url, &supported, token.as_deref()).await?;
+            call_tool_with_session(&base_url, &session, &tool_name, arguments, token.as_deref()).await
+        })
+    })
+    .join()
+    .map_err(|_| WeaveError::PluginError("MCP legacy tool-call thread panicked".to_string()))?
+}
+
 // ── OAuth 2.1 / CIMD authorization (Phase 8.2 Part 2 §4–§5) ─────────────
 
 /// Default loopback redirect URI the OAuth flow's local listener binds.
@@ -1221,6 +1260,9 @@ pub struct McpExecutor {
     /// Tool input schemas at registration time, keyed by tool name — used
     /// to route `x-mcp-header` parameters to `Mcp-Param-*` headers.
     pub schemas: HashMap<String, Value>,
+    /// Negotiated protocol version at registration (`None`/`2026-07-28` →
+    /// stateless; `2025-06-18` → legacy session per call).
+    pub protocol_version: Option<String>,
 }
 
 impl PluginExecutor for McpExecutor {
@@ -1234,8 +1276,9 @@ impl PluginExecutor for McpExecutor {
         let tool_name = capability
             .strip_prefix(prefix.as_str())
             .ok_or_else(|| WeaveError::CapabilityNotFound(capability.to_string()))?;
-        call_tool_sync(
+        call_tool_sync_negotiated(
             &self.base_url,
+            self.protocol_version.as_deref(),
             tool_name,
             params,
             self.schemas.get(tool_name),
@@ -1347,6 +1390,7 @@ mod tests {
             base_url: "http://127.0.0.1:1".to_string(),
             access_token: None,
             schemas: HashMap::new(),
+            protocol_version: None,
         };
         let ctx = runtime_kernel::execution_context::ExecutionContext::new(
             "test".to_string(),

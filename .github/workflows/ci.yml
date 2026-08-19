@@ -28,6 +28,12 @@ jobs:
       - name: Cargo test (workspace)
         run: cargo test --workspace
 
+      # Clippy: deny the correctness group (real bugs). The broad style
+      # backlog (-D warnings, e.g. too_many_arguments) is tracked separately;
+      # shell.nix provides a matching clippy for reproducibility.
+      - name: Clippy (correctness)
+        run: cargo clippy --workspace --all-targets -- -D clippy::correctness
+
       - name: Architecture contract check
         run: python3 scripts/check_architecture.py
 
