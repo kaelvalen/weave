@@ -192,10 +192,11 @@ pub enum AgentEvent {
 /// net against model loops that never stop calling tools).
 const MAX_ROUNDS: usize = 12;
 
-/// Hard cap on a single tool call's execution time. Executors run on their
-/// own OS thread (see `execute_call`); this bounds how long a hung tool can
-/// stall the turn, feeding the result back to the model as a normal error.
-const TOOL_EXEC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+/// Default hard cap (ms) on a single tool call's execution time. Executors run
+/// on their own OS thread (see `execute_call`); this bounds how long a hung
+/// tool can stall the turn, feeding the result back to the model as an error.
+/// Public so the app shell and the test harness share the same default.
+pub const DEFAULT_TOOL_TIMEOUT_MS: u64 = 120_000;
 
 pub struct AgentLoop {
     pub ai_bridge: Arc<AiBridge>,
@@ -214,6 +215,10 @@ pub struct AgentLoop {
     pub event_bus: Arc<EventBus>,
     pub observability: Arc<Observability>,
     pub event_store: Arc<EventSourcingStore>,
+    /// Hard cap (ms) on each tool call's execution time (see `execute_call`).
+    /// Atomic so it can be tuned at runtime (e.g. by tests) behind the shared
+    /// `Arc<AgentLoop>`. Default is `DEFAULT_TOOL_TIMEOUT_MS`.
+    pub tool_timeout_ms: std::sync::atomic::AtomicU64,
 }
 
 impl AgentLoop {
@@ -705,18 +710,19 @@ impl AgentLoop {
 
         // Bounded wait: normalized to a String so timeout, panic, and real
         // failure all flow through one error surface.
+        let tool_timeout = std::time::Duration::from_millis(self.tool_timeout_ms.load(Ordering::SeqCst));
         let result: Result<serde_json::Value, String> =
-            match tokio::time::timeout(TOOL_EXEC_TIMEOUT, rx).await {
+            match tokio::time::timeout(tool_timeout, rx).await {
                 Ok(Ok(r)) => r.map_err(|e| e.to_string()),
                 Ok(Err(_)) => Err(format!(
                     "{}::{} panicked during execution",
                     plugin_id, call.capability
                 )),
                 Err(_) => Err(format!(
-                    "{}::{} timed out after {}s",
+                    "{}::{} timed out after {}ms",
                     plugin_id,
                     call.capability,
-                    TOOL_EXEC_TIMEOUT.as_secs()
+                    tool_timeout.as_millis()
                 )),
             };
         let latency_ms = started.elapsed().as_millis() as u64;

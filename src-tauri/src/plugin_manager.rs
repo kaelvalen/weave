@@ -171,6 +171,19 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Register a plugin with a custom executor under the plugin's own id.
+    ///
+    /// Used by the test harness to inject deterministic plugins into the spine
+    /// (e.g. a deliberately slow executor to exercise the tool-timeout guard).
+    /// The plugin is marked `Active` so it participates in the agent loop.
+    pub fn register_plugin(&self, plugin: Plugin, executor: Box<dyn PluginExecutor>) {
+        let mut p = plugin;
+        let id = p.id.clone();
+        p.state = PluginState::Active;
+        self.plugins.write().insert(id.clone(), p);
+        self.executors.write().insert(id, executor);
+    }
+
     pub fn mcp_tool_cache(&self) -> Arc<McpToolCache> {
         self.mcp_tool_cache.clone()
     }

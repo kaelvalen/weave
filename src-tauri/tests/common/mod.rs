@@ -247,6 +247,9 @@ impl Harness {
             event_bus,
             observability,
             event_store,
+            tool_timeout_ms: std::sync::atomic::AtomicU64::new(
+                weave::agent::DEFAULT_TOOL_TIMEOUT_MS,
+            ),
         });
 
         Harness {

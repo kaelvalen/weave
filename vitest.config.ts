@@ -8,7 +8,10 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
+    // jsdom so component tests can render React (QuestionsCard, ToolCallCard…).
+    // Pure unit tests (stores, lib, CommandPalette helpers) also run under it.
+    environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['./src/test/setup.ts'],
   },
 });

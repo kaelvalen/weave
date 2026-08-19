@@ -121,6 +121,9 @@ impl AppState {
             event_bus: event_bus.clone(),
             observability: observability.clone(),
             event_store: event_store.clone(),
+            tool_timeout_ms: std::sync::atomic::AtomicU64::new(
+                crate::agent::DEFAULT_TOOL_TIMEOUT_MS,
+            ),
         });
 
         let _ = plugin_manager.discover();

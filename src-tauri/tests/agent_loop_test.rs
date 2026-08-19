@@ -10,7 +10,7 @@ mod common;
 
 use common::{
     assert_completion_rule, ask_user_script, plain_text_script, round_trip, saw_approval,
-    second_request_body, ApprovalDecision, Harness, PluginManager,
+    second_request_body, tool_call_script, ApprovalDecision, Harness, PluginManager,
 };
 use weave::agent::AgentEvent;
 
@@ -170,4 +170,95 @@ async fn plain_text_turn_never_gates() {
         "no tool calls means no approval gate"
     );
     assert_eq!(harness.bodies().len(), 1, "no re-request without tool calls");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 6: a hung tool execution is cut off by the guard timeout instead
+// of stalling the agent-loop worker forever (DSH guard / loop-hygiene pattern).
+// The executor sleeps far longer than the (shortened) per-tool timeout; the
+// loop must surface "timed out", still pair a completion-rule result, and
+// continue — all within a fraction of the hang.
+// ---------------------------------------------------------------------------
+
+use std::sync::atomic::Ordering;
+use serde_json::Value;
+use weave::models::plugin::{
+    Capabilities, Plugin, PluginCategory, PluginState, PluginUiConfig, RuntimeConfig,
+    RuntimeType, SandboxLevel, UiType, PluginExecutor,
+};
+use weave::utils::errors::WeaveError;
+
+/// An executor that blocks much longer than the test's (shortened) tool
+/// timeout. The guard must cut it off rather than let it stall the turn.
+struct HangingPlugin;
+impl PluginExecutor for HangingPlugin {
+    fn execute(
+        &self,
+        _capability: &str,
+        _params: Value,
+        _ctx: &runtime_kernel::execution_context::ExecutionContext,
+    ) -> Result<Value, WeaveError> {
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        Ok(Value::Null)
+    }
+}
+
+fn slow_plugin_fixture() -> Plugin {
+    let mut capabilities = Capabilities::default();
+    capabilities.provide.push("slow.echo".to_string());
+    capabilities
+        .schemas
+        .insert("slow.echo".into(), serde_json::json!({"type": "object", "properties": {}}));
+    Plugin {
+        id: "com.weave.test.slow".into(),
+        name: "Slow".into(),
+        version: "0.0.0".into(),
+        author: "test".into(),
+        description: String::new(),
+        capabilities,
+        runtime: RuntimeConfig {
+            runtime_type: RuntimeType::Builtin,
+            entry: String::new(),
+            sandbox: SandboxLevel::Strict,
+        },
+        ui: PluginUiConfig {
+            ui_type: UiType::None,
+            entry: String::new(),
+        },
+        state: PluginState::Active,
+        path: None,
+        is_builtin: false,
+        category: PluginCategory::System,
+    }
+}
+
+#[tokio::test]
+async fn hung_tool_execution_is_timed_out_not_never() {
+    let harness = Harness::new(tool_call_script("slow.echo", r#"{}"#, "Done.")).await;
+    // Shorten the per-tool timeout so this test runs fast; the guard must cut
+    // the 30s hang short (in ~200ms) rather than waiting it out.
+    harness.loop_.tool_timeout_ms.store(200, Ordering::SeqCst);
+    harness
+        .loop_
+        .plugin_manager
+        .register_plugin(slow_plugin_fixture(), Box::new(HangingPlugin));
+
+    let start = std::time::Instant::now();
+    let (final_text, _events) = harness.run_loop(ApprovalDecision::Approved).await;
+    let elapsed = start.elapsed();
+
+    // 1. The loop continued after the timed-out tool.
+    assert!(final_text.contains("Done."), "loop must continue after a timed-out tool");
+    // 2. The timeout is reported back to the model as an error...
+    let second = &harness.bodies()[1];
+    assert!(second.contains("timed out"), "tool result must report the timeout, got: {}", second);
+    assert!(second.contains("slow.echo"), "the timeout message must name the capability");
+    // 3. ...and the completion rule still holds (paired result).
+    assert_completion_rule(second);
+    // 4. The whole turn finished far sooner than the 30s hang.
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "timeout guard must cut the hang short (took {:?})",
+        elapsed
+    );
 }
