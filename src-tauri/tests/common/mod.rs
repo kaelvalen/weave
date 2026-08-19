@@ -181,6 +181,14 @@ pub fn plain_text_script(text: &str) -> Vec<Vec<String>> {
     ]]
 }
 
+/// SSE script for the reserved `weave.ask_user` native tool: request 1 asks
+/// the model to call ask_user with one structured question, request 2 returns
+/// plain text.
+pub fn ask_user_script(final_text: &str) -> Vec<Vec<String>> {
+    let args = r#"{"questions":[{"type":"radio","question":"Which plan?","options":["a","b"]}]}"#;
+    tool_call_script(PluginManager::ASK_USER_CAPABILITY, args, final_text)
+}
+
 // ---------------------------------------------------------------------------
 // Harness
 // ---------------------------------------------------------------------------
@@ -189,6 +197,7 @@ pub struct Harness {
     pub server: MockServer,
     pub config: Arc<RwLock<AppConfig>>,
     pub approvals: Arc<ApprovalRegistry>,
+    pub questions: Arc<QuestionsRegistry>,
     pub loop_: Arc<AgentLoop>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
 }
@@ -232,7 +241,7 @@ impl Harness {
             chat_history: chat_history.clone(),
             abort,
             approval_auto: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            questions,
+            questions: questions.clone(),
             event_bus,
             observability,
             event_store,
@@ -242,6 +251,7 @@ impl Harness {
             server,
             config,
             approvals,
+            questions,
             loop_: agent_loop,
             chat_history,
         }
@@ -310,6 +320,77 @@ impl Harness {
             };
             if let AgentEvent::PendingApproval { call_id, .. } = &event {
                 approvals.resolve(call_id, decision).unwrap();
+            }
+            let is_complete = matches!(event, AgentEvent::RunComplete { .. });
+            events.push(event);
+            if is_complete {
+                break;
+            }
+        }
+
+        let result: Result<(), WeaveError> = task.await.unwrap();
+        result.unwrap();
+        let final_text = events
+            .iter()
+            .filter_map(|e| match e {
+                AgentEvent::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        (final_text, events)
+    }
+
+    /// Like `run_loop`, but also resolves every `QuestionsAsked` event with the
+    /// next batch of answers (in order), so a `weave.ask_user` tool call can
+    /// proceed. Approvals are auto-approved.
+    pub async fn run_loop_with_question_answers(
+        &self,
+        answers: Vec<Vec<String>>,
+    ) -> (String, Vec<AgentEvent>) {
+        self.seed_history();
+        let history = self.chat_history.read().clone();
+        let assistant_id = history
+            .iter()
+            .rev()
+            .find(|m| m.role == ChatRole::Assistant)
+            .map(|m| m.id.clone())
+            .unwrap();
+
+        let (event_tx, mut event_rx) = mpsc::channel(128);
+        let loop_ = self.loop_.clone();
+        let approvals = self.approvals.clone();
+        let questions = self.questions.clone();
+        let answers = Arc::new(Mutex::new(answers));
+        let model_config = self.model_config();
+
+        let task = tokio::spawn(async move {
+            loop_
+                .run(
+                    model_config,
+                    "You are Weave, a test assistant.".to_string(),
+                    history,
+                    assistant_id,
+                    "test_session",
+                    event_tx,
+                )
+                .await
+        });
+
+        let mut events = Vec::new();
+        loop {
+            let event = match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
+                .await
+            {
+                Ok(Some(e)) => e,
+                _ => break,
+            };
+            if let AgentEvent::PendingApproval { call_id, .. } = &event {
+                approvals.resolve(call_id, ApprovalDecision::Approved).unwrap();
+            }
+            if let AgentEvent::QuestionsAsked { question_id, .. } = &event {
+                let next = answers.lock().unwrap().pop().unwrap_or_default();
+                questions.resolve(question_id, next).unwrap();
             }
             let is_complete = matches!(event, AgentEvent::RunComplete { .. });
             events.push(event);

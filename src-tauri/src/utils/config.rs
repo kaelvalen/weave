@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::errors::WeaveError;
+use super::secrets;
 
 pub const OLLAMA_DEFAULT_URL: &str = "http://localhost:11434";
 
@@ -13,9 +14,11 @@ pub struct AppConfig {
     pub ui: UiConfig,
     pub version: String,
     /// MCP (2026-07-28) servers the user has added, keyed by server id.
-    /// docs/phase8-mcp-spec.md Part 2 §5: extends this same plaintext
-    /// AppConfig store rather than a new one — same pattern as the
-    /// provider API keys above, same inherited caveat (no OS keychain).
+    /// docs/phase8-mcp-spec.md Part 2 §5: extends this same AppConfig store
+    /// rather than a new one — same pattern as the provider API keys. Secrets
+    /// (provider keys + MCP tokens) are mirrored into the OS keychain via
+    /// `utils::secrets` and redacted from this file when the keychain is
+    /// usable; otherwise they remain here in plaintext (`secrets.rs`).
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
     /// The workspace root the File Manager selected (persisted so the AI's
@@ -224,12 +227,12 @@ impl Default for AppConfig {
 impl AppConfig {
     pub fn load() -> Result<Self, WeaveError> {
         let config_path = Self::config_path()?;
-        if config_path.exists() {
+        let mut config = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
 
             // Try normal deserialization first
             match serde_json::from_str::<AppConfig>(&content) {
-                Ok(config) => Ok(config),
+                Ok(config) => config,
                 Err(_) => {
                     // Migrate older config: parse as generic JSON and merge missing fields with defaults
                     let mut value: serde_json::Value =
@@ -245,14 +248,18 @@ impl AppConfig {
                         WeaveError::ConfigError(format!("Failed to migrate config: {}", e))
                     })?;
                     config.save()?;
-                    Ok(config)
+                    config
                 }
             }
         } else {
             let config = AppConfig::default();
             config.save()?;
-            Ok(config)
-        }
+            config
+        };
+        // Rehydrate secrets that were redacted on disk (they now live in the
+        // keychain). No-op when no keychain is usable.
+        secrets::resolve_from_keychain(&mut config);
+        Ok(config)
     }
 
     fn merge_missing(target: &mut serde_json::Value, source: &serde_json::Value) {
@@ -273,8 +280,14 @@ impl AppConfig {
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let content = serde_json::to_string_pretty(self)
+        let mut content = serde_json::to_string_pretty(self)
             .map_err(|e| WeaveError::Serialization(e.to_string()))?;
+        // Mirror provider keys + MCP tokens into the OS keychain and redact
+        // them from the plaintext file only when the keychain accepted them.
+        // Any keychain failure degrades to the historical plaintext behaviour.
+        if secrets::store_to_keychain(self) {
+            content = secrets::redact_json(&content);
+        }
         std::fs::write(config_path, content)?;
         Ok(())
     }

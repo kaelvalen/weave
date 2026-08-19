@@ -7,7 +7,6 @@ import sys
 # If a dependency is not listed here, CI will fail.
 ALLOWED_DEPENDENCIES = {
     "runtime-kernel": [],
-    "capabilities": ["runtime-kernel"],
 }
 
 def parse_cargo_toml_dependencies(toml_path):

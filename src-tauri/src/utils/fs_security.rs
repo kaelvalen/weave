@@ -120,3 +120,60 @@ pub fn ensure_within_roots(path: &Path) -> Result<(), WeaveError> {
         )))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_root(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("weave_fs_security_{}_{}", tag, uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn canonicalize_dotdot_traversal_is_denied() {
+        let root = temp_root("traversal");
+        // Build a literal path like /tmp/weave_fs_sec_X/../secret — must
+        // canonicalize to the parent, which is outside `root`.
+        let traversal = root.join("..").join("null_does_not_matter");
+        let canonical = canonicalize_checked(&traversal).unwrap();
+        assert!(!is_within_any(&canonical, &[root.clone()]));
+        // Symmetry: a real child is allowed.
+        std::fs::create_dir_all(root.join("child")).unwrap();
+        let child_canon = canonicalize_checked(&root.join("child")).unwrap();
+        assert!(is_within_any(&child_canon, &[root.clone()]));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn symlink_escape_is_resolved_and_denied() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let root = temp_root("symlink");
+            let outside = temp_root("symlink_outside");
+            std::fs::write(outside.join("secret.txt"), "x").unwrap();
+            let link = root.join("escape");
+            // Symlink INSIDE root → OUTSIDE root. Literal prefix checks would
+            // pass; canonicalization must resolve it and deny it.
+            symlink(&outside, &link).unwrap();
+            let canonical = canonicalize_checked(&link.join("secret.txt")).unwrap();
+            assert!(!is_within_any(&canonical, &[root.clone()]));
+            let _ = std::fs::remove_dir_all(&root);
+            let _ = std::fs::remove_dir_all(&outside);
+        }
+    }
+
+    #[test]
+    fn canonicalize_tolerates_missing_leaf_for_writes() {
+        let root = temp_root("write");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        let target = root.join("sub").join("new").join("file.txt");
+        let canonical = canonicalize_checked(&target).unwrap();
+        assert!(canonical.starts_with(root.join("sub")));
+        assert!(canonical.ends_with("file.txt"));
+        assert!(is_within_any(&canonical, &[root.clone()]));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

@@ -120,7 +120,7 @@ fn systemctl(args: &[&str]) -> Result<std::process::Output, WeaveError> {
 }
 
 /// Last N lines of the unit's journal — the actionable error surface for
-/// start failures ("Address already in use", "Hiç .gguf modeli yok", …).
+/// start failures ("Address already in use", "No .gguf model found", …).
 fn journal_tail(lines: usize) -> String {
     match Command::new("journalctl")
         .arg("--user")
@@ -136,12 +136,12 @@ fn journal_tail(lines: usize) -> String {
         Ok(out) => {
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if text.is_empty() {
-                "(journal boş — unit hiç başlamamış olabilir)".to_string()
+                "(journal is empty — the unit may never have started)".to_string()
             } else {
                 text
             }
         }
-        Err(_) => "(journalctl çalıştırılamadı)".to_string(),
+        Err(_) => "(journalctl could not be run)".to_string(),
     }
 }
 
@@ -159,7 +159,7 @@ pub async fn ensure_ready() -> Result<(), WeaveError> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(WeaveError::LocalLlmNotAvailable(format!(
-            "llama-swap start başarısız: {}\n{}",
+            "llama-swap failed to start: {}\n{}",
             stderr.trim(),
             journal_tail(12)
         )));
@@ -174,7 +174,7 @@ pub async fn ensure_ready() -> Result<(), WeaveError> {
     }
 
     Err(WeaveError::LocalLlmNotAvailable(format!(
-        "llama-swap ready değil ({:.1}s doldu). Son journal satırları:\n{}",
+        "llama-swap not ready after {:.1}s. Last journal lines:\n{}",
         READY_POLLS as f64 * READY_POLL_INTERVAL.as_secs_f64(),
         journal_tail(12)
     )))
@@ -223,7 +223,7 @@ pub async fn llama_swap_stop(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(WeaveError::LocalLlmNotAvailable(format!(
-            "llama-swap stop başarısız: {}",
+            "llama-swap failed to stop: {}",
             stderr.trim()
         )));
     }
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_parse_config_models() {
-        let sample = r#"# Otomatik üretildi
+        let sample = r#"# Auto-generated
 healthCheckTimeout: 500
 logLevel: info
 startPort: 10100

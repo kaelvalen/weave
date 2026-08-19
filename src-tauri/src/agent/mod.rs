@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -113,117 +113,24 @@ impl QuestionsRegistry {
     }
 }
 
-/// One structured clarifying question from the model, parsed from the
-/// `<questions>` block it emitted instead of acting on ambiguous parameters.
-#[derive(Debug, Clone, Serialize)]
+/// One structured clarifying question from the model, parsed from the native
+/// `weave.ask_user` tool's arguments (previously a hand-rolled `<questions>`
+/// XML block in assistant prose).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentQuestion {
     /// "radio" (single choice), "check" (multi choice), or "text" (free form).
     #[serde(rename = "type")]
     pub qtype: String,
     pub question: String,
+    #[serde(default)]
     pub options: Vec<String>,
 }
 
-/// Parse a `<questions>…</questions>` block out of the model's text. Shape:
-///
-/// ```xml
-/// <questions>
-///   <question type="radio">How many flavors?<options>Three, Five</options></question>
-///   <question type="check">Which mix-ins?<options>Chips, Sprinkles</options></question>
-///   <question type="text">Anything else?</question>
-/// </questions>
-/// ```
-fn parse_questions(text: &str) -> Vec<AgentQuestion> {
-    let Some(open) = text.find("<questions") else {
-        return Vec::new();
-    };
-    let body_start = text[open..].find('>').map(|i| open + i + 1).unwrap_or(text.len());
-    let body_end = text[body_start..]
-        .find("</questions")
-        .map(|i| body_start + i)
-        .unwrap_or(text.len());
-    let body = &text[body_start..body_end];
-
-    let mut questions = Vec::new();
-    let mut rest = body;
-    while let Some(start) = rest.find("<question") {
-        let block = &rest[start..];
-        let tag_end = match block.find('>') {
-            Some(i) => i,
-            None => break,
-        };
-        let open_tag = &block[..tag_end];
-        let qtype = if open_tag.contains("type=\"check\"") || open_tag.contains("type='check'") {
-            "check".to_string()
-        } else if open_tag.contains("type=\"text\"") || open_tag.contains("type='text'") {
-            "text".to_string()
-        } else {
-            "radio".to_string()
-        };
-        let content_end = block[tag_end..]
-            .find("</question")
-            .map(|i| tag_end + i)
-            .unwrap_or(block.len());
-        let content = &block[tag_end + 1..content_end];
-        if content_end == block.len() {
-            break; // unclosed <question> — nothing more to parse
-        }
-        rest = &block[content_end + 10..]; // "</question>"
-
-        let question = content
-            .split("<options>")
-            .next()
-            .unwrap_or(content)
-            .trim()
-            .to_string();
-        let options: Vec<String> = content
-            .split("<options>")
-            .nth(1)
-            .and_then(|part| part.split("</options>").next())
-            .map(|raw| {
-                raw.split(',')
-                    .map(|o| o.trim().to_string())
-                    .filter(|o| !o.is_empty())
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        if question.is_empty() || questions.len() >= 3 {
-            continue;
-        }
-        questions.push(AgentQuestion {
-            qtype,
-            question,
-            options,
-        });
-    }
-    questions
-}
-
-/// Remove `<questions>` blocks from assistant text so history and the
-/// final answer stay clean (the block is protocol, not content).
-fn strip_questions_blocks(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    loop {
-        match rest.find("<questions") {
-            Some(open) => {
-                out.push_str(&rest[..open]);
-                let after_open = &rest[open..];
-                let body_start = after_open.find('>').map(|i| open + i + 1).unwrap_or(open);
-                let close = rest[body_start..]
-                    .find("</questions")
-                    .map(|i| body_start + i + 12)
-                    .unwrap_or(rest.len());
-                rest = &rest[close.min(rest.len())..];
-            }
-            None => {
-                out.push_str(rest);
-                break;
-            }
-        }
-    }
-    out.trim().to_string()
+/// Arguments to `weave.ask_user`: one to three structured questions.
+#[derive(Debug, Clone, Deserialize)]
+struct AskUserArgs {
+    #[serde(default)]
+    questions: Vec<AgentQuestion>,
 }
 
 /// A fully-assembled native tool call from the provider stream.
@@ -435,7 +342,7 @@ impl AgentLoop {
                         // Persist alongside use_native_tools (spec §3).
                         let config = self.config.read().clone();
                         if let Err(e) = config.save() {
-                            tracing::warn!("probe sonucu kaydedilemedi: {}", e);
+                            tracing::warn!("failed to persist tool-capability probe result: {}", e);
                         }
                         ok
                     }
@@ -538,67 +445,6 @@ impl AgentLoop {
                 break;
             }
 
-            // ---- Human-in-the-loop: structured clarifying questions ----
-            // The model may emit a <questions> block instead of acting on
-            // ambiguous parameters. Pause the turn, show the card, and only
-            // continue once the user's answers come back (or the turn is
-            // aborted / the card dismissed without answers).
-            let parsed_questions = parse_questions(&round_text);
-            if pending.is_empty() && !parsed_questions.is_empty() {
-                let questions = parsed_questions;
-                let cleaned_round = strip_questions_blocks(&round_text);
-                round_text = cleaned_round;
-                final_text.push_str(&round_text);
-                self.update_assistant_text(&assistant_id, &final_text);
-
-                let question_id = format!("questions_{}", uuid::Uuid::new_v4());
-                let _ = event_tx
-                    .send(AgentEvent::QuestionsAsked {
-                        question_id: question_id.clone(),
-                        questions: questions.clone(),
-                    })
-                    .await;
-
-                let mut answers_rx = self.questions.register(question_id.clone());
-                // Wait for the user's answers, polling the abort flag so
-                // Stop still interrupts a paused turn.
-                let answers: Vec<String> = loop {
-                    if self.abort.load(Ordering::SeqCst) {
-                        break Vec::new();
-                    }
-                    match answers_rx.try_recv() {
-                        Ok(answers) => break answers,
-                        Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-                        }
-                        Err(tokio::sync::oneshot::error::TryRecvError::Closed) => break Vec::new(),
-                    }
-                };
-                if self.abort.load(Ordering::SeqCst) {
-                    // Drop the registry entry so a late submit doesn't error.
-                    let _ = self.questions.resolve(&question_id, Vec::new());
-                    break;
-                }
-
-                // Feed the answers back as a user message so the model can
-                // proceed with the clarified parameters (provider-agnostic —
-                // user role works on every backend).
-                if !answers.is_empty() {
-                    let mut qa = String::new();
-                    for (i, (q, a)) in questions.iter().zip(answers.iter()).enumerate() {
-                        qa.push_str(&format!("Q{} — {}\nA: {}\n", i + 1, q.question, a));
-                    }
-                    native.push(json!({
-                        "role": "user",
-                        "content": format!(
-                            "[Answers to your clarifying questions]\n{}\nProceed with the task.",
-                            qa
-                        ),
-                    }));
-                }
-                continue;
-            }
-
             final_text.push_str(&round_text);
             self.update_assistant_text(&assistant_id, &final_text);
 
@@ -614,10 +460,17 @@ impl AgentLoop {
                 .into_iter()
                 .map(|p| {
                     let name = p.name;
-                    let capability = self
-                        .plugin_manager
-                        .resolve_provider_tool_name(&name)
-                        .unwrap_or_else(|| name.clone());
+                    let capability = if name
+                        == PluginManager::provider_tool_name(PluginManager::ASK_USER_CAPABILITY)
+                    {
+                        // Reserved human-in-the-loop tool — not a plugin
+                        // capability, handled directly below.
+                        PluginManager::ASK_USER_CAPABILITY.to_string()
+                    } else {
+                        self.plugin_manager
+                            .resolve_provider_tool_name(&name)
+                            .unwrap_or_else(|| name.clone())
+                    };
                     AgentToolCall {
                         call_id: if p.call_id.is_empty() {
                             format!("call_{}", p.index)
@@ -635,6 +488,33 @@ impl AgentLoop {
             let mut outcomes: Vec<CallOutcome> = Vec::with_capacity(calls.len());
 
             for call in &calls {
+                // ---- Reserved human-in-the-loop tool: ask the user ----
+                // `weave.ask_user` is not routed to a plugin and never runs the
+                // approval gate (asking the user is not a side effect). It
+                // pauses the turn, shows a structured card, and returns the
+                // answers as a normal native tool result so the completion
+                // rule below feeds them back to the model.
+                if call.capability == PluginManager::ASK_USER_CAPABILITY {
+                    let outcome = self.execute_ask_user(call, &event_tx).await;
+                    self.record_call(&assistant_id, call, "weave".to_string(), &outcome);
+                    let _ = event_tx
+                        .send(AgentEvent::ToolCall {
+                            call_id: call.call_id.clone(),
+                            plugin_id: "weave".to_string(),
+                            capability: call.capability.clone(),
+                            params: call.args.clone(),
+                            status: match &outcome {
+                                CallOutcome::Success(_) => "success",
+                                _ => "error",
+                            }
+                            .to_string(),
+                            result: outcome_to_result(&outcome),
+                        })
+                        .await;
+                    outcomes.push(outcome);
+                    continue;
+                }
+
                 let plugin_id = match self.plugin_manager.resolve_capability(&call.capability) {
                     Some(id) => id,
                     None => {
@@ -869,6 +749,69 @@ impl AgentLoop {
         if let Some(msg) = history.iter_mut().find(|m| m.id == assistant_id) {
             msg.content = text.to_string();
         }
+    }
+
+    /// Handle the reserved `weave.ask_user` native tool call: parse the model's
+    /// structured questions, surface them as a `QuestionsAsked` card, and wait
+    /// (polling the abort flag) for the user's answers via
+    /// `chat_submit_answers`. The answers are returned as a readable tool result
+    /// so the normal completion rule feeds them back to the model as a native
+    /// `tool`/`tool_result` message — no hand-written XML protocol.
+    async fn execute_ask_user(
+        &self,
+        call: &AgentToolCall,
+        event_tx: &mpsc::Sender<AgentEvent>,
+    ) -> CallOutcome {
+        let args: AskUserArgs =
+            serde_json::from_value(call.args.clone()).unwrap_or(AskUserArgs {
+                questions: Vec::new(),
+            });
+        if args.questions.is_empty() {
+            return CallOutcome::Error(
+                "weave.ask_user requires a non-empty 'questions' array".to_string(),
+            );
+        }
+        let questions: Vec<AgentQuestion> = args.questions.into_iter().take(3).collect();
+
+        let question_id = format!("questions_{}", uuid::Uuid::new_v4());
+        let _ = event_tx
+            .send(AgentEvent::QuestionsAsked {
+                question_id: question_id.clone(),
+                questions: questions.clone(),
+            })
+            .await;
+
+        let mut answers_rx = self.questions.register(question_id.clone());
+        // Wait for the user's answers, polling the abort flag so Stop still
+        // interrupts a paused turn.
+        let answers: Vec<String> = loop {
+            if self.abort.load(Ordering::SeqCst) {
+                break Vec::new();
+            }
+            match answers_rx.try_recv() {
+                Ok(answers) => break answers,
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                }
+                Err(tokio::sync::oneshot::error::TryRecvError::Closed) => break Vec::new(),
+            }
+        };
+        if self.abort.load(Ordering::SeqCst) || answers.is_empty() {
+            // Dismissed or aborted — drop the registry entry so a late submit
+            // doesn't error, and report the turn ended without answers.
+            let _ = self.questions.resolve(&question_id, Vec::new());
+            if self.abort.load(Ordering::SeqCst) {
+                return CallOutcome::Rejected;
+            }
+            return CallOutcome::Error("User dismissed the clarifying questions.".to_string());
+        }
+
+        // Readable summary the model consumes as this tool's result.
+        let mut qa = String::from("User answers:\n");
+        for (i, (q, a)) in questions.iter().zip(answers.iter()).enumerate() {
+            qa.push_str(&format!("Q{} — {}: A: {}\n", i + 1, q.question, a));
+        }
+        CallOutcome::Success(Value::String(qa.trim().to_string()))
     }
 }
 
@@ -1161,66 +1104,45 @@ mod budget_tests {
         assert_eq!(native.len(), 3);
     }
 
-    // ─── Human-in-the-loop questions parsing ───
+    // ─── weave.ask_user native-tool contract ───
 
     #[test]
-    fn parses_mixed_question_types_and_options() {
-        let text = concat!(
-            "I need some details first.\n",
-            "<questions>\n",
-            "  <question type=\"radio\">How many flavors?<options>Three, Five, One hero</options></question>\n",
-            "  <question type=\"check\">Which mix-ins?<options>Chips, Sprinkles</options></question>\n",
-            "  <question type=\"text\">Anything else?</question>\n",
-            "</questions>\n",
-            "Thanks!"
+    fn parses_ask_user_args_from_native_tool_call() {
+        let args = json!({
+            "questions": [
+                {"type": "radio", "question": "How many flavors?", "options": ["Three", "Five"]},
+                {"type": "check", "question": "Which mix-ins?", "options": ["Chips", "Sprinkles", "One hero"]},
+                {"type": "text", "question": "Anything else?"}
+            ]
+        });
+        let parsed: AskUserArgs = serde_json::from_value(args).unwrap();
+        assert_eq!(parsed.questions.len(), 3);
+        assert_eq!(parsed.questions[0].qtype, "radio");
+        assert_eq!(parsed.questions[0].options, vec!["Three", "Five"]);
+        assert_eq!(parsed.questions[1].qtype, "check");
+        assert!(parsed.questions[2].options.is_empty());
+        assert_eq!(parsed.questions[2].qtype, "text");
+    }
+
+    #[test]
+    fn ask_user_args_defaults_missing_fields() {
+        // options is optional; missing questions field defaults to empty.
+        let parsed: AskUserArgs = serde_json::from_value(json!({})).unwrap();
+        assert!(parsed.questions.is_empty());
+        let parsed: AskUserArgs =
+            serde_json::from_value(json!({"questions": [{"type": "text", "question": "Budget?"}]}))
+                .unwrap();
+        assert_eq!(parsed.questions.len(), 1);
+        assert!(parsed.questions[0].options.is_empty());
+    }
+
+    #[test]
+    fn ask_user_tool_is_the_provider_tool_name() {
+        // The reserved tool must resolve to the ask_user capability and be
+        // excluded from plugin resolution — i.e. it is a first-class tool.
+        assert_eq!(
+            PluginManager::provider_tool_name(PluginManager::ASK_USER_CAPABILITY),
+            PluginManager::provider_tool_name("weave.ask_user")
         );
-        let qs = parse_questions(text);
-
-        assert_eq!(qs.len(), 3);
-        assert_eq!(qs[0].qtype, "radio");
-        assert_eq!(qs[0].question, "How many flavors?");
-        assert_eq!(qs[0].options, vec!["Three", "Five", "One hero"]);
-        assert_eq!(qs[1].qtype, "check");
-        assert_eq!(qs[1].options, vec!["Chips", "Sprinkles"]);
-        assert_eq!(qs[2].qtype, "text");
-        assert!(qs[2].options.is_empty());
-    }
-
-    #[test]
-    fn no_questions_block_yields_empty() {
-        assert!(parse_questions("plain answer, no markup").is_empty());
-    }
-
-    #[test]
-    fn unclosed_questions_block_is_tolerated() {
-        let qs = parse_questions("<questions>\n<question type=\"text\">Budget?</question>");
-        assert_eq!(qs.len(), 1);
-        assert_eq!(qs[0].question, "Budget?");
-    }
-
-    #[test]
-    fn strips_questions_blocks_from_text() {
-        let text = concat!(
-            "Let me ask.\n",
-            "<questions><question type=\"radio\">A?<options>x, y</options></question></questions>\n",
-            "Done asking."
-        );
-        let cleaned = strip_questions_blocks(text);
-        assert!(!cleaned.contains("<questions"));
-        assert!(cleaned.contains("Let me ask."));
-        assert!(cleaned.contains("Done asking."));
-    }
-
-    #[test]
-    fn caps_question_batch_at_three() {
-        let mut text = String::from("<questions>");
-        for i in 0..6 {
-            text.push_str(&format!(
-                "<question type=\"text\">Q{}?</question>",
-                i
-            ));
-        }
-        text.push_str("</questions>");
-        assert_eq!(parse_questions(&text).len(), 3);
     }
 }

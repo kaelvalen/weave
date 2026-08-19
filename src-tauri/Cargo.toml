@@ -13,7 +13,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 runtime-kernel = { path = "../crates/runtime-kernel" }
-capabilities = { path = "../crates/capabilities" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -41,6 +40,7 @@ diffy = "0.4"
 similar = "2"
 ignore = "0.4"
 sha2 = "0.10"
+keyring = { version = "2.3.3", default-features = false, features = ["linux-keyutils", "linux-no-secret-service", "linux-default-keyutils", "platform-macos", "platform-windows"] }
 
 [dependencies.wasmtime]
 version = "22"

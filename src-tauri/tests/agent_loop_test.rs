@@ -9,10 +9,57 @@
 mod common;
 
 use common::{
-    assert_completion_rule, plain_text_script, round_trip, saw_approval, second_request_body,
-    ApprovalDecision, Harness, PluginManager,
+    assert_completion_rule, ask_user_script, plain_text_script, round_trip, saw_approval,
+    second_request_body, ApprovalDecision, Harness, PluginManager,
 };
 use weave::agent::AgentEvent;
+
+// ---------------------------------------------------------------------------
+// Scenario 5: reserved weave.ask_user native tool (replaces the old
+// hand-rolled <questions> XML protocol). It must pause the turn, surface a
+// QuestionsAsked card, receive the user's answers as its tool result, and
+// continue the loop without ever hitting the approval gate.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn ask_user_native_tool_pauses_and_continues() {
+    let harness = Harness::new(ask_user_script("Done.")).await;
+    let (final_text, events) = harness
+        .run_loop_with_question_answers(vec![vec!["a".to_string()]])
+        .await;
+
+    // 1. The model's ask_user call surfaced as a QuestionsAsked card.
+    assert!(events.iter().any(|e| matches!(e, AgentEvent::QuestionsAsked { .. })));
+
+    // 2. ask_user is a first-class native tool advertised in request 1.
+    let safe_name = PluginManager::provider_tool_name(PluginManager::ASK_USER_CAPABILITY);
+    assert!(
+        harness.bodies()[0].contains(&format!("{}", safe_name)),
+        "request 1 must advertise the reserved ask_user tool"
+    );
+
+    // 3. It must NOT hit the approval gate (asking the user is not a side effect).
+    assert!(
+        !saw_approval(&events, PluginManager::ASK_USER_CAPABILITY),
+        "ask_user must never trigger the approval gate"
+    );
+
+    // 4. Completion rule: the second request pairs a tool result for the
+    //    ask_user call carrying the user's answer.
+    let second = &harness.bodies()[1];
+    assert!(second.contains("\"tool_call_id\":\"call_p\""), "ask_user result must be paired");
+    assert!(second.contains("Which plan?"), "result must carry the question");
+    assert!(second.contains(": A: a"), "result must carry the user's answer");
+    // 5. The loop continued after the answers and completed.
+    assert!(final_text.contains("Done."), "loop must continue after ask_user");
+    assert_completion_rule(second);
+
+    // 6. Protocol-level: no hand-written <questions> XML lives in the request.
+    assert!(
+        !harness.bodies().iter().any(|b| b.contains("<questions")),
+        "native tool-calling must replace the old XML questions protocol"
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Scenario 1: approved sensitive call — tool result paired, loop continues

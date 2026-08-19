@@ -86,9 +86,10 @@ Rust AgentLoop
 ```
 
 `runtime-kernel` supplies `ExecutionContext`, events, observability, and event
-storage. The `capabilities` crate remains a coder-plugin routing helper. The
-previous unused planning, workflow, knowledge, memory, and runtime crates were
-removed after the architecture inventory.
+storage. It is kept deliberately thin — only the modules the backend actually
+uses. The `capabilities` routing crate and the unused planning/workflow/
+knowledge/memory/runtime crates were removed; process sandboxing has a single
+home in `shell_plugin.rs` (bubblewrap).
 
 ## Built-in Plugins
 
@@ -307,8 +308,11 @@ explicitly allowlisted.
 
 Server connection state — URL, discovered auth endpoints, tokens, and the
 allowlist — lives in `~/.weave/config.json` alongside the existing provider
-API keys: same plaintext-file storage this project already uses (no OS
-keychain integration), extended rather than duplicated into a second store.
+API keys. Provider API keys and MCP OAuth tokens are mirrored into the OS
+keychain (macOS Keychain / Windows Credential Manager / Linux kernel keyring)
+the moment one is available, and redacted from the on-disk JSON; when no
+keychain is usable (e.g. a headless/container Linux boot) Weave transparently
+falls back to the plaintext config file, so the app always works.
 OAuth 2.1/CIMD authorization and the browser callback flow are implemented.
 The release pipeline still needs a registered Weave GitHub OAuth App to
 populate the build-time credentials above; a source build without those

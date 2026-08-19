@@ -690,13 +690,78 @@ impl PluginManager {
         })
     }
 
+    /// Reserved capability id handled directly by the agent loop, not by any
+    /// plugin. The model calls this native tool when user-facing parameters
+    /// are ambiguous instead of emitting a hand-rolled `<questions>` XML block
+    /// (the XML protocol was removed — see phase10-ask-user-native.md).
+    pub const ASK_USER_CAPABILITY: &str = "weave.ask_user";
+
+    /// JSON Schema for the `weave.ask_user` tool.
+    ///
+    /// Arguments: `{"questions": [{"type": "radio|check|text", "question": "...",
+    /// "options": ["..."]}, ...]}`. The agent loop turns these into an
+    /// approval-style card and a `QuestionsAsked` event; the user's answers
+    /// come back as the native tool result so the loop continues normally.
+    pub fn ask_user_schema() -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "description": "One to three structured questions for the user, used only when parameters are genuinely ambiguous.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["radio", "check", "text"],
+                                "description": "radio = single choice, check = multiple choices, text = free form."
+                            },
+                            "question": { "type": "string", "description": "The question to ask the user." },
+                            "options": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Choices for radio/check; omit for text."
+                            }
+                        },
+                        "required": ["type", "question"]
+                    }
+                }
+            },
+            "required": ["questions"]
+        })
+    }
+
     /// Build the provider-specific `tools` array for native function-calling
-    /// from every loaded plugin's capabilities (phase1-spine-spec.md §4).
+    /// from every loaded plugin's capabilities (phase1-spine-spec.md §4),
+    /// plus the reserved `weave.ask_user` interaction tool.
     ///
     /// OpenAI and Ollama use the `{"type":"function",...}` envelope;
     /// Anthropic uses `{"name","description","input_schema"}`.
     pub fn tools_for_provider(&self, provider: &crate::utils::config::Provider) -> Vec<serde_json::Value> {
         let mut tools: Vec<serde_json::Value> = Vec::new();
+
+        // Reserved human-in-the-loop tool — always offered, never a plugin.
+        let cap = Self::ASK_USER_CAPABILITY;
+        let ask = match provider {
+            crate::utils::config::Provider::Anthropic => serde_json::json!({
+                "name": Self::provider_tool_name(cap),
+                "description": "Ask the user one to three structured clarifying questions when a sensitive or destructive operation has ambiguous parameters. The turn pauses for the answers, which arrive as the tool result. Use radio/check/text question types.",
+                "input_schema": Self::ask_user_schema(),
+            }),
+            _ => serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": Self::provider_tool_name(cap),
+                    "description": "Ask the user one to three structured clarifying questions when a sensitive or destructive operation has ambiguous parameters. The turn pauses for the answers, which arrive as the tool result. Use radio/check/text question types.",
+                    "parameters": Self::ask_user_schema(),
+                },
+            }),
+        };
+        tools.push(ask);
+
         for plugin in self.get_loaded() {
             for cap in &plugin.capabilities.provide {
                 let schema = plugin
@@ -752,9 +817,7 @@ impl PluginManager {
         prompt.push_str("- **Approval**: Read, network, and file/system-modifying tool calls may require the user's approval. If a call is pending approval, wait; never retry it on your own.\n\n");
 
         prompt.push_str("## Human-in-the-loop questions\n");
-        prompt.push_str("Before running a sensitive or destructive tool call when its parameters are unclear or the user's intent is ambiguous, ASK instead of guessing. Pause and emit a structured `<questions>` block with up to 3 questions, one `<question>` each. Types: `radio` (single choice), `check` (multiple choices), `text` (free form). Use `<options>a, b, c</options>` for radio/check.\n");
-        prompt.push_str("```\n<questions>\n  <question type=\"radio\">How many flavors should we launch?<options>Three, Five, One hero</options></question>\n  <question type=\"check\">Which mix-ins should we stock?<options>Chocolate chips, Waffle bits, Sprinkles</options></question>\n  <question type=\"text\">Anything else?</question>\n</questions>\n```\n");
-        prompt.push_str("The turn pauses and the user's answers come back to you as a user message labeled \"[Answers to your clarifying questions]\". Then proceed with the clarified parameters. Do not emit the block when parameters are already unambiguous.\n\n");
+        prompt.push_str("Before running a sensitive or destructive tool call when its parameters are unclear or the user's intent is ambiguous, ASK instead of guessing. Call the native `weave.ask_user` tool (supplied in this request's tool definitions) with up to 3 structured questions. Types: `radio` (single choice), `check` (multiple choices), `text` (free form), with `options` for radio/check. The turn pauses; the user's answers arrive as that tool's result, and you proceed with the clarified parameters. Do not call it when parameters are already unambiguous, and never emit hand-written XML tool-call syntax.\n\n");
 
         if let Ok(memory) = MemoryPlugin::read_memory() {
             let profile = memory

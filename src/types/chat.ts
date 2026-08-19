@@ -22,7 +22,7 @@ export interface IntentResult {
 }
 
 /** One structured clarifying question from the agent (human-in-the-loop).
- *  Parsed by the backend from the model's `<questions>` block. */
+ *  Produced by the reserved native `weave.ask_user` tool call. */
 export interface AgentQuestion {
   /** "radio" (single choice), "check" (multi choice), "text" (free form). */
   type: 'radio' | 'check' | 'text';

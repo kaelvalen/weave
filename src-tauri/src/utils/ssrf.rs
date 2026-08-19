@@ -265,4 +265,40 @@ mod tests {
         let url = Url::parse("https://example.com/").unwrap();
         assert!(validate_outbound_url(&url).is_ok());
     }
+
+    #[test]
+    fn literal_private_hosts_rejected_without_dns() {
+        // These parse as literal IPs, so the guard rejects them before any DNS.
+        for host in ["127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "::1", "::ffff:127.0.0.1"] {
+            assert!(
+                ensure_public_host_sync(host).is_err(),
+                "{} should be rejected",
+                host
+            );
+        }
+        assert!(ensure_public_host_sync("8.8.8.8").is_ok());
+        assert!(ensure_public_host_sync("1.1.1.1").is_ok());
+    }
+
+    #[test]
+    fn cloud_metadata_and_loopback_urls_denied() {
+        // The canonical SSRF targets: cloud metadata and the local model server.
+        let meta = Url::parse("http://169.254.169.254/latest/meta-data/iam/security-credentials").unwrap();
+        assert!(ensure_safe_url_sync(&meta).is_err(), "cloud metadata must be denied");
+        let loopback = Url::parse("http://127.0.0.1:11434/api/chat").unwrap();
+        assert!(ensure_safe_url_sync(&loopback).is_err(), "local model endpoint must be denied");
+    }
+
+    #[test]
+    fn redirect_targets_are_revalidated() {
+        // The security claim is that every redirect hop is re-checked — a
+        // redirect to a private/reserved target must fail the sync guard just
+        // like the original request would.
+        let redirect_to_private = Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
+        assert!(ensure_safe_url_sync(&redirect_to_private).is_err());
+        let redirect_to_loopback = Url::parse("http://localhost:8080/admin").unwrap();
+        // "localhost" is a name, not a literal IP — resolve it and require
+        // it to be private (the loopback ranges cover 127.0.0.0/8 / ::1).
+        assert!(ensure_safe_url_sync(&redirect_to_loopback).is_err());
+    }
 }
