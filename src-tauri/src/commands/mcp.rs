@@ -231,6 +231,9 @@ pub fn mcp_remove_server(
     let mut config = app_state.config.write();
     config.mcp_servers.remove(&server_id);
     config.save()?;
+    // Drop this server's OAuth tokens from the OS keychain so they cannot be
+    // orphaned (they are no longer referenced by config).
+    crate::utils::secrets::delete_mcp_secrets(&server_id);
     Ok(())
 }
 

@@ -52,12 +52,6 @@ pub async fn chat_send_message(
 ) -> Result<String, WeaveError> {
     info!("Chat message received: {} (model: {:?})", message, model);
 
-    // A previous Stop (chat_abort_generation) leaves the shared abort flag
-    // set; it must be cleared for THIS generation or the agent loop and the
-    // event-forwarding loop below both break immediately and the chat goes
-    // permanently silent after the first interrupt.
-    app_state.abort_generation.store(false, Ordering::SeqCst);
-
     let mut user_msg = ChatMessage::new_user(message.clone());
     user_msg.images = images.clone();
     let _msg_id = user_msg.id.clone();
@@ -188,7 +182,11 @@ pub async fn chat_send_message(
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(128);
     let agent_loop = app_state.agent_loop.clone();
     let history_for_loop = history.clone();
-    let abort = app_state.abort_generation.clone();
+    // Each generation owns a fresh cancellation token (not a shared global),
+    // so Stop targets this run and a new message never un-aborts a prior one.
+    let abort = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    *app_state.current_run.lock() = Some(abort.clone());
+    let event_abort = abort.clone(); // for the event-forwarding loop below
     let loop_assistant_id = assistant_id.clone();
 
     let loop_handle = tauri::async_runtime::spawn(async move {
@@ -200,6 +198,7 @@ pub async fn chat_send_message(
                 loop_assistant_id,
                 "ipc_session",
                 event_tx,
+                abort,
             )
             .await
     });
@@ -223,7 +222,7 @@ pub async fn chat_send_message(
     };
 
     while let Some(event) = event_rx.recv().await {
-        if abort.load(Ordering::SeqCst) {
+        if event_abort.load(Ordering::SeqCst) {
             close_reasoning(&mut reasoning_open);
             break;
         }
@@ -434,7 +433,10 @@ pub fn chat_clear_history(app_state: State<'_, AppState>) -> Result<(), WeaveErr
 
 #[tauri::command]
 pub fn chat_abort_generation(app_state: State<'_, AppState>) -> Result<(), WeaveError> {
-    app_state.abort_generation.store(true, Ordering::SeqCst);
+    // Stop targets the most recent generation's own cancellation token.
+    if let Some(abort) = app_state.current_run.lock().as_ref() {
+        abort.store(true, Ordering::SeqCst);
+    }
     info!("Generation aborted by user");
     Ok(())
 }

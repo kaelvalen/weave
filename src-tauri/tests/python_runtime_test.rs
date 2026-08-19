@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use weave::models::manifest::Manifest;
-use weave::models::plugin::{PluginState, RuntimeType};
+use weave::models::plugin::PluginState;
 use weave::runtime::python::PythonRuntime;
 
 #[test]

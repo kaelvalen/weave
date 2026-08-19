@@ -198,13 +198,13 @@ pub struct AgentLoop {
     pub approvals: Arc<ApprovalRegistry>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
-    pub abort: Arc<AtomicBool>,
     /// When true the approval gate is fully bypassed: sensitive/destructive
     /// and MCP-sourced calls execute without a PendingApproval event
     /// (frontend "Auto-Approve" mode).
     pub approval_auto: Arc<AtomicBool>,
-    /// Human-in-the-loop clarifying questions — the loop pauses on a
-    /// `<questions>` block and waits for `chat_submit_answers`.
+    /// Human-in-the-loop clarifying questions — the agent pauses its turn
+    /// until the user answers via the `weave.ask_user` tool (resolved through
+    /// `chat_submit_answers`).
     pub questions: Arc<QuestionsRegistry>,
     pub event_bus: Arc<EventBus>,
     pub observability: Arc<Observability>,
@@ -241,6 +241,7 @@ impl AgentLoop {
         assistant_id: String,
         session_id: &str,
         event_tx: mpsc::Sender<AgentEvent>,
+        run_abort: Arc<AtomicBool>,
     ) -> Result<(), WeaveError> {
         let provider = model_config.provider.clone();
 
@@ -294,7 +295,7 @@ impl AgentLoop {
         }
 
         for _round in 0..MAX_ROUNDS {
-            if self.abort.load(Ordering::SeqCst) {
+            if run_abort.load(Ordering::SeqCst) {
                 break;
             }
 
@@ -380,7 +381,7 @@ impl AgentLoop {
             let mut saw_reasoning = false;
 
             while let Some(event) = rx.recv().await {
-                if self.abort.load(Ordering::SeqCst) {
+                if run_abort.load(Ordering::SeqCst) {
                     break;
                 }
                 match event {
@@ -495,7 +496,7 @@ impl AgentLoop {
                 // answers as a normal native tool result so the completion
                 // rule below feeds them back to the model.
                 if call.capability == PluginManager::ASK_USER_CAPABILITY {
-                    let outcome = self.execute_ask_user(call, &event_tx).await;
+                    let outcome = self.execute_ask_user(call, &event_tx, &run_abort).await;
                     self.record_call(&assistant_id, call, "weave".to_string(), &outcome);
                     let _ = event_tx
                         .send(AgentEvent::ToolCall {
@@ -761,6 +762,7 @@ impl AgentLoop {
         &self,
         call: &AgentToolCall,
         event_tx: &mpsc::Sender<AgentEvent>,
+        run_abort: &Arc<AtomicBool>,
     ) -> CallOutcome {
         let args: AskUserArgs =
             serde_json::from_value(call.args.clone()).unwrap_or(AskUserArgs {
@@ -785,7 +787,7 @@ impl AgentLoop {
         // Wait for the user's answers, polling the abort flag so Stop still
         // interrupts a paused turn.
         let answers: Vec<String> = loop {
-            if self.abort.load(Ordering::SeqCst) {
+            if run_abort.load(Ordering::SeqCst) {
                 break Vec::new();
             }
             match answers_rx.try_recv() {
@@ -796,11 +798,11 @@ impl AgentLoop {
                 Err(tokio::sync::oneshot::error::TryRecvError::Closed) => break Vec::new(),
             }
         };
-        if self.abort.load(Ordering::SeqCst) || answers.is_empty() {
+        if run_abort.load(Ordering::SeqCst) || answers.is_empty() {
             // Dismissed or aborted — drop the registry entry so a late submit
             // doesn't error, and report the turn ended without answers.
             let _ = self.questions.resolve(&question_id, Vec::new());
-            if self.abort.load(Ordering::SeqCst) {
+            if run_abort.load(Ordering::SeqCst) {
                 return CallOutcome::Rejected;
             }
             return CallOutcome::Error("User dismissed the clarifying questions.".to_string());

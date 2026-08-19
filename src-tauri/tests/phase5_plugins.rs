@@ -8,10 +8,7 @@
 
 mod common;
 
-use common::{
-    round_trip, saw_approval, second_request_body, ApprovalDecision, Harness,
-};
-use std::sync::Mutex;
+use common::{round_trip, saw_approval, second_request_body, ApprovalDecision};
 
 // ---------------------------------------------------------------------------
 // calc_plugin — no external side effects, no approval gate

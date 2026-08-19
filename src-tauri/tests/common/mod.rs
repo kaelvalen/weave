@@ -1,5 +1,10 @@
 //! Shared Phase-5 test harness: a mock OpenAI-compatible SSE provider plus
 //! the agent-loop scaffolding, used by every per-plugin migration test.
+//!
+//! `#![allow(dead_code)]`: this module is `mod common;`-included into several
+//! separate test binaries, each of which uses only a subset of the shared
+//! helpers. A helper unused by one binary is not dead — it is used by another.
+#![allow(dead_code)]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -231,15 +236,12 @@ impl Harness {
         let approvals = Arc::new(ApprovalRegistry::new());
         let questions = Arc::new(QuestionsRegistry::new());
         let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
-        let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
-
         let agent_loop = Arc::new(AgentLoop {
             ai_bridge: ai_bridge.clone(),
             plugin_manager: plugin_manager.clone(),
             approvals: approvals.clone(),
             config: config.clone(),
             chat_history: chat_history.clone(),
-            abort,
             approval_auto: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             questions: questions.clone(),
             event_bus,
@@ -296,6 +298,7 @@ impl Harness {
         let loop_ = self.loop_.clone();
         let approvals = self.approvals.clone();
         let model_config = self.model_config();
+        let run_abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let task = tokio::spawn(async move {
             loop_
@@ -306,6 +309,7 @@ impl Harness {
                     assistant_id,
                     "test_session",
                     event_tx,
+                    run_abort,
                 )
                 .await
         });
@@ -363,6 +367,7 @@ impl Harness {
         let questions = self.questions.clone();
         let answers = Arc::new(Mutex::new(answers));
         let model_config = self.model_config();
+        let run_abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let task = tokio::spawn(async move {
             loop_
@@ -373,6 +378,7 @@ impl Harness {
                     assistant_id,
                     "test_session",
                     event_tx,
+                    run_abort,
                 )
                 .await
         });

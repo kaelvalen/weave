@@ -90,3 +90,20 @@ a fake `sandbox.rs`; two sandbox stories.
 nix-shell shell.nix --run 'cargo test --workspace'   # Rust (all pass)
 npm run typecheck && npm test && npm run build       # web (all pass)
 ```
+
+---
+
+## Follow-up audit — additional findings and disposition
+
+A second review pass (beyond the original five concerns) found and resolved:
+
+| # | Finding | Disposition |
+|---|---------|-------------|
+| A1 | **Single global cancellation token.** `AppState.abort_generation` was one `Arc<AtomicBool>` shared by every generation: starting a new message reset it (`chat.rs:59`), so an already-aborted prior run could be silently un-aborted, and Stop killed every active generation. | **Fixed** — each generation now owns a fresh per-run token (`AppState.current_run: Mutex<Option<Arc<AtomicBool>>>`); `AgentLoop::run` takes `run_abort`; `chat_abort_generation` targets the latest run only. |
+| A2 | **Dead `runtime-kernel/src/errors.rs`** (`KernelError` + its `WeaveError` had no users after the crate prune). | **Fixed** — module + `thiserror` dep removed. |
+| A3 | **AiBridge config staleness suspicion** (`ai_bridge.config` is a startup clone; a single `update_config` call). | **Verified OK** — the only AI-config writer is `system_set_config`, which always calls `update_config(config.ai.clone())`; SettingsPanel routes every save through it. No change needed. |
+| A4 | **MCP OAuth access-token expiry** — no auto-refresh on 401 inside `tools/call`; token expiry leaves tools failing until manual re-authorize. | **Documented limitation** (already stated in README). Deliberately not half-implemented; an executor without a config/AS handle would ship broken refresh. |
+| A5 | **`weave.ask_user` is native-tool-only** — local models with `use_native_tools=false` (tools cleared) can no longer ask clarifying questions the way the old `<questions>` XML allowed. | **Accepted + documented** — low-capability local models lose the interactive ask; a prompt-based XML degrade path was intentionally not reintroduced (it was the smell being removed). |
+| A6 | **Keychain probe wrote a throwaway credential** on first use (side effect). | **Fixed** — `keychain_available()` now probes platform support via `Entry::new` with no write; write failures still fall back. Also wired `delete_mcp_secrets` on server removal so orphaned OAuth tokens are purged. |
+| A7 | **Frontend coverage / bundle.** | **Fixed (coverage)** — added `weave.ask_user` questions-card store tests (dedupe / submit / clear). Bundle code-splitting remains a polish note (1.9MB single chunk). |
+| A8 | **Compiler warnings** (unused imports, shared-test-harness dead-code). | **Fixed** — cleaned unused imports; `#![allow(dead_code)]` on the shared test harness with a comment explaining it is compiled into several binaries. |

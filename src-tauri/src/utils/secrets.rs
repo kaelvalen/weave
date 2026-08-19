@@ -17,7 +17,6 @@
 //! keychain on load. Any keychain failure degrades to the historical plaintext
 //! behaviour verbatim.
 
-use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use keyring::Entry;
@@ -71,20 +70,17 @@ fn delete_from_keychain(account: &str) {
     }
 }
 
-/// True when the OS keychain is usable right now. Probes with a throwaway
-/// credential so a headless/container boot (no kernel keyring, no Secret
-/// Service daemon) cleanly reports "unavailable" and callers fall back.
+/// True when the OS keychain backend is usable right now.
+///
+/// Probes **without side effects** (no throwaway credential) by checking that
+/// a keyring `Entry` can be constructed for the service. Constructibility
+/// reflects platform support — e.g. on headless/container Linux the kernel
+/// keyring is absent and `Entry::new` fails — so callers fall back to
+/// plaintext. Write/read failures that slip past this are still caught by the
+/// per-operation fallbacks in `store_to_keychain`.
 pub fn keychain_available() -> bool {
     static AVAIL: OnceLock<bool> = OnceLock::new();
-    *AVAIL.get_or_init(|| {
-        let account = format!("probe_{}", uuid::Uuid::new_v4());
-        write_to_keychain(&account, "1")
-            && read_from_keychain(&account).as_deref() == Some("1")
-            && {
-                delete_from_keychain(&account);
-                true
-            }
-    })
+    *AVAIL.get_or_init(|| Entry::new(SERVICE, "probe").is_ok())
 }
 
 // AppConfig batch plumbing -----------------------------------------------
@@ -192,15 +188,14 @@ pub fn redact_json(pretty: &str) -> String {
     serde_json::to_string_pretty(&value).unwrap_or_else(|_| pretty.to_string())
 }
 
-/// Drop stale keychain entries for MCP servers that no longer exist.
-pub fn cleanup_removed_servers(cfg: &AppConfig) {
+/// Delete a server's OAuth tokens from the keychain (called on server
+/// removal). Best-effort: no-op when no keychain is usable.
+pub fn delete_mcp_secrets(server_id: &str) {
     if !keychain_available() {
         return;
     }
-    let live: HashMap<String, ()> = cfg.mcp_servers.keys().map(|k| (k.clone(), ())).collect();
-    // We cannot enumerate the keychain, so removal is handled at the call
-    // site when a server is deleted (see commands/mcp.rs).
-    let _ = live;
+    delete_from_keychain(&mcp_access_account(server_id));
+    delete_from_keychain(&mcp_refresh_account(server_id));
 }
 
 #[cfg(test)]

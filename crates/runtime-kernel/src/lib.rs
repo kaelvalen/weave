@@ -1,15 +1,13 @@
 //! Micro-kernel supporting the backend agent loop.
 //!
 //! Kept deliberately thin: only the modules the Tauri backend actually uses —
-//! event bus/store, execution context, observability, runtime events, and
-//! errors. The former planning/knowledge/memory/workflow crates and the
-//! `capabilities` routing crate were removed in the phase-5 purge; the
-//! remaining dead modules here (`kernel`, `sandbox`, `blackboard`,
-//! `subsystem`, `task_graph`, `artifact`, `policy_engine`,
-//! `resource_manager`) were pruned. Process sandboxing now lives in
-//! `shell_plugin.rs` (bubblewrap) — the single sandbox story.
+//! event bus/store, execution context, observability, and runtime events. The
+//! former planning/knowledge/memory/workflow crates and the `capabilities`
+//! routing crate were removed; the dead modules (`kernel`, `sandbox`,
+//! `blackboard`, `subsystem`, `task_graph`, `artifact`, `policy_engine`,
+//! `resource_manager`, and the unused `errors` module) were pruned too.
+//! Process sandboxing lives in `shell_plugin.rs` (bubblewrap) — one story.
 
-pub mod errors;
 pub mod event_bus;
 pub mod event_store;
 pub mod execution_context;

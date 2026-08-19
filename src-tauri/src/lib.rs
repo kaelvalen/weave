@@ -39,7 +39,8 @@ pub struct AppState {
     pub observability: Arc<Observability>,
     pub config: Arc<RwLock<AppConfig>>,
     pub chat_history: Arc<RwLock<Vec<ChatMessage>>>,
-    pub abort_generation: Arc<AtomicBool>,
+    /// Cancellation token of the most recent generation (per-run, not global).
+    pub current_run: Arc<parking_lot::Mutex<Option<Arc<AtomicBool>>>>,
     /// Auto-Approve mode: when true the agent loop skips the approval gate
     /// (set by `chat_set_approval_mode`; frontend "Auto-Approve" toggle).
     pub approval_auto: Arc<AtomicBool>,
@@ -103,7 +104,11 @@ impl AppState {
         let approvals = Arc::new(ApprovalRegistry::new());
         let questions = Arc::new(QuestionsRegistry::new());
         let chat_history: Arc<RwLock<Vec<ChatMessage>>> = Arc::new(RwLock::new(Vec::new()));
-        let abort_generation = Arc::new(AtomicBool::new(false));
+        // Handle to the *current* generation's cancellation token. Each new
+        // message replaces it with a fresh per-run flag, so "Stop" targets the
+        // latest run and an already-aborted previous run is never un-aborted
+        // by starting a new one (P1#1 — no shared global abort).
+        let current_run = Arc::new(parking_lot::Mutex::new(None::<Arc<AtomicBool>>));
         let approval_auto = Arc::new(AtomicBool::new(false));
         let agent_loop = Arc::new(AgentLoop {
             ai_bridge: ai_bridge.clone(),
@@ -111,7 +116,6 @@ impl AppState {
             approvals: approvals.clone(),
             config: config_arc.clone(),
             chat_history: chat_history.clone(),
-            abort: abort_generation.clone(),
             approval_auto: approval_auto.clone(),
             questions: questions.clone(),
             event_bus: event_bus.clone(),
@@ -135,7 +139,7 @@ impl AppState {
             observability,
             config: config_arc,
             chat_history,
-            abort_generation,
+            current_run,
             approval_auto,
             llama_swap_last_error: Arc::new(parking_lot::Mutex::new(None)),
             canvas_tx,

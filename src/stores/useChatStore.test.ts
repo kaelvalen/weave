@@ -222,3 +222,52 @@ describe('session persistence guard (last message lost)', () => {
     expect(saveCalls[0][1]).toMatchObject({ id: 'conv-1' });
   });
 });
+
+describe('weave.ask_user (human-in-the-loop questions card)', () => {
+  beforeEach(() => {
+    useChatStore.setState({ messages: [], pendingQuestions: [], conversationId: 'test' });
+    vi.mocked(invoke).mockClear();
+  });
+
+  it('stores the structured questions from the ask_user native tool', () => {
+    useChatStore.getState().handleQuestionsAsked({
+      question_id: 'questions_abc',
+      message_id: 'assistant-1',
+      questions: [
+        { type: 'radio', question: 'Which plan?', options: ['a', 'b'] },
+        { type: 'text', question: 'Anything else?' },
+      ],
+    });
+    const pending = useChatStore.getState().pendingQuestions;
+    expect(pending).toHaveLength(1);
+    expect(pending[0].questionId).toBe('questions_abc');
+    expect(pending[0].messageId).toBe('assistant-1');
+    expect(pending[0].questions[0]).toEqual({ type: 'radio', question: 'Which plan?', options: ['a', 'b'] });
+  });
+
+  it('dedupes re-emitted questions by id, submits answers, then clears', async () => {
+    const store = useChatStore.getState();
+    store.handleQuestionsAsked({
+      question_id: 'q1',
+      message_id: 'assistant-1',
+      questions: [{ type: 'text', question: 'Budget?' }],
+    });
+    // Backend may re-emit the same card with refreshed questions — must dedupe.
+    store.handleQuestionsAsked({
+      question_id: 'q1',
+      message_id: 'assistant-1',
+      questions: [{ type: 'radio', question: 'Re-asked?', options: ['x'] }],
+    });
+    expect(useChatStore.getState().pendingQuestions).toHaveLength(1);
+    expect(useChatStore.getState().pendingQuestions[0].questions[0].question).toBe('Re-asked?');
+
+    await store.submitAnswers('q1', ['x']);
+    expect(invoke).toHaveBeenCalledWith('chat_submit_answers', {
+      questionId: 'q1',
+      answers: ['x'],
+    });
+
+    store.clearQuestions('q1');
+    expect(useChatStore.getState().pendingQuestions).toHaveLength(0);
+  });
+});
