@@ -192,6 +192,11 @@ pub enum AgentEvent {
 /// net against model loops that never stop calling tools).
 const MAX_ROUNDS: usize = 12;
 
+/// Hard cap on a single tool call's execution time. Executors run on their
+/// own OS thread (see `execute_call`); this bounds how long a hung tool can
+/// stall the turn, feeding the result back to the model as a normal error.
+const TOOL_EXEC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 pub struct AgentLoop {
     pub ai_bridge: Arc<AiBridge>,
     pub plugin_manager: Arc<PluginManager>,
@@ -586,6 +591,7 @@ impl AgentLoop {
                         ApprovalDecision::Approved => {
                             info!("User approved tool call {}", call.call_id);
                             self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id)
+                                .await
                         }
                     };
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
@@ -605,7 +611,7 @@ impl AgentLoop {
                         .await;
                     outcomes.push(outcome);
                 } else {
-                    let outcome = self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id);
+                    let outcome = self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id).await;
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
                     let _ = event_tx
                         .send(AgentEvent::ToolCall {
@@ -645,7 +651,18 @@ impl AgentLoop {
         Ok(())
     }
 
-    fn execute_call(
+    /// Execute one tool call with a hard timeout, off the agent-loop worker.
+    ///
+    /// Capability executors (Python/WASM/PyO3 runtimes, HTTP, subprocess) run
+    /// synchronously on the calling thread. Executing them inline would block
+    /// the agent-loop tokio worker for the full duration — a hung tool would
+    /// block it forever (SQLite lock, an HTTP client that never answers, a
+    /// runaway Python runtime) and also starve cancellation, since the abort
+    /// flag is only polled between tool calls. So the executor runs on its own
+    /// OS thread and the result is awaited with a bounded timeout (the DSH
+    /// `guard` loop-hygiene pattern). A timeout or panic surfaces as a normal
+    /// `CallOutcome::Error` and still emits the trace StepFailed event.
+    async fn execute_call(
         &self,
         plugin_id: String,
         call: &AgentToolCall,
@@ -671,9 +688,37 @@ impl AgentLoop {
 
         let started = std::time::Instant::now();
         let ctx = self.create_execution_context(session_id);
-        let result = self
-            .plugin_manager
-            .execute_capability(&plugin_id, &call.capability, call.args.clone(), &ctx);
+        let plugin_manager = self.plugin_manager.clone();
+        let plugin_id_for_thread = plugin_id.clone();
+        let capability_for_thread = call.capability.clone();
+        let args_for_thread = call.args.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        std::thread::spawn(move || {
+            let result = plugin_manager.execute_capability(
+                &plugin_id_for_thread,
+                &capability_for_thread,
+                args_for_thread,
+                &ctx,
+            );
+            let _ = tx.send(result);
+        });
+
+        // Bounded wait: normalized to a String so timeout, panic, and real
+        // failure all flow through one error surface.
+        let result: Result<serde_json::Value, String> =
+            match tokio::time::timeout(TOOL_EXEC_TIMEOUT, rx).await {
+                Ok(Ok(r)) => r.map_err(|e| e.to_string()),
+                Ok(Err(_)) => Err(format!(
+                    "{}::{} panicked during execution",
+                    plugin_id, call.capability
+                )),
+                Err(_) => Err(format!(
+                    "{}::{} timed out after {}s",
+                    plugin_id,
+                    call.capability,
+                    TOOL_EXEC_TIMEOUT.as_secs()
+                )),
+            };
         let latency_ms = started.elapsed().as_millis() as u64;
 
         self.observability
@@ -697,7 +742,7 @@ impl AgentLoop {
         end.latency_ms = Some(latency_ms);
         match &result {
             Ok(output) => end.output = Some(truncate_value(output)),
-            Err(e) => end.error = Some(e.to_string()),
+            Err(e) => end.error = Some(e.clone()),
         }
         self.event_bus.publish_runtime(end);
 
@@ -705,7 +750,7 @@ impl AgentLoop {
             Ok(result) => CallOutcome::Success(result),
             Err(e) => {
                 warn!("Tool call {} ({}) failed: {}", call.call_id, call.capability, e);
-                CallOutcome::Error(e.to_string())
+                CallOutcome::Error(e)
             }
         }
     }
