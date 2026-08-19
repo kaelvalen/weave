@@ -31,6 +31,34 @@ use crate::utils::errors::{AuthChallenge, WeaveError};
 
 pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 
+/// The session-based (pre-stateless) revision Weave can still drive. Older
+/// session servers (`2024-11-25` and earlier, and the legacy bidirectional
+/// SSE transport) are not supported. Docs: phase8-mcp-spec.md Part 2 §4.
+pub const LEGACY_PROTOCOL_VERSION: &str = "2025-06-18";
+
+/// A negotiated MCP connection. For **stateless** `2026-07-28` servers this
+/// is a plain version marker with no session. For **legacy** session-based
+/// servers it also carries the `Mcp-Session-Id` returned by the `initialize`
+/// handshake, echoed on every subsequent request.
+#[derive(Debug, Clone)]
+pub struct ServerSession {
+    pub protocol_version: String,
+    pub session_id: Option<String>,
+}
+
+impl ServerSession {
+    /// A stateless `2026-07-28` connection (the default, live-verified path).
+    pub fn stateless() -> Self {
+        Self {
+            protocol_version: MCP_PROTOCOL_VERSION.to_string(),
+            session_id: None,
+        }
+    }
+    pub fn is_legacy(&self) -> bool {
+        self.protocol_version != MCP_PROTOCOL_VERSION
+    }
+}
+
 /// A tool as advertised by an MCP server's `tools/list` response. `input_schema`
 /// is real JSON Schema per the spec (both before and after 2026-07-28) — it
 /// drops into `Capabilities.schemas` with no `schema_from_example`-style
@@ -344,14 +372,11 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
 
-    if !protocol_versions.is_empty() && !protocol_versions.iter().any(|v| v == MCP_PROTOCOL_VERSION) {
-        return Err(WeaveError::PluginError(format!(
-            "MCP server at {} does not support protocol {} (supports: {}) — 2025-11-25 and earlier session-based revisions are out of scope (docs/phase8-mcp-spec.md Part 2 §4)",
-            base_url,
-            MCP_PROTOCOL_VERSION,
-            protocol_versions.join(", ")
-        )));
-    }
+    // No blanket version reject here: `discover` reports what the server
+    // supports and `establish_session`/`choose_session` negotiate the actual
+    // transport (stateless 2026-07-28 or legacy session-based 2025-06-18).
+    // A server that declares nothing usable is refused later, at negotiation
+    // time, with a specific reason rather than on bare version mismatch.
 
     // Live servers (GitHub MCP, 2026-08-13) advertise identity inside
     // `_meta.io.modelcontextprotocol/serverInfo` rather than a top-level
@@ -398,6 +423,218 @@ pub async fn list_tools(base_url: &str, token: Option<&str>) -> Result<ToolsList
     let ttl_ms = result.get("ttlMs").and_then(|v| v.as_u64());
 
     Ok(ToolsListResult { tools, ttl_ms })
+}
+
+// ---------------------------------------------------------------------------
+// Legacy (session-based, 2025-06-18) transport
+// ---------------------------------------------------------------------------
+//
+// The 2026-07-28 revision is stateless. Older session-based servers require
+// an `initialize` handshake whose `Mcp-Session-Id` is echoed on every later
+// request, and they do NOT understand the stateless `server/discover` /
+// `Mcp-Method`/`Mcp-Name`/`Mcp-Param-*` surface. These helpers let Weave
+// connect to such servers instead of refusing them outright.
+
+/// Pick a transport for the protocol versions a server advertises. An empty
+/// list or a `2026-07-28` declaration → stateless. A `2025-06-18` declaration
+/// → legacy session-based (still needs `establish_session` for the id). Any
+/// other/older-only declaration → `None` (refused with a precise reason).
+pub fn choose_session(supported: &[String]) -> Option<ServerSession> {
+    if supported.is_empty() || supported.iter().any(|v| v == MCP_PROTOCOL_VERSION) {
+        return Some(ServerSession::stateless());
+    }
+    if supported.iter().any(|v| v == LEGACY_PROTOCOL_VERSION) {
+        return Some(ServerSession {
+            protocol_version: LEGACY_PROTOCOL_VERSION.to_string(),
+            session_id: None,
+        });
+    }
+    None
+}
+
+/// Run the legacy `initialize` handshake if the advertised versions need a
+/// session, returning a ready `ServerSession`. Stateless servers short-circuit
+/// without a network call. Servers with no usable protocol are refused here
+/// with a precise reason (the old blanket version-reject in `discover` was
+/// removed in favor of this negotiation point).
+pub async fn establish_session(
+    base_url: &str,
+    supported: &[String],
+    token: Option<&str>,
+) -> Result<ServerSession, WeaveError> {
+    let base = match choose_session(supported) {
+        Some(s) if !s.is_legacy() => return Ok(s),
+        Some(s) => s,
+        None => {
+            return Err(WeaveError::PluginError(format!(
+                "MCP server at {} supports no protocol Weave can speak (supports: {}) — Weave speaks MCP {} (stateless) or {} (legacy session)",
+                base_url,
+                supported.join(", "),
+                MCP_PROTOCOL_VERSION,
+                LEGACY_PROTOCOL_VERSION
+            )))
+        }
+    };
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "weave-init",
+        "method": "initialize",
+        "params": {
+            "protocolVersion": base.protocol_version,
+            "capabilities": {},
+            "clientInfo": { "name": "weave", "version": env!("CARGO_PKG_VERSION") }
+        }
+    });
+    let (_, new_session) = post_legacy(base_url, &base, "initialize", body, token).await?;
+    Ok(ServerSession {
+        protocol_version: base.protocol_version,
+        session_id: new_session,
+    })
+}
+
+/// A single-round-trip POST in the legacy session shape. Returns the parsed
+/// JSON-RPC result and any `Mcp-Session-Id` the server set (from `initialize`).
+async fn post_legacy(
+    base_url: &str,
+    session: &ServerSession,
+    method: &str,
+    body: Value,
+    token: Option<&str>,
+) -> Result<(Value, Option<String>), WeaveError> {
+    let client = build_client()?;
+    let mut req = client
+        .post(base_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", &session.protocol_version);
+    if method != "initialize" {
+        if let Some(sid) = &session.session_id {
+            req = req.header("Mcp-Session-Id", sid);
+        }
+    }
+    if let Some(token) = token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+    let response = req
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| WeaveError::Http(format!("MCP request to {} failed: {}", base_url, e)))?;
+
+    let new_session = response
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        if let Some(auth_url) = auth_challenge_from_headers(response.headers()) {
+            return Err(WeaveError::AuthRequired(auth_url));
+        }
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| WeaveError::Http(format!("MCP response from {} unreadable: {}", base_url, e)))?;
+    let payload: Value = if content_type.contains("text/event-stream") {
+        let mut last: Option<Value> = None;
+        for line in text.lines() {
+            if let Some(data) = line.trim_start().strip_prefix("data:") {
+                if let Ok(v) = serde_json::from_str(data.trim()) {
+                    last = Some(v);
+                }
+            }
+        }
+        last.unwrap_or(Value::Null)
+    } else if text.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str(&text).unwrap_or(Value::Null)
+    };
+
+    if !status.is_success() && status != reqwest::StatusCode::ACCEPTED {
+        return Err(WeaveError::Http(format!(
+            "MCP server {} returned {}: {}",
+            base_url, status, payload
+        )));
+    }
+
+    let result = payload
+        .get("result")
+        .cloned()
+        .ok_or_else(|| WeaveError::Http(format!("MCP response from {} had no result field", base_url)))?;
+    if let Some(error) = result.get("error") {
+        return Err(WeaveError::Http(format!(
+            "MCP server {} returned a JSON-RPC error: {}",
+            base_url, error
+        )));
+    }
+    Ok((result, new_session))
+}
+
+/// Session-aware `tools/list`: delegates to the stateless path for
+/// 2026-07-28 servers, uses the legacy session transport otherwise.
+pub async fn list_tools_with_session(
+    base_url: &str,
+    session: &ServerSession,
+    token: Option<&str>,
+) -> Result<ToolsListResult, WeaveError> {
+    if !session.is_legacy() {
+        return list_tools(base_url, token).await;
+    }
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": "weave-list", "method": "tools/list", "params": {}
+    });
+    let (result, _) = post_legacy(base_url, session, "tools/list", body, token).await?;
+    let tools: Vec<McpTool> = serde_json::from_value(
+        result.get("tools").cloned().unwrap_or_else(|| Value::Array(vec![])),
+    )
+    .map_err(|e| WeaveError::Http(format!("MCP tools/list from {} had an unexpected shape: {}", base_url, e)))?;
+    let ttl_ms = result.get("ttlMs").and_then(|v| v.as_u64());
+    Ok(ToolsListResult { tools, ttl_ms })
+}
+
+/// Session-aware `tools/call`. `InputRequired` is surfaced like the stateless
+/// path (not driven further ─ same MRTR scope as `call_tool`).
+pub async fn call_tool_with_session(
+    base_url: &str,
+    session: &ServerSession,
+    tool_name: &str,
+    arguments: Value,
+    token: Option<&str>,
+) -> Result<Value, WeaveError> {
+    if !session.is_legacy() {
+        return call_tool(base_url, tool_name, arguments, None, token).await;
+    }
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": "weave-call", "method": "tools/call",
+        "params": { "name": tool_name, "arguments": arguments }
+    });
+    let (result, _) = post_legacy(base_url, session, "tools/call", body, token).await?;
+    if result.get("resultType").and_then(|v| v.as_str()) == Some("input_required") {
+        return Err(WeaveError::PluginError(format!(
+            "MCP tool '{}' requires interactive input mid-call, which Weave does not yet support",
+            tool_name
+        )));
+    }
+    let is_error = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
+    let content = result.get("content").cloned().unwrap_or(Value::Null);
+    if is_error {
+        return Err(WeaveError::PluginError(format!(
+            "MCP tool '{}' returned an error result: {}",
+            tool_name, content
+        )));
+    }
+    Ok(content)
 }
 
 /// Parameter names a tool's inputSchema marks as header-bound via

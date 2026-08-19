@@ -230,21 +230,23 @@ Weave can add tools from an MCP server as a capability source, registered
 into the same plugin registry as builtins — from the Plugin Marketplace
 ("Add MCP Server"), or via `mcp_add_server(url, name)`.
 
-**Scope: MCP specification revision `2026-07-28` only.** This is the
-stateless-core rewrite of MCP — no `initialize`/`Mcp-Session-Id` handshake,
-`MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` request headers, `resultType`
-on every result, and Multi Round-Trip Requests (MRTR) in place of
-server-initiated streams for mid-call input. **Older MCP revisions
-(2025-11-25 and earlier, session-based) are not supported** — Weave calls
-`server/discover` before trusting anything else from a server and rejects
-one that doesn't declare `2026-07-28` support, rather than silently falling
-back to a legacy transport.
-
-Within `2026-07-28`, Weave implements **single-round-trip `tools/call`
-only**. A server that responds with `resultType: "input_required"`
-(MRTR mid-call elicitation, e.g. asking the user "Delete 3 files?" before
-finishing) surfaces as a clear tool-execution error, not a hang — Weave
-does not yet drive the follow-up round trip that would answer it.
+**Scope: MCP specification revision `2026-07-28`, with a legacy `2025-06-18`
+fallback.** `2026-07-28` is the stateless-core rewrite of MCP — no
+`initialize`/`Mcp-Session-Id` handshake, `MCP-Protocol-Version`/
+`Mcp-Method`/`Mcp-Name` request headers, `resultType` on every result, and
+Multi Round-Trip Requests (MRTR) in place of server-initiated streams for
+mid-call input. Weave no longer *blanket-rejects* servers that don't declare
+`2026-07-28`: discovery reports what a server supports and `establish_session`
+negotiates — a server advertising `2025-06-18` is connected via the legacy
+`initialize` handshake and session-based single-round-trip `tools/list` /
+`tools/call` (`mcp_client::establish_session` / `list_tools_with_session` /
+`call_tool_with_session`, covered by a hermetic mock-session test). Older
+session revisions (`2024-11-25` and earlier, including the legacy bidirectional
+SSE transport) remain explicitly out of scope and are refused at negotiation
+with a precise reason. Within either revision Weave implements
+**single-round-trip `tools/call` only**: a `resultType: "input_required"`
+(MRTR mid-call elicitation) surfaces as a clear tool-execution error, not a
+hang — Weave does not yet drive the follow-up round trip that would answer it.
 
 **Live-server verified (2026-08-13):** a full `server/discover` →
 `tools/list` → `tools/call` round trip was run through Weave's own client
