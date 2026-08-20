@@ -13,7 +13,7 @@ jobs:
     name: Rust tests (with bubblewrap)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install bubblewrap (required by shell.exec sandbox tests)
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
@@ -43,7 +43,7 @@ jobs:
     name: Link the full binary (Tauri GUI deps)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Tauri Linux (GUI) dependency stack
         run: |
@@ -76,7 +76,7 @@ jobs:
     name: Web typecheck / lint / test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
