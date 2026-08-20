@@ -39,7 +39,7 @@ sysinfo = "0.30"
 diffy = "0.4"
 similar = "2"
 ignore = "0.4"
-sha2 = "0.10"
+sha2 = "0.11"
 keyring = { version = "2.3.3", default-features = false, features = ["linux-keyutils", "linux-no-secret-service", "linux-default-keyutils", "platform-macos", "platform-windows"] }
 
 [dependencies.wasmtime]
