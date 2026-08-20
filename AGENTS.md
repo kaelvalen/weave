@@ -52,8 +52,7 @@ Read this before editing. The human maintainer follows the same rules.
 - **Fail closed, never silently.** An unknown capability, unresolved host, or
   unhandled protocol is a clear error — not a silent passthrough.
 - **English, concrete comments.** No translator notes in code.
-- **Don't reformat the whole tree.** Prefer targeted, reviewable diffs. The repo
-  is not currently `rustfmt`-enforced; formatting must be internally consistent.
+- **Run `cargo fmt` before finishing.** Formatting is enforced (`cargo fmt --check` in CI); `nix-shell shell.nix --run 'cargo fmt --all'` normalizes the tree.
 
 ## Verification matrix (run all before finishing)
 
@@ -62,7 +61,8 @@ Read this before editing. The human maintainer follows the same rules.
 # and bubblewrap for the sandbox tests (headless shells lack them).
 nix-shell shell.nix --run 'cargo test --workspace'
 nix-shell shell.nix --run 'cargo check --workspace --all-targets'   # zero warnings
-nix-shell shell.nix --run 'cargo clippy --workspace --all-targets -- -D clippy::correctness'
+nix-shell shell.nix --run 'cargo fmt --all -- --check'               # formatting
+nix-shell shell.nix --run 'cargo clippy --workspace --all-targets -- -D warnings'
 
 # Web
 npm run typecheck && npm run lint && npm test && npm run build

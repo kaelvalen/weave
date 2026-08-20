@@ -274,9 +274,16 @@ code for tokens, persists them in `~/.weave/config.json`, and
 re-registers the server's tools. The RFC 9728 resolution step was added
 after a live failure against Puter MCP exposed the naive
 double-`.well-known` bug (2026-08-13). Token refresh
-(`mcp_oauth_refresh`) is available; automatic refresh-on-401 inside a
-tool call is not yet wired. Note: Weave does not yet host its CIMD
-metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and see
+(`mcp_oauth_refresh`) is available; **automatic refresh-on-401 inside a tool
+call is not yet wired**. This is a deliberate decision, not an oversight: the
+MCP executor is synchronous and stateless w.r.t. app config, and auto-refresh
+must persist rotated tokens back to `config.json`/keychain and retry atomically —
+shipping that without live-server validation risks corrupting token state.
+A 401 currently surfaces as a clear `AuthRequired` error directing the user to
+re-authorize (Marketplace → Authorize). Wiring it requires threading the
+server's refresh metadata + a config write-back into `McpExecutor`, then a
+live test against an expiring-token server. Note: Weave does not yet host its
+CIMD metadata document — set `WEAVE_CIMD_CLIENT_ID` if you host one, and see
 `docs/phase8-mcp-spec.md` Part 2 §5 for the self-hosting prerequisite for
 servers that strictly validate CIMD. Protected-resource `scopes_supported`
 are carried into the authorization request; Weave no longer invents a
@@ -322,6 +329,29 @@ credentials fails with an actionable configuration error instead of opening
 a guaranteed GitHub 404 page.
 
 Full design record: `docs/phase8-mcp-spec.md`.
+
+## Security model
+
+Weave treats the backend as the sole authority over what the AI may do, and
+defaults to deny:
+
+- **Backend-owned approval.** Sensitive / destructive / MCP tool calls are
+  gated in `agent/mod.rs` via `capability_policy.rs`; the frontend copy is
+  display-only and a Rust test fails on any drift.
+- **Deny by default.** Unclassified capabilities, unresolved hosts,
+  unsupported MCP protocols, and non-allowlisted MCP tools are rejected.
+- **One sandbox.** Shell commands run in a fail-closed bubblewrap sandbox
+  (`shell_plugin.rs`): read-only rootfs with only the workspace bind writable.
+- **SSRF + FS confinement.** Outbound HTTP re-validates every redirect; paths
+  are canonicalized (`..`, symlinks) then confined to workspace/app-data.
+- **Bounded execution.** Every tool runs on its own thread with a timeout;
+  context has a budget; runs have a round cap and a per-run cancel token.
+- **Secrets.** Provider keys and MCP OAuth tokens mirror to the OS keychain
+  and are redacted from plaintext when available (full plaintext fallback
+  otherwise, so Weave always works).
+
+The rules, history, and test guidance live in
+`docs/architecture.md`, `docs/defensive-patterns.md`, and `docs/testing.md`.
 
 ## Project Status
 

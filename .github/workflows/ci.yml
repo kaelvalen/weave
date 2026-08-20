@@ -28,14 +28,49 @@ jobs:
       - name: Cargo test (workspace)
         run: cargo test --workspace
 
-      # Clippy: deny the correctness group (real bugs). The broad style
-      # backlog (-D warnings, e.g. too_many_arguments) is tracked separately;
-      # shell.nix provides a matching clippy for reproducibility.
-      - name: Clippy (correctness)
-        run: cargo clippy --workspace --all-targets -- -D clippy::correctness
+      - name: Format check
+        run: cargo fmt --check --all
+
+      # Clippy with -D warnings: the full style+correctness gate. shell.nix
+      # ships a matching clippy (same rustc), so it's reproducible locally too.
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Architecture contract check
         run: python3 scripts/check_architecture.py
+
+  build:
+    name: Link the full binary (Tauri GUI deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux (GUI) dependency stack
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the web bundle (frontendDist for tauri::generate_context!)
+        run: npm run build
+
+      - name: Build the app binary
+        # Debug build is the cheap, reliable "this compiles and links" gate;
+        # a release tauri:build artifact is out of scope for CI.
+        run: cargo build --workspace
 
   web:
     name: Web typecheck / lint / test
