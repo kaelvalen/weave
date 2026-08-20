@@ -189,7 +189,10 @@ async fn mcp_tool_call_round_trips_through_agent_loop() {
         bodies[0].contains(&format!("\"name\":\"{}\"", safe_name)),
         "tools must advertise the MCP capability with a provider-safe name"
     );
-    assert!(bodies[0].contains("\"city\""), "the real MCP inputSchema must reach the provider request");
+    assert!(
+        bodies[0].contains("\"city\""),
+        "the real MCP inputSchema must reach the provider request"
+    );
 
     // 3. The approved call actually executed against the mock MCP server
     //    (single-round-trip tools/call, Part 2 §1) and the result is paired.
@@ -199,7 +202,11 @@ async fn mcp_tool_call_round_trips_through_agent_loop() {
         bodies,
     };
     let second = &rt.bodies[1];
-    assert!(second.contains("Sunny, 22C in Ankara"), "tool result must carry the MCP server's content, got: {}", second);
+    assert!(
+        second.contains("Sunny, 22C in Ankara"),
+        "tool result must carry the MCP server's content, got: {}",
+        second
+    );
     assert_completion_rule(second);
 
     // 4. Loop continued to the final turn.
@@ -222,11 +229,20 @@ async fn mcp_tool_call_rejected_still_pairs_result() {
     let listed = mcp_client::list_tools(&mcp_url, None).await.unwrap();
     let capability = mcp_client::capability_id("weather", "get_forecast");
 
-    let harness = Harness::new(tool_call_script(&capability, r#"{"city":"Ankara"}"#, "Done.")).await;
-    harness
-        .loop_
-        .plugin_manager
-        .add_mcp_server("weather", "Weather", &mcp_url, None, listed.tools, None);
+    let harness = Harness::new(tool_call_script(
+        &capability,
+        r#"{"city":"Ankara"}"#,
+        "Done.",
+    ))
+    .await;
+    harness.loop_.plugin_manager.add_mcp_server(
+        "weather",
+        "Weather",
+        &mcp_url,
+        None,
+        listed.tools,
+        None,
+    );
 
     let (_final_text, events) = harness.run_loop(ApprovalDecision::Rejected).await;
     assert!(saw_approval(&events, &capability));
@@ -240,7 +256,6 @@ async fn mcp_tool_call_rejected_still_pairs_result() {
     );
     assert_completion_rule(second);
 }
-
 
 /// Spawns a mock **legacy session-based** MCP server (2025-06-18). Unlike the
 /// stateless mock above it does NOT understand `server/discover`; it answers
@@ -355,7 +370,7 @@ fn spawn_mock_legacy_mcp_server() -> (String, Arc<std::sync::Mutex<Vec<String>>>
                     response.push_str("\r\nContent-Type: application/json\r\n");
                     // extra_header (e.g. "Mcp-Session-Id: sess-123\r\n") is
                     // already a complete header line for initialize.
-                    response.push_str(&extra_header);
+                    response.push_str(extra_header);
                     response.push_str(&format!(
                         "Content-Length: {}\r\nConnection: close\r\n\r\n{}",
                         response_body.len(),
@@ -382,7 +397,11 @@ async fn legacy_session_based_server_negotiates_and_roundtrips() {
         .await
         .expect("legacy server must connect via initialize");
     assert!(session.is_legacy(), "session must be legacy-mode");
-    assert_eq!(session.session_id.as_deref(), Some("sess-123"), "initialize must echo the session id");
+    assert_eq!(
+        session.session_id.as_deref(),
+        Some("sess-123"),
+        "initialize must echo the session id"
+    );
 
     // tools/list carries the session id + legacy protocol version.
     let listed = mcp_client::list_tools_with_session(&url, &session, None)
@@ -403,32 +422,44 @@ async fn legacy_session_based_server_negotiates_and_roundtrips() {
     .await
     .expect("legacy tools/call");
     assert!(
-        serde_json::to_string(&result).unwrap().contains("legacy-sunny"),
+        serde_json::to_string(&result)
+            .unwrap()
+            .contains("legacy-sunny"),
         "legacy call result must carry the server content"
     );
 
     // Every post-initialize request actually carried the session header.
-    let rec = seen.lock().unwrap();
-    assert!(
-        rec.iter().any(|r| r.starts_with("tools/list|proto=mcp-protocol-version: 2025-06-18|session=mcp-session-id: sess-123")),
-        "tools/list must echo session + version, saw: {:?}",
-        *rec
-    );
-    assert!(
-        rec.iter().any(|r| r.starts_with("tools/call|proto=mcp-protocol-version: 2025-06-18|session=mcp-session-id: sess-123")),
-        "tools/call must echo session + version, saw: {:?}",
-        *rec
-    );
+    {
+        let rec = seen.lock().unwrap();
+        assert!(
+            rec.iter().any(|r| {
+                r.starts_with(
+                "tools/list|proto=mcp-protocol-version: 2025-06-18|session=mcp-session-id: sess-123"
+            )
+            }),
+            "tools/list must echo session + version, saw: {:?}",
+            *rec
+        );
+        assert!(
+            rec.iter().any(|r| {
+                r.starts_with(
+                "tools/call|proto=mcp-protocol-version: 2025-06-18|session=mcp-session-id: sess-123"
+            )
+            }),
+            "tools/call must echo session + version, saw: {:?}",
+            *rec
+        );
+    } // guard dropped before the awaits below.
 
     // Stateless advertising short-circuits (no session needed).
-    let s2 = mcp_client::establish_session(&url, &vec!["2026-07-28".to_string()], None)
+    let s2 = mcp_client::establish_session(&url, &["2026-07-28".to_string()], None)
         .await
         .unwrap();
     assert!(!s2.is_legacy());
 
     // An older/unsupported-only server is refused with a precise reason.
     assert!(
-        mcp_client::establish_session(&url, &vec!["2024-11-25".to_string()], None)
+        mcp_client::establish_session(&url, &["2024-11-25".to_string()], None)
             .await
             .is_err(),
         "2024-11-25-only (legacy SSE transport) must be refused at negotiation"
@@ -454,7 +485,9 @@ fn legacy_executor_negotiates_session_and_calls_tool() {
     )
     .expect("legacy tools/call must run through a negotiated session");
     assert!(
-        serde_json::to_string(&result).unwrap().contains("legacy-sunny"),
+        serde_json::to_string(&result)
+            .unwrap()
+            .contains("legacy-sunny"),
         "legacy tool call should return the server content, got: {:?}",
         result
     );
@@ -486,21 +519,34 @@ async fn live_round_trip_against_github_mcp_server() {
     let info = mcp_client::discover(base, Some(&token))
         .await
         .expect("server/discover against a live 2026-07-28 server");
-    println!("discover: server={:?} protocol_versions={:?}", info.name, info.protocol_versions);
-    assert_eq!(info.name, "github-mcp-server", "expected GitHub MCP identity from _meta.serverInfo");
+    println!(
+        "discover: server={:?} protocol_versions={:?}",
+        info.name, info.protocol_versions
+    );
+    assert_eq!(
+        info.name, "github-mcp-server",
+        "expected GitHub MCP identity from _meta.serverInfo"
+    );
 
     let listed = mcp_client::list_tools(base, Some(&token))
         .await
         .expect("tools/list against a live 2026-07-28 server");
     println!("tools/list: {} tools advertised", listed.tools.len());
-    assert!(listed.tools.len() > 10, "expected a real tool surface, got {}", listed.tools.len());
+    assert!(
+        listed.tools.len() > 10,
+        "expected a real tool surface, got {}",
+        listed.tools.len()
+    );
 
     let get_me = listed
         .tools
         .iter()
         .find(|t| t.name == "get_me")
         .expect("github-mcp-server advertises get_me");
-    println!("get_me schema: {}", serde_json::to_string(&get_me.input_schema).unwrap());
+    println!(
+        "get_me schema: {}",
+        serde_json::to_string(&get_me.input_schema).unwrap()
+    );
 
     let result = mcp_client::call_tool(
         base,
@@ -509,11 +555,18 @@ async fn live_round_trip_against_github_mcp_server() {
         Some(&get_me.input_schema),
         Some(&token),
     )
-        .await
-        .expect("tools/call against a live 2026-07-28 server");
+    .await
+    .expect("tools/call against a live 2026-07-28 server");
     let text = serde_json::to_string(&result).unwrap();
-    println!("tools/call get_me -> {}", &text.chars().take(400).collect::<String>());
-    assert!(result.is_array(), "get_me result should be a content array, got: {}", &text.chars().take(200).collect::<String>());
+    println!(
+        "tools/call get_me -> {}",
+        text.chars().take(400).collect::<String>()
+    );
+    assert!(
+        result.is_array(),
+        "get_me result should be a content array, got: {}",
+        text.chars().take(200).collect::<String>()
+    );
     let content = result.as_array().unwrap();
     assert!(
         content.iter().any(|c| c.get("text").is_some()),
@@ -541,7 +594,10 @@ async fn live_oauth_challenge_resolution_against_puter_mcp() {
     let base = "https://mcp.puter.com";
     let challenge = match mcp_client::discover(base, None).await {
         Err(weave::utils::errors::WeaveError::AuthRequired(c)) => c,
-        other => panic!("expected AuthRequired from a live OAuth server, got: {:?}", other),
+        other => panic!(
+            "expected AuthRequired from a live OAuth server, got: {:?}",
+            other
+        ),
     };
     assert!(
         matches!(challenge, AuthChallenge::ResourceMetadata(_)),
@@ -566,7 +622,10 @@ async fn live_oauth_challenge_resolution_against_puter_mcp() {
     assert!(md.authorization_endpoint.is_some());
     assert!(md.token_endpoint.is_some());
     assert!(
-        md.authorization_endpoint.as_deref().unwrap().ends_with("/authorize"),
+        md.authorization_endpoint
+            .as_deref()
+            .unwrap()
+            .ends_with("/authorize"),
         "expected an authorization endpoint, got {:?}",
         md.authorization_endpoint
     );
@@ -586,7 +645,8 @@ async fn live_oauth_challenge_resolution_against_puter_mcp() {
 async fn live_github_discovery_is_path_aware() {
     use weave::mcp_client;
 
-    let [path_aware, append] = mcp_client::discovery_url_candidates("https://github.com/login/oauth");
+    let [path_aware, append] =
+        mcp_client::discovery_url_candidates("https://github.com/login/oauth");
     assert_eq!(
         path_aware,
         "https://github.com/.well-known/oauth-authorization-server/login/oauth"

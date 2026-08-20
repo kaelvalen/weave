@@ -184,10 +184,12 @@ async fn post(
     // `event: message` / `data: {jsonrpc...}`. The last parseable data frame
     // is the terminal JSON-RPC message.
     let payload: Value = if content_type.contains("text/event-stream") {
-        let text = response
-            .text()
-            .await
-            .map_err(|e| WeaveError::Http(format!("MCP SSE response from {} unreadable: {}", base_url, e)))?;
+        let text = response.text().await.map_err(|e| {
+            WeaveError::Http(format!(
+                "MCP SSE response from {} unreadable: {}",
+                base_url, e
+            ))
+        })?;
         let mut last: Option<Value> = None;
         for line in text.lines() {
             if let Some(data) = line.trim_start().strip_prefix("data:") {
@@ -204,10 +206,12 @@ async fn post(
             ))
         })?
     } else {
-        response
-            .json()
-            .await
-            .map_err(|e| WeaveError::Http(format!("MCP response from {} was not JSON: {}", base_url, e)))?
+        response.json().await.map_err(|e| {
+            WeaveError::Http(format!(
+                "MCP response from {} was not JSON: {}",
+                base_url, e
+            ))
+        })?
     };
 
     if !status.is_success() {
@@ -224,19 +228,19 @@ async fn post(
         )));
     }
 
-    payload
-        .get("result")
-        .cloned()
-        .ok_or_else(|| WeaveError::Http(format!("MCP response from {} had no result field", base_url)))
+    payload.get("result").cloned().ok_or_else(|| {
+        WeaveError::Http(format!(
+            "MCP response from {} had no result field",
+            base_url
+        ))
+    })
 }
 
 /// Extracts the OAuth challenge from a 401 response's headers. Real
 /// 2026-07-28 servers use either a direct `Mcp-Authorization: <url>`
 /// header or a `WWW-Authenticate` challenge carrying
 /// `resource_metadata="<url>"` (the 2025-06-18-era shape).
-fn auth_challenge_from_headers(
-    headers: &reqwest::header::HeaderMap,
-) -> Option<AuthChallenge> {
+fn auth_challenge_from_headers(headers: &reqwest::header::HeaderMap) -> Option<AuthChallenge> {
     if let Some(v) = headers.get("mcp-authorization") {
         if let Ok(s) = v.to_str() {
             let s = s.trim();
@@ -252,7 +256,9 @@ fn auth_challenge_from_headers(
                     let rest = &s[idx + marker.len()..];
                     if let Some(quoted) = rest.strip_prefix('"') {
                         if let Some(end) = quoted.find('"') {
-                            return Some(AuthChallenge::ResourceMetadata(quoted[..end].to_string()));
+                            return Some(AuthChallenge::ResourceMetadata(
+                                quoted[..end].to_string(),
+                            ));
                         }
                     }
                 }
@@ -282,11 +288,12 @@ pub async fn fetch_protected_resource_metadata(
     metadata_url: &str,
 ) -> Result<ProtectedResourceMetadata, WeaveError> {
     let client = build_client()?;
-    let response = client
-        .get(metadata_url)
-        .send()
-        .await
-        .map_err(|e| WeaveError::Http(format!("protected-resource metadata request to {} failed: {}", metadata_url, e)))?;
+    let response = client.get(metadata_url).send().await.map_err(|e| {
+        WeaveError::Http(format!(
+            "protected-resource metadata request to {} failed: {}",
+            metadata_url, e
+        ))
+    })?;
     if !response.status().is_success() {
         return Err(WeaveError::Http(format!(
             "protected-resource metadata at {} returned {}",
@@ -294,10 +301,12 @@ pub async fn fetch_protected_resource_metadata(
             response.status()
         )));
     }
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|e| WeaveError::Http(format!("protected-resource metadata at {} was not JSON: {}", metadata_url, e)))?;
+    let payload: Value = response.json().await.map_err(|e| {
+        WeaveError::Http(format!(
+            "protected-resource metadata at {} was not JSON: {}",
+            metadata_url, e
+        ))
+    })?;
 
     let servers: Vec<String> = payload
         .get("authorization_servers")
@@ -369,7 +378,11 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
     let protocol_versions: Vec<String> = result
         .get("protocolVersions")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     // No blanket version reject here: `discover` reports what the server
@@ -404,7 +417,10 @@ pub async fn discover(base_url: &str, token: Option<&str>) -> Result<ServerInfo,
 }
 
 /// `tools/list`. Schema passthrough only — no inference (Q3).
-pub async fn list_tools(base_url: &str, token: Option<&str>) -> Result<ToolsListResult, WeaveError> {
+pub async fn list_tools(
+    base_url: &str,
+    token: Option<&str>,
+) -> Result<ToolsListResult, WeaveError> {
     let result = post(
         base_url,
         "tools/list",
@@ -416,9 +432,17 @@ pub async fn list_tools(base_url: &str, token: Option<&str>) -> Result<ToolsList
     .await?;
 
     let tools: Vec<McpTool> = serde_json::from_value(
-        result.get("tools").cloned().unwrap_or_else(|| Value::Array(vec![])),
+        result
+            .get("tools")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(vec![])),
     )
-    .map_err(|e| WeaveError::Http(format!("MCP tools/list from {} had an unexpected shape: {}", base_url, e)))?;
+    .map_err(|e| {
+        WeaveError::Http(format!(
+            "MCP tools/list from {} had an unexpected shape: {}",
+            base_url, e
+        ))
+    })?;
 
     let ttl_ms = result.get("ttlMs").and_then(|v| v.as_u64());
 
@@ -541,10 +565,9 @@ async fn post_legacy(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-    let text = response
-        .text()
-        .await
-        .map_err(|e| WeaveError::Http(format!("MCP response from {} unreadable: {}", base_url, e)))?;
+    let text = response.text().await.map_err(|e| {
+        WeaveError::Http(format!("MCP response from {} unreadable: {}", base_url, e))
+    })?;
     let payload: Value = if content_type.contains("text/event-stream") {
         let mut last: Option<Value> = None;
         for line in text.lines() {
@@ -568,10 +591,12 @@ async fn post_legacy(
         )));
     }
 
-    let result = payload
-        .get("result")
-        .cloned()
-        .ok_or_else(|| WeaveError::Http(format!("MCP response from {} had no result field", base_url)))?;
+    let result = payload.get("result").cloned().ok_or_else(|| {
+        WeaveError::Http(format!(
+            "MCP response from {} had no result field",
+            base_url
+        ))
+    })?;
     if let Some(error) = result.get("error") {
         return Err(WeaveError::Http(format!(
             "MCP server {} returned a JSON-RPC error: {}",
@@ -596,9 +621,17 @@ pub async fn list_tools_with_session(
     });
     let (result, _) = post_legacy(base_url, session, "tools/list", body, token).await?;
     let tools: Vec<McpTool> = serde_json::from_value(
-        result.get("tools").cloned().unwrap_or_else(|| Value::Array(vec![])),
+        result
+            .get("tools")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(vec![])),
     )
-    .map_err(|e| WeaveError::Http(format!("MCP tools/list from {} had an unexpected shape: {}", base_url, e)))?;
+    .map_err(|e| {
+        WeaveError::Http(format!(
+            "MCP tools/list from {} had an unexpected shape: {}",
+            base_url, e
+        ))
+    })?;
     let ttl_ms = result.get("ttlMs").and_then(|v| v.as_u64());
     Ok(ToolsListResult { tools, ttl_ms })
 }
@@ -626,7 +659,10 @@ pub async fn call_tool_with_session(
             tool_name
         )));
     }
-    let is_error = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
+    let is_error = result
+        .get("isError")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let content = result.get("content").cloned().unwrap_or(Value::Null);
     if is_error {
         return Err(WeaveError::PluginError(format!(
@@ -706,7 +742,10 @@ async fn call_tool_once(
     match result.get("resultType").and_then(|v| v.as_str()) {
         Some("input_required") => Ok(CallOutcome::InputRequired),
         _ => {
-            let is_error = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
+            let is_error = result
+                .get("isError")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let content = result.get("content").cloned().unwrap_or(Value::Null);
             if is_error {
                 return Err(WeaveError::PluginError(format!(
@@ -819,7 +858,8 @@ pub fn call_tool_sync_negotiated(
         rt.block_on(async move {
             let supported = vec![pv.clone()];
             let session = establish_session(&base_url, &supported, token.as_deref()).await?;
-            call_tool_with_session(&base_url, &session, &tool_name, arguments, token.as_deref()).await
+            call_tool_with_session(&base_url, &session, &tool_name, arguments, token.as_deref())
+                .await
         })
     })
     .join()
@@ -844,8 +884,7 @@ pub fn oauth_redirect_uri() -> String {
         .unwrap_or_else(|_| DEFAULT_OAUTH_REDIRECT_URI.to_string())
 }
 
-const BUILTIN_GITHUB_OAUTH_CLIENT_ID: Option<&str> =
-    option_env!("WEAVE_GITHUB_OAUTH_CLIENT_ID");
+const BUILTIN_GITHUB_OAUTH_CLIENT_ID: Option<&str> = option_env!("WEAVE_GITHUB_OAUTH_CLIENT_ID");
 const BUILTIN_GITHUB_OAUTH_CLIENT_SECRET: Option<&str> =
     option_env!("WEAVE_GITHUB_OAUTH_CLIENT_SECRET");
 
@@ -940,9 +979,13 @@ pub struct PkcePair {
 
 fn base64url_encode(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
     for chunk in input.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         out.push(TABLE[(n >> 18) as usize & 63] as char);
         out.push(TABLE[(n >> 12) as usize & 63] as char);
@@ -1061,10 +1104,12 @@ pub async fn discover_authorization_server(
                 response.status()
             )));
         }
-        let md: AuthorizationServerMetadata = response
-            .json()
-            .await
-            .map_err(|e| WeaveError::Http(format!("authorization-server discovery at {} was not JSON: {}", discovery_url, e)))?;
+        let md: AuthorizationServerMetadata = response.json().await.map_err(|e| {
+            WeaveError::Http(format!(
+                "authorization-server discovery at {} was not JSON: {}",
+                discovery_url, e
+            ))
+        })?;
         if md.authorization_endpoint.is_none() || md.token_endpoint.is_none() {
             return Err(WeaveError::Http(format!(
                 "authorization-server discovery at {} was incomplete (no authorization/token endpoint)",
@@ -1088,9 +1133,10 @@ pub fn authorization_url(
     state: &str,
     pkce: &PkcePair,
 ) -> Result<String, WeaveError> {
-    let endpoint = md.authorization_endpoint.as_deref().ok_or_else(|| {
-        WeaveError::Http("authorization endpoint not discovered".to_string())
-    })?;
+    let endpoint = md
+        .authorization_endpoint
+        .as_deref()
+        .ok_or_else(|| WeaveError::Http("authorization endpoint not discovered".to_string()))?;
     let mut url = reqwest::Url::parse(endpoint)
         .map_err(|e| WeaveError::Http(format!("invalid authorization endpoint: {}", e)))?;
     let client = oauth_client_config(md)?;
@@ -1127,9 +1173,10 @@ async fn token_request(
     client: &OAuthClientConfig,
     form: &[(&str, &str)],
 ) -> Result<TokenSet, WeaveError> {
-    let endpoint = md.token_endpoint.as_deref().ok_or_else(|| {
-        WeaveError::Http("token endpoint not discovered".to_string())
-    })?;
+    let endpoint = md
+        .token_endpoint
+        .as_deref()
+        .ok_or_else(|| WeaveError::Http("token endpoint not discovered".to_string()))?;
     let mut fields = form.to_vec();
     if let Some(secret) = client.client_secret.as_deref() {
         fields.push(("client_secret", secret));
@@ -1143,18 +1190,24 @@ async fn token_request(
         .await
         .map_err(|e| WeaveError::Http(format!("token request to {} failed: {}", endpoint, e)))?;
     let status = response.status();
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|e| WeaveError::Http(format!("token response from {} was not JSON: {}", endpoint, e)))?;
+    let payload: Value = response.json().await.map_err(|e| {
+        WeaveError::Http(format!(
+            "token response from {} was not JSON: {}",
+            endpoint, e
+        ))
+    })?;
     if !status.is_success() {
         return Err(WeaveError::Http(format!(
             "token endpoint {} returned {}: {}",
             endpoint, status, payload
         )));
     }
-    serde_json::from_value(payload)
-        .map_err(|e| WeaveError::Http(format!("token response from {} was unexpected: {}", endpoint, e)))
+    serde_json::from_value(payload).map_err(|e| {
+        WeaveError::Http(format!(
+            "token response from {} was unexpected: {}",
+            endpoint, e
+        ))
+    })
 }
 
 /// Authorization-code grant with PKCE (OAuth 2.1 public-client shape).
@@ -1235,7 +1288,9 @@ impl McpToolCache {
     }
 
     pub fn store(&self, server_id: &str, result: ToolsListResult) {
-        self.entries.write().insert(server_id.to_string(), (Instant::now(), result));
+        self.entries
+            .write()
+            .insert(server_id.to_string(), (Instant::now(), result));
     }
 
     pub fn invalidate(&self, server_id: &str) {
@@ -1319,8 +1374,14 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "get_forecast");
         assert_eq!(tools[0].input_schema["type"], "object");
-        assert_eq!(tools[0].input_schema["properties"]["city"]["type"], "string");
-        assert_eq!(tools[0].input_schema["properties"]["days"]["type"], "integer");
+        assert_eq!(
+            tools[0].input_schema["properties"]["city"]["type"],
+            "string"
+        );
+        assert_eq!(
+            tools[0].input_schema["properties"]["days"]["type"],
+            "integer"
+        );
         assert_eq!(
             tools[0].input_schema["required"],
             serde_json::json!(["city"])
@@ -1339,7 +1400,10 @@ mod tests {
 
     #[test]
     fn capability_and_plugin_ids_are_namespaced_by_server() {
-        assert_eq!(capability_id("weather", "get_forecast"), "mcp.weather.get_forecast");
+        assert_eq!(
+            capability_id("weather", "get_forecast"),
+            "mcp.weather.get_forecast"
+        );
         assert_eq!(plugin_id("weather"), "com.weave.mcp.weather");
         // Two servers exposing the same tool name never collide.
         assert_ne!(
@@ -1437,16 +1501,28 @@ mod tests {
             .query_pairs()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
-        assert_eq!(params.get("response_type").map(String::as_str), Some("code"));
-        assert_eq!(params.get("client_id").map(String::as_str), Some(cimd_client_id().as_str()));
+        assert_eq!(
+            params.get("response_type").map(String::as_str),
+            Some("code")
+        );
+        assert_eq!(
+            params.get("client_id").map(String::as_str),
+            Some(cimd_client_id().as_str())
+        );
         assert_eq!(
             params.get("redirect_uri").map(String::as_str),
             Some(oauth_redirect_uri().as_str())
         );
         assert_eq!(params.get("scope").map(String::as_str), Some("mcp"));
         assert_eq!(params.get("state").map(String::as_str), Some("state-42"));
-        assert_eq!(params.get("code_challenge_method").map(String::as_str), Some("S256"));
-        assert_eq!(params.get("code_challenge").map(String::as_str), Some(pkce.code_challenge.as_str()));
+        assert_eq!(
+            params.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
+        assert_eq!(
+            params.get("code_challenge").map(String::as_str),
+            Some(pkce.code_challenge.as_str())
+        );
     }
 
     #[test]
@@ -1469,10 +1545,15 @@ mod tests {
     #[test]
     fn auth_challenge_parses_mcp_authorization_header() {
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("mcp-authorization", "https://auth.example/oauth".parse().unwrap());
+        headers.insert(
+            "mcp-authorization",
+            "https://auth.example/oauth".parse().unwrap(),
+        );
         assert_eq!(
             auth_challenge_from_headers(&headers),
-            Some(AuthChallenge::Direct("https://auth.example/oauth".to_string()))
+            Some(AuthChallenge::Direct(
+                "https://auth.example/oauth".to_string()
+            ))
         );
     }
 
@@ -1487,7 +1568,9 @@ mod tests {
         );
         assert_eq!(
             auth_challenge_from_headers(&headers),
-            Some(AuthChallenge::ResourceMetadata("https://rs.example/meta".to_string()))
+            Some(AuthChallenge::ResourceMetadata(
+                "https://rs.example/meta".to_string()
+            ))
         );
     }
 
@@ -1529,10 +1612,16 @@ mod tests {
         });
         let args = serde_json::json!({"owner": "kaelvalen", "perPage": 30});
         let headers = split_header_params(Some(&schema), &args);
-        assert_eq!(headers, vec![("owner".to_string(), "kaelvalen".to_string())]);
+        assert_eq!(
+            headers,
+            vec![("owner".to_string(), "kaelvalen".to_string())]
+        );
         // The body keeps the parameter: live servers (GitHub MCP) reject a
         // header whose parameter is absent from arguments.
-        assert_eq!(args, serde_json::json!({"owner": "kaelvalen", "perPage": 30}));
+        assert_eq!(
+            args,
+            serde_json::json!({"owner": "kaelvalen", "perPage": 30})
+        );
     }
 
     #[tokio::test]
@@ -1642,16 +1731,18 @@ mod tests {
             )
         })
         .await;
-        let as_url = fetch_protected_resource_metadata(&format!("{}/protected-resource-metadata", base))
-            .await
-            .unwrap();
+        let as_url =
+            fetch_protected_resource_metadata(&format!("{}/protected-resource-metadata", base))
+                .await
+                .unwrap();
         assert_eq!(as_url.authorization_servers, vec!["https://as.example"]);
         assert_eq!(as_url.scopes_supported, vec!["repo", "read:org"]);
     }
 
     #[tokio::test]
     async fn fetch_protected_resource_metadata_falls_back_to_bare_server() {
-        let base = spawn_mock(|_, _| (200, serde_json::json!({"resource": "https://rs.example/"}))).await;
+        let base =
+            spawn_mock(|_, _| (200, serde_json::json!({"resource": "https://rs.example/"}))).await;
         let metadata = fetch_protected_resource_metadata(&base).await.unwrap();
         // No authorization_servers declared: RFC 9728 bare-server form —
         // the resource server itself serves AS metadata.
@@ -1661,18 +1752,21 @@ mod tests {
     #[tokio::test]
     async fn resolve_authorization_server_handles_both_challenge_shapes() {
         let meta_base = spawn_mock(|_, _| {
-            (200, serde_json::json!({"authorization_servers": ["https://as.example"]}))
+            (
+                200,
+                serde_json::json!({"authorization_servers": ["https://as.example"]}),
+            )
         })
         .await;
-        let direct = resolve_authorization_server(&AuthChallenge::Direct(
-            "https://as.example".to_string(),
-        ))
-        .await
-        .unwrap();
+        let direct =
+            resolve_authorization_server(&AuthChallenge::Direct("https://as.example".to_string()))
+                .await
+                .unwrap();
         assert_eq!(direct.base_url, "https://as.example");
-        let via_metadata = resolve_authorization_server(&AuthChallenge::ResourceMetadata(
-            format!("{}/meta", meta_base),
-        ))
+        let via_metadata = resolve_authorization_server(&AuthChallenge::ResourceMetadata(format!(
+            "{}/meta",
+            meta_base
+        )))
         .await
         .unwrap();
         assert_eq!(via_metadata.base_url, "https://as.example");
@@ -1720,7 +1814,11 @@ mod tests {
                 reqwest::Method::POST
             };
             let (status, body) = respond(method, &full);
-            let status_text = if status == 200 { "200 OK" } else { "401 Unauthorized" };
+            let status_text = if status == 200 {
+                "200 OK"
+            } else {
+                "401 Unauthorized"
+            };
             let bytes = serde_json::to_vec(&body).unwrap();
             let mut resp = format!(
                 "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -1752,8 +1850,14 @@ mod tests {
         .await;
         let md = discover_authorization_server(&base).await.unwrap();
         assert_eq!(md.issuer.as_deref(), Some("https://as.example"));
-        assert_eq!(md.authorization_endpoint.as_deref(), Some("https://as.example/authorize"));
-        assert_eq!(md.token_endpoint.as_deref(), Some("https://as.example/token"));
+        assert_eq!(
+            md.authorization_endpoint.as_deref(),
+            Some("https://as.example/authorize")
+        );
+        assert_eq!(
+            md.token_endpoint.as_deref(),
+            Some("https://as.example/token")
+        );
     }
 
     #[test]
@@ -1883,13 +1987,16 @@ mod tests {
             )
         })
         .await;
-        let md = discover_authorization_server(&format!("{}/issuer", base)).await.unwrap();
+        let md = discover_authorization_server(&format!("{}/issuer", base))
+            .await
+            .unwrap();
         assert_eq!(md.issuer.as_deref(), Some("https://as.example/issuer"));
     }
 
     #[tokio::test]
     async fn discover_authorization_server_rejects_incomplete_metadata() {
-        let base = spawn_mock(|_, _| (200, serde_json::json!({"issuer": "https://as.example"}))).await;
+        let base =
+            spawn_mock(|_, _| (200, serde_json::json!({"issuer": "https://as.example"}))).await;
         let err = discover_authorization_server(&base).await.unwrap_err();
         assert!(err.to_string().contains("incomplete"));
     }
@@ -1925,7 +2032,10 @@ mod tests {
             assert_eq!(method, reqwest::Method::POST);
             assert!(text.contains("grant_type=refresh_token"));
             assert!(text.contains("refresh_token=rt-old"));
-            (200, serde_json::json!({"access_token": "at-2", "expires_in": 3600}))
+            (
+                200,
+                serde_json::json!({"access_token": "at-2", "expires_in": 3600}),
+            )
         })
         .await;
         let md = AuthorizationServerMetadata {

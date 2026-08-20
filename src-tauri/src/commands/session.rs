@@ -42,7 +42,7 @@ pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {
                         sessions.push(SessionMeta {
@@ -58,7 +58,7 @@ pub fn chat_list_sessions() -> Result<Vec<SessionMeta>, WeaveError> {
         }
     }
 
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    sessions.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
     Ok(sessions)
 }
 

@@ -100,30 +100,28 @@ fn list_dir(params: Value) -> Result<Value, WeaveError> {
         .build();
 
     let mut entries = Vec::new();
-    for result in walker {
-        if let Ok(entry) = result {
-            let entry_path = entry.path();
-            if entry_path == path {
+    for entry in walker.flatten() {
+        let entry_path = entry.path();
+        if entry_path == path {
+            continue;
+        }
+        if let Ok(rel_path) = entry_path.strip_prefix(&path) {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == "node_modules"
+                || name == "target"
+                || name == ".git"
+                || name == "__pycache__"
+                || name == "dist"
+                || name == ".venv"
+            {
                 continue;
             }
-            if let Ok(rel_path) = entry_path.strip_prefix(&path) {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name == "node_modules"
-                    || name == "target"
-                    || name == ".git"
-                    || name == "__pycache__"
-                    || name == "dist"
-                    || name == ".venv"
-                {
-                    continue;
-                }
-                let depth = rel_path.components().count();
-                if depth <= max_depth {
-                    entries.push((
-                        rel_path.to_path_buf(),
-                        entry.file_type().map(|t| t.is_dir()).unwrap_or(false),
-                    ));
-                }
+            let depth = rel_path.components().count();
+            if depth <= max_depth {
+                entries.push((
+                    rel_path.to_path_buf(),
+                    entry.file_type().map(|t| t.is_dir()).unwrap_or(false),
+                ));
             }
         }
     }

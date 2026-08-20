@@ -9,7 +9,7 @@
 mod common;
 
 use common::{
-    assert_completion_rule, ask_user_script, plain_text_script, round_trip, saw_approval,
+    ask_user_script, assert_completion_rule, plain_text_script, round_trip, saw_approval,
     second_request_body, tool_call_script, ApprovalDecision, Harness, PluginManager,
 };
 use weave::agent::AgentEvent;
@@ -29,12 +29,14 @@ async fn ask_user_native_tool_pauses_and_continues() {
         .await;
 
     // 1. The model's ask_user call surfaced as a QuestionsAsked card.
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::QuestionsAsked { .. })));
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::QuestionsAsked { .. })));
 
     // 2. ask_user is a first-class native tool advertised in request 1.
     let safe_name = PluginManager::provider_tool_name(PluginManager::ASK_USER_CAPABILITY);
     assert!(
-        harness.bodies()[0].contains(&format!("{}", safe_name)),
+        harness.bodies()[0].contains(&safe_name.to_string()),
         "request 1 must advertise the reserved ask_user tool"
     );
 
@@ -47,11 +49,23 @@ async fn ask_user_native_tool_pauses_and_continues() {
     // 4. Completion rule: the second request pairs a tool result for the
     //    ask_user call carrying the user's answer.
     let second = &harness.bodies()[1];
-    assert!(second.contains("\"tool_call_id\":\"call_p\""), "ask_user result must be paired");
-    assert!(second.contains("Which plan?"), "result must carry the question");
-    assert!(second.contains(": A: a"), "result must carry the user's answer");
+    assert!(
+        second.contains("\"tool_call_id\":\"call_p\""),
+        "ask_user result must be paired"
+    );
+    assert!(
+        second.contains("Which plan?"),
+        "result must carry the question"
+    );
+    assert!(
+        second.contains(": A: a"),
+        "result must carry the user's answer"
+    );
     // 5. The loop continued after the answers and completed.
-    assert!(final_text.contains("Done."), "loop must continue after ask_user");
+    assert!(
+        final_text.contains("Done."),
+        "loop must continue after ask_user"
+    );
     assert_completion_rule(second);
 
     // 6. Protocol-level: no hand-written <questions> XML lives in the request.
@@ -81,7 +95,10 @@ async fn approved_sensitive_call_round_trips_with_paired_result() {
     );
 
     // 2. The first request carried native tools with the file.read schema.
-    assert!(rt.bodies[0].contains("\"tools\""), "request 1 must include tools");
+    assert!(
+        rt.bodies[0].contains("\"tools\""),
+        "request 1 must include tools"
+    );
     let safe_name = PluginManager::provider_tool_name("file.read");
     assert!(
         rt.bodies[0].contains(&format!("\"name\":\"{}\"", safe_name)),
@@ -90,8 +107,14 @@ async fn approved_sensitive_call_round_trips_with_paired_result() {
 
     // 3. Completion rule: the second request pairs a tool result with call_p.
     let second = second_request_body(&rt);
-    assert!(second.contains("\"role\":\"tool\""), "second request must contain a tool-role message");
-    assert!(second.contains("\"tool_call_id\":\"call_p\""), "tool result must be paired");
+    assert!(
+        second.contains("\"role\":\"tool\""),
+        "second request must contain a tool-role message"
+    );
+    assert!(
+        second.contains("\"tool_call_id\":\"call_p\""),
+        "tool result must be paired"
+    );
 
     // 4. The plugin actually executed (file.read read a real file) and the
     //    loop continued to the final turn.
@@ -169,7 +192,11 @@ async fn plain_text_turn_never_gates() {
             .any(|e| matches!(e, AgentEvent::PendingApproval { .. })),
         "no tool calls means no approval gate"
     );
-    assert_eq!(harness.bodies().len(), 1, "no re-request without tool calls");
+    assert_eq!(
+        harness.bodies().len(),
+        1,
+        "no re-request without tool calls"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -180,11 +207,11 @@ async fn plain_text_turn_never_gates() {
 // continue — all within a fraction of the hang.
 // ---------------------------------------------------------------------------
 
-use std::sync::atomic::Ordering;
 use serde_json::Value;
+use std::sync::atomic::Ordering;
 use weave::models::plugin::{
-    Capabilities, Plugin, PluginCategory, PluginState, PluginUiConfig, RuntimeConfig,
-    RuntimeType, SandboxLevel, UiType, PluginExecutor,
+    Capabilities, Plugin, PluginCategory, PluginExecutor, PluginState, PluginUiConfig,
+    RuntimeConfig, RuntimeType, SandboxLevel, UiType,
 };
 use weave::utils::errors::WeaveError;
 
@@ -206,9 +233,10 @@ impl PluginExecutor for HangingPlugin {
 fn slow_plugin_fixture() -> Plugin {
     let mut capabilities = Capabilities::default();
     capabilities.provide.push("slow.echo".to_string());
-    capabilities
-        .schemas
-        .insert("slow.echo".into(), serde_json::json!({"type": "object", "properties": {}}));
+    capabilities.schemas.insert(
+        "slow.echo".into(),
+        serde_json::json!({"type": "object", "properties": {}}),
+    );
     Plugin {
         id: "com.weave.test.slow".into(),
         name: "Slow".into(),
@@ -248,11 +276,21 @@ async fn hung_tool_execution_is_timed_out_not_never() {
     let elapsed = start.elapsed();
 
     // 1. The loop continued after the timed-out tool.
-    assert!(final_text.contains("Done."), "loop must continue after a timed-out tool");
+    assert!(
+        final_text.contains("Done."),
+        "loop must continue after a timed-out tool"
+    );
     // 2. The timeout is reported back to the model as an error...
     let second = &harness.bodies()[1];
-    assert!(second.contains("timed out"), "tool result must report the timeout, got: {}", second);
-    assert!(second.contains("slow.echo"), "the timeout message must name the capability");
+    assert!(
+        second.contains("timed out"),
+        "tool result must report the timeout, got: {}",
+        second
+    );
+    assert!(
+        second.contains("slow.echo"),
+        "the timeout message must name the capability"
+    );
     // 3. ...and the completion rule still holds (paired result).
     assert_completion_rule(second);
     // 4. The whole turn finished far sooner than the 30s hang.

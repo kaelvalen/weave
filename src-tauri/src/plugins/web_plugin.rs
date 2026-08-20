@@ -59,7 +59,9 @@ impl WebPlugin {
             rt.block_on(async {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(15))
-                    .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0")
+                    .user_agent(
+                        "Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0",
+                    )
                     .build()
                     .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
@@ -158,10 +160,10 @@ impl WebPlugin {
                 }
                 let (title, snippet) = match text.split_once(" — ") {
                     Some((t, s)) => (t, s),
-                    None => {
-                        let cut = text.find(" - ").map(|i| (&text[..i], &text[i + 3..])).unwrap_or((text, ""));
-                        cut
-                    }
+                    None => text
+                        .find(" - ")
+                        .map(|i| (&text[..i], &text[i + 3..]))
+                        .unwrap_or((text, "")),
                 };
                 results.push(json!({
                     "title": title.trim(),
@@ -184,13 +186,15 @@ impl WebPlugin {
         let mut rest = html;
 
         while let Some(class_idx) = rest.find("class=\"result__a\"") {
-            let tag_start = rest[..class_idx].rfind("<a ").map(|i| i).unwrap_or(class_idx);
+            let tag_start = rest[..class_idx].rfind("<a ").unwrap_or(class_idx);
             let anchor = &rest[tag_start..];
 
             // Closing ">" of the <a ...> tag.
             let Some(gt) = anchor.find('>') else { break };
             let open_tag = &anchor[..gt];
-            let Some(end_rel) = anchor[gt..].find("</a>") else { break };
+            let Some(end_rel) = anchor[gt..].find("</a>") else {
+                break;
+            };
             let title = Self::strip_inner_tags(&anchor[gt + 1..gt + end_rel])
                 .trim()
                 .to_string();
@@ -203,7 +207,7 @@ impl WebPlugin {
             // After the title comes the snippet in a `result__snippet` element.
             let snippet = match rest.find("class=\"result__snippet\"") {
                 Some(s) => {
-                    let s_start = rest[..s].rfind("<a ").map(|i| i).unwrap_or(s);
+                    let s_start = rest[..s].rfind("<a ").unwrap_or(s);
                     let snippet_a = &rest[s_start..];
                     match snippet_a.find('>') {
                         Some(gt2) => {
@@ -272,7 +276,8 @@ impl WebPlugin {
         let mut i = 0;
         while i < bytes.len() {
             if bytes[i] == b'%' && i + 2 < bytes.len() {
-                if let (Some(h), Some(l)) = (Self::hex_val(bytes[i + 1]), Self::hex_val(bytes[i + 2]))
+                if let (Some(h), Some(l)) =
+                    (Self::hex_val(bytes[i + 1]), Self::hex_val(bytes[i + 2]))
                 {
                     out.push(h * 16 + l);
                     i += 3;
@@ -373,11 +378,10 @@ impl WebPlugin {
                     .build()
                     .map_err(|e| WeaveError::PluginError(e.to_string()))?;
 
-                let response = client
-                    .get(parsed)
-                    .send()
-                    .await
-                    .map_err(|e| WeaveError::PluginError(format!("Failed to fetch URL: {}", e)))?;
+                let response =
+                    client.get(parsed).send().await.map_err(|e| {
+                        WeaveError::PluginError(format!("Failed to fetch URL: {}", e))
+                    })?;
 
                 let status = response.status().as_u16();
                 let content_type = response
@@ -403,7 +407,7 @@ impl WebPlugin {
                     "content_type": content_type,
                     "content": clean_text,
                     "raw_size": size,
-                    "success": status >= 200 && status < 400,
+                    "success": (200..400).contains(&status),
                 }))
             })
         })

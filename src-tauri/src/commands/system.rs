@@ -54,7 +54,10 @@ pub fn system_get_version() -> String {
 }
 
 #[tauri::command]
-pub fn system_set_cwd(path: String, _app_state: tauri::State<'_, AppState>) -> Result<(), WeaveError> {
+pub fn system_set_cwd(
+    path: String,
+    _app_state: tauri::State<'_, AppState>,
+) -> Result<(), WeaveError> {
     std::env::set_current_dir(&path)
         .map_err(|e| WeaveError::Io(format!("Failed to set CWD to {}: {}", path, e)))?;
     info!("Changed working directory to: {}", path);

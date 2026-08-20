@@ -60,23 +60,16 @@ impl ApprovalRegistry {
 
     /// Resolve a pending approval. Returns an error when the call_id is not
     /// awaiting approval (already resolved, unknown, or the loop moved on).
-    pub fn resolve(
-        &self,
-        call_id: &str,
-        decision: ApprovalDecision,
-    ) -> Result<(), WeaveError> {
-        let tx = self
-            .pending
-            .lock()
-            .remove(call_id)
-            .ok_or_else(|| {
-                WeaveError::PluginError(format!(
-                    "No tool call awaiting approval for call_id '{}'",
-                    call_id
-                ))
-            })?;
-        tx.send(decision)
-            .map_err(|_| WeaveError::PluginError(format!("Approval channel closed for '{}'", call_id)))
+    pub fn resolve(&self, call_id: &str, decision: ApprovalDecision) -> Result<(), WeaveError> {
+        let tx = self.pending.lock().remove(call_id).ok_or_else(|| {
+            WeaveError::PluginError(format!(
+                "No tool call awaiting approval for call_id '{}'",
+                call_id
+            ))
+        })?;
+        tx.send(decision).map_err(|_| {
+            WeaveError::PluginError(format!("Approval channel closed for '{}'", call_id))
+        })
     }
 }
 
@@ -101,13 +94,9 @@ impl QuestionsRegistry {
     }
 
     pub fn resolve(&self, id: &str, answers: Vec<String>) -> Result<(), WeaveError> {
-        let tx = self
-            .pending
-            .lock()
-            .remove(id)
-            .ok_or_else(|| {
-                WeaveError::PluginError(format!("No question batch awaiting answers for '{}'", id))
-            })?;
+        let tx = self.pending.lock().remove(id).ok_or_else(|| {
+            WeaveError::PluginError(format!("No question batch awaiting answers for '{}'", id))
+        })?;
         tx.send(answers)
             .map_err(|_| WeaveError::PluginError(format!("Questions channel closed for '{}'", id)))
     }
@@ -154,11 +143,15 @@ pub enum CallOutcome {
 /// Events the agent loop emits for the Tauri command layer to forward.
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     /// A piece of the model's reasoning/thinking, streamed before content.
     /// The frontend renders it as an expandable trace — it is never part of
     /// the assistant's final text.
-    Reasoning { text: String },
+    Reasoning {
+        text: String,
+    },
     /// Reasoning has finished (first content token or end of stream).
     ReasoningDone {},
     /// A tool call was detected / executed. `status`: pending | success | error.
@@ -184,8 +177,12 @@ pub enum AgentEvent {
         question_id: String,
         questions: Vec<AgentQuestion>,
     },
-    RunComplete { final_text: String },
-    RunError { error: String },
+    RunComplete {
+        final_text: String,
+    },
+    RunError {
+        error: String,
+    },
 }
 
 /// Maximum provider round-trips per `run` before the loop gives up (safety
@@ -338,10 +335,7 @@ impl AgentLoop {
                     None => {
                         // First use of this model: probe it now (loads the
                         // model into VRAM; ttl:300 unloads it ~5min later).
-                        let ok = self
-                            .ai_bridge
-                            .llama_swap_probe_tools(&model_id)
-                            .await?;
+                        let ok = self.ai_bridge.llama_swap_probe_tools(&model_id).await?;
                         {
                             let mut config = self.config.write();
                             config
@@ -407,9 +401,7 @@ impl AgentLoop {
                             let _ = event_tx.send(AgentEvent::ReasoningDone {}).await;
                         }
                         round_text.push_str(&text);
-                        let _ = event_tx
-                            .send(AgentEvent::Text { text })
-                            .await;
+                        let _ = event_tx.send(AgentEvent::Text { text }).await;
                     }
                     AgentStreamEvent::ToolCall {
                         index,
@@ -490,8 +482,7 @@ impl AgentLoop {
                         },
                         name,
                         capability,
-                        args: serde_json::from_str(&p.fragments)
-                            .unwrap_or_else(|_| json!({})),
+                        args: serde_json::from_str(&p.fragments).unwrap_or_else(|_| json!({})),
                     }
                 })
                 .collect();
@@ -534,12 +525,7 @@ impl AgentLoop {
                             "No plugin provides capability '{}'",
                             call.capability
                         ));
-                        self.record_call(
-                            &assistant_id,
-                            call,
-                            "unknown".to_string(),
-                            &outcome,
-                        );
+                        self.record_call(&assistant_id, call, "unknown".to_string(), &outcome);
                         let _ = event_tx
                             .send(AgentEvent::ToolCall {
                                 call_id: call.call_id.clone(),
@@ -579,7 +565,10 @@ impl AgentLoop {
                         })
                         .await;
 
-                    info!("Awaiting approval for {} ({})", call.capability, call.call_id);
+                    info!(
+                        "Awaiting approval for {} ({})",
+                        call.capability, call.call_id
+                    );
                     let decision = match receiver.await {
                         Ok(decision) => decision,
                         Err(_) => {
@@ -616,7 +605,9 @@ impl AgentLoop {
                         .await;
                     outcomes.push(outcome);
                 } else {
-                    let outcome = self.execute_call(plugin_id.clone(), call, &session_id, &assistant_id).await;
+                    let outcome = self
+                        .execute_call(plugin_id.clone(), call, &session_id, &assistant_id)
+                        .await;
                     self.record_call(&assistant_id, call, plugin_id.clone(), &outcome);
                     let _ = event_tx
                         .send(AgentEvent::ToolCall {
@@ -645,7 +636,11 @@ impl AgentLoop {
                 native.push(tool_result_message(&provider, &call.call_id, outcome));
             }
 
-            let _ = event_tx.send(AgentEvent::Text { text: "\n".to_string() }).await;
+            let _ = event_tx
+                .send(AgentEvent::Text {
+                    text: "\n".to_string(),
+                })
+                .await;
         }
 
         let _ = event_tx
@@ -710,7 +705,8 @@ impl AgentLoop {
 
         // Bounded wait: normalized to a String so timeout, panic, and real
         // failure all flow through one error surface.
-        let tool_timeout = std::time::Duration::from_millis(self.tool_timeout_ms.load(Ordering::SeqCst));
+        let tool_timeout =
+            std::time::Duration::from_millis(self.tool_timeout_ms.load(Ordering::SeqCst));
         let result: Result<serde_json::Value, String> =
             match tokio::time::timeout(tool_timeout, rx).await {
                 Ok(Ok(r)) => r.map_err(|e| e.to_string()),
@@ -755,7 +751,10 @@ impl AgentLoop {
         match result {
             Ok(result) => CallOutcome::Success(result),
             Err(e) => {
-                warn!("Tool call {} ({}) failed: {}", call.call_id, call.capability, e);
+                warn!(
+                    "Tool call {} ({}) failed: {}",
+                    call.call_id, call.capability, e
+                );
                 CallOutcome::Error(e)
             }
         }
@@ -815,10 +814,9 @@ impl AgentLoop {
         event_tx: &mpsc::Sender<AgentEvent>,
         run_abort: &Arc<AtomicBool>,
     ) -> CallOutcome {
-        let args: AskUserArgs =
-            serde_json::from_value(call.args.clone()).unwrap_or(AskUserArgs {
-                questions: Vec::new(),
-            });
+        let args: AskUserArgs = serde_json::from_value(call.args.clone()).unwrap_or(AskUserArgs {
+            questions: Vec::new(),
+        });
         if args.questions.is_empty() {
             return CallOutcome::Error(
                 "weave.ask_user requires a non-empty 'questions' array".to_string(),
@@ -993,7 +991,9 @@ fn tool_result_message(provider: &Provider, call_id: &str, outcome: &CallOutcome
 /// Conservative token estimate (bytes/4; JSON is ASCII-heavy). Undershoots
 /// for CJK-heavy content, but the 10% headroom below absorbs that.
 fn estimate_json_tokens(value: &Value) -> usize {
-    serde_json::to_string(value).map(|s| s.len() / 4).unwrap_or(0)
+    serde_json::to_string(value)
+        .map(|s| s.len() / 4)
+        .unwrap_or(0)
 }
 
 /// Order `tools` for the context budget: tools already used this session
@@ -1102,7 +1102,11 @@ mod budget_tests {
 
     #[test]
     fn test_trim_tools_keeps_smallest() {
-        let mut tools = vec![tool("big", 6000), tool("small1", 2000), tool("small2", 2000)];
+        let mut tools = vec![
+            tool("big", 6000),
+            tool("small1", 2000),
+            tool("small2", 2000),
+        ];
         // est: big ≈1500 tok, smalls ≈500 each; eff budget 1800 → big drops.
         trim_tools_to_budget(&mut tools, 2000, &HashSet::new());
         assert_eq!(tools.len(), 2);
@@ -1135,8 +1139,8 @@ mod budget_tests {
     fn test_trim_history_keeps_system_and_recent() {
         let mk = |role: &str, n: usize| json!({"role": role, "content": "x".repeat(n)});
         let mut native = vec![
-            mk("system", 4000),  // est ≈1000
-            mk("user", 6000),    // est ≈1500 — oldest turn, must go
+            mk("system", 4000), // est ≈1000
+            mk("user", 6000),   // est ≈1500 — oldest turn, must go
             mk("assistant", 1000),
             mk("user", 500),
         ];

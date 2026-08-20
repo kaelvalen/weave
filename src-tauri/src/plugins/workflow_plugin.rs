@@ -109,10 +109,7 @@ impl WorkflowPlugin {
 
     fn list() -> Result<Value, WeaveError> {
         let workflows = Self::load_all_workflows()?;
-        let wf_jsons: Vec<Value> = workflows
-            .iter()
-            .map(|w| Self::workflow_to_json(w))
-            .collect();
+        let wf_jsons: Vec<Value> = workflows.iter().map(Self::workflow_to_json).collect();
         info!("Listed {} workflow templates", wf_jsons.len());
         Ok(json!({"workflows": wf_jsons, "count": wf_jsons.len(), "success": true}))
     }
@@ -177,7 +174,7 @@ impl WorkflowPlugin {
                 }
             }
         }
-        workflows.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        workflows.sort_by_key(|w| std::cmp::Reverse(w.updated_at));
         Ok(workflows)
     }
 }

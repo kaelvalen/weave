@@ -670,7 +670,7 @@ impl AiBridge {
                         native_messages,
                         &model,
                         None,
-                        Some(&crate::commands::llama_swap::LLAMA_SWAP_CHAT_URL),
+                        Some(crate::commands::llama_swap::LLAMA_SWAP_CHAT_URL),
                         temperature,
                         max_tokens,
                         tools,
@@ -1407,7 +1407,7 @@ impl AiBridge {
                         if let Some(usage) = json.usage {
                             last_usage = Some(usage);
                         }
-                        if let Some(delta) = json.choices.get(0) {
+                        if let Some(delta) = json.choices.first() {
                             if let Some(reasoning) = &delta.delta.reasoning_content {
                                 if !reasoning.is_empty() {
                                     let _ = tx
@@ -1581,7 +1581,8 @@ impl AiBridge {
                                         if let Some(fragment) = &delta.partial_json {
                                             partial_json.push(fragment.clone());
                                         }
-                                    } else if delta.delta_type.as_deref() == Some("thinking_delta") {
+                                    } else if delta.delta_type.as_deref() == Some("thinking_delta")
+                                    {
                                         if let Some(fragment) = &delta.thinking {
                                             if !fragment.is_empty() {
                                                 let _ = tx

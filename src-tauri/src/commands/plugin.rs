@@ -299,7 +299,7 @@ pub async fn plugin_execute(
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.len() as u64)
                         })
-                        .or_else(|| params_content_size);
+                        .or(params_content_size);
 
                     if let Some(size) = size {
                         event.params = Some(serde_json::json!({ "size_bytes": size }));

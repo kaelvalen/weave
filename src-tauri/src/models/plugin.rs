@@ -30,7 +30,7 @@ pub struct Plugin {
     pub category: PluginCategory,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Capabilities {
     #[serde(default)]
     pub read: Vec<String>,
@@ -109,18 +109,6 @@ pub enum UiType {
     Native,
     Webview,
     None,
-}
-
-impl Default for Capabilities {
-    fn default() -> Self {
-        Self {
-            read: Vec::new(),
-            write: Vec::new(),
-            provide: Vec::new(),
-            schemas: HashMap::new(),
-            descriptions: HashMap::new(),
-        }
-    }
 }
 
 impl Default for RuntimeConfig {
@@ -239,8 +227,8 @@ impl PluginBuilder {
 /// - documents that already look like a schema (`type` present) pass
 ///   through unchanged.
 pub fn schema_from_example(example: &str) -> serde_json::Value {
-    let parsed: serde_json::Value =
-        serde_json::from_str(example.trim()).unwrap_or(serde_json::Value::Object(Default::default()));
+    let parsed: serde_json::Value = serde_json::from_str(example.trim())
+        .unwrap_or(serde_json::Value::Object(Default::default()));
     schema_from_value(&parsed)
 }
 
@@ -327,7 +315,10 @@ mod tests {
             serde_json::json!(["string", "null"]),
             "cwd: null must not infer object"
         );
-        assert_eq!(schema["required"], serde_json::json!(["command", "timeout"]));
+        assert_eq!(
+            schema["required"],
+            serde_json::json!(["command", "timeout"])
+        );
     }
 
     #[test]
@@ -369,7 +360,10 @@ mod tests {
         assert_eq!(schema["type"], "object");
         assert_eq!(schema["properties"]["type"]["type"], "string");
         assert_eq!(schema["required"], serde_json::json!(["data", "type"]));
-        assert_eq!(schema["properties"]["position"]["type"], serde_json::json!(["string", "null"]));
+        assert_eq!(
+            schema["properties"]["position"]["type"],
+            serde_json::json!(["string", "null"])
+        );
     }
 
     #[test]
@@ -391,12 +385,7 @@ mod tests {
         for (example, key) in cases {
             let schema = schema_from_example(example);
             let t = &schema["properties"][key]["type"];
-            assert!(
-                t != "object",
-                "{} must not infer object (got {:?})",
-                key,
-                t
-            );
+            assert!(t != "object", "{} must not infer object (got {:?})", key, t);
             let required = schema["required"].as_array().unwrap();
             assert!(
                 !required.iter().any(|r| r == key),

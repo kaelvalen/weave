@@ -16,8 +16,12 @@ use common::{round_trip, saw_approval, second_request_body, ApprovalDecision};
 
 #[tokio::test]
 async fn calc_eval_round_trips_through_spine() {
-    let rt = round_trip("calc.eval", r#"{"expression":"2+2*3"}"#, ApprovalDecision::Approved)
-        .await;
+    let rt = round_trip(
+        "calc.eval",
+        r#"{"expression":"2+2*3"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
 
     // Not sensitive/destructive: the gate must NOT fire.
     assert!(!saw_approval(&rt.events, "calc.eval"));
@@ -35,11 +39,19 @@ async fn calc_eval_round_trips_through_spine() {
 #[tokio::test]
 async fn calc_convert_and_stats_round_trip() {
     for (cap, args, needle) in [
-        ("calc.convert", r#"{"value":100,"from":"km","to":"miles"}"#, "62.1"),
+        (
+            "calc.convert",
+            r#"{"value":100,"from":"km","to":"miles"}"#,
+            "62.1",
+        ),
         ("calc.stats", r#"{"numbers":[1,2,3]}"#, "2"),
     ] {
         let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
-        assert!(!saw_approval(&rt.events, cap), "{} must not require approval", cap);
+        assert!(
+            !saw_approval(&rt.events, cap),
+            "{} must not require approval",
+            cap
+        );
         assert!(
             second_request_body(&rt).contains(needle),
             "{} result should contain {}",
@@ -56,9 +68,16 @@ async fn calc_convert_and_stats_round_trip() {
 
 #[tokio::test]
 async fn file_read_round_trips_with_gate() {
-    let rt = round_trip("file.read", r#"{"path":"src/main.rs"}"#, ApprovalDecision::Approved)
-        .await;
-    assert!(saw_approval(&rt.events, "file.read"), "file.read is sensitive");
+    let rt = round_trip(
+        "file.read",
+        r#"{"path":"src/main.rs"}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(
+        saw_approval(&rt.events, "file.read"),
+        "file.read is sensitive"
+    );
     assert!(
         second_request_body(&rt).contains("fn main"),
         "file.read must return the real file content"
@@ -73,7 +92,10 @@ async fn file_write_round_trips_with_gate_and_confinement() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "file.write"), "file.write is destructive");
+    assert!(
+        saw_approval(&rt.events, "file.write"),
+        "file.write is destructive"
+    );
     let second = second_request_body(&rt);
     // The tool result is a JSON string inside the request body, so its quotes
     // are escaped (\"bytes_written\":13).
@@ -83,15 +105,25 @@ async fn file_write_round_trips_with_gate_and_confinement() {
         second
     );
     assert!(
-        std::fs::read_to_string("target/phase5_write.txt").unwrap().contains("phase5 marker"),
+        std::fs::read_to_string("target/phase5_write.txt")
+            .unwrap()
+            .contains("phase5 marker"),
         "file must actually exist in the workspace"
     );
 }
 
 #[tokio::test]
 async fn file_list_round_trips_with_gate() {
-    let rt = round_trip("file.list", r#"{"directory":"."}"#, ApprovalDecision::Approved).await;
-    assert!(saw_approval(&rt.events, "file.list"), "file.list is sensitive");
+    let rt = round_trip(
+        "file.list",
+        r#"{"directory":"."}"#,
+        ApprovalDecision::Approved,
+    )
+    .await;
+    assert!(
+        saw_approval(&rt.events, "file.list"),
+        "file.list is sensitive"
+    );
     assert!(
         second_request_body(&rt).contains("Cargo.toml"),
         "listing the workspace root must include Cargo.toml"
@@ -165,9 +197,15 @@ async fn db_query_round_trips_with_gate() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "db.query"), "db.query is sensitive");
+    assert!(
+        saw_approval(&rt.events, "db.query"),
+        "db.query is sensitive"
+    );
     let second = second_request_body(&rt);
-    assert!(second.contains("1"), "SELECT 1 must return 1 in the paired result");
+    assert!(
+        second.contains("1"),
+        "SELECT 1 must return 1 in the paired result"
+    );
 }
 
 #[tokio::test]
@@ -178,7 +216,10 @@ async fn db_execute_and_tables_round_trip() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "db.execute"), "db.execute is destructive");
+    assert!(
+        saw_approval(&rt.events, "db.execute"),
+        "db.execute is destructive"
+    );
     assert!(
         second_request_body(&rt).contains("executed successfully"),
         "db.execute must report success"
@@ -190,7 +231,10 @@ async fn db_execute_and_tables_round_trip() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "db.tables"), "db.tables is sensitive");
+    assert!(
+        saw_approval(&rt.events, "db.tables"),
+        "db.tables is sensitive"
+    );
     assert!(
         second_request_body(&rt).contains("t5"),
         "db.tables must list the created table"
@@ -211,7 +255,10 @@ async fn web_fetch_loopback_is_blocked_and_paired() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "web.fetch"), "web.fetch is sensitive");
+    assert!(
+        saw_approval(&rt.events, "web.fetch"),
+        "web.fetch is sensitive"
+    );
     let second = second_request_body(&rt);
     assert!(
         second.contains("[Error]") && second.contains("private or reserved"),
@@ -228,7 +275,10 @@ async fn http_request_loopback_is_blocked_and_paired() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "http.request"), "http.request is sensitive");
+    assert!(
+        saw_approval(&rt.events, "http.request"),
+        "http.request is sensitive"
+    );
     let second = second_request_body(&rt);
     assert!(
         second.contains("[Error]") && second.contains("private or reserved"),
@@ -292,14 +342,34 @@ async fn storage_plugins_round_trip_with_isolated_home() {
     std::env::set_var("HOME", &home);
 
     for (cap, args, needle, gated) in [
-        ("note.create", r#"{"title":"phase5 note","content":"hello"}"#, "success", false),
+        (
+            "note.create",
+            r#"{"title":"phase5 note","content":"hello"}"#,
+            "success",
+            false,
+        ),
         // memory.store and workflow.create mutate persistent state →
         // destructive, gated.
-        ("memory.store", r#"{"key":"phase5_key","content":"phase5 value"}"#, "created", true),
-        ("workflow.create", r#"{"name":"phase5 workflow"}"#, "success", true),
+        (
+            "memory.store",
+            r#"{"key":"phase5_key","content":"phase5 value"}"#,
+            "created",
+            true,
+        ),
+        (
+            "workflow.create",
+            r#"{"name":"phase5 workflow"}"#,
+            "success",
+            true,
+        ),
     ] {
         let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
-        assert_eq!(saw_approval(&rt.events, cap), gated, "{} gating mismatch", cap);
+        assert_eq!(
+            saw_approval(&rt.events, cap),
+            gated,
+            "{} gating mismatch",
+            cap
+        );
         assert!(
             second_request_body(&rt).contains(needle),
             "{} result should contain {}",
@@ -310,7 +380,9 @@ async fn storage_plugins_round_trip_with_isolated_home() {
 
     // The isolated home must actually hold the persisted data.
     assert!(
-        std::fs::read_dir(home.join(".weave").join("notes")).map(|mut d| d.next().is_some()).unwrap_or(false),
+        std::fs::read_dir(home.join(".weave").join("notes"))
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false),
         "note must be persisted under the isolated HOME"
     );
     assert!(
@@ -336,7 +408,10 @@ async fn canvas_and_sys_round_trip_with_gate() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "canvas.add_node"), "canvas.add_node is destructive");
+    assert!(
+        saw_approval(&rt.events, "canvas.add_node"),
+        "canvas.add_node is destructive"
+    );
     assert!(second_request_body(&rt).contains("success"));
 
     for (cap, args, needle) in [
@@ -344,7 +419,11 @@ async fn canvas_and_sys_round_trip_with_gate() {
         ("sys.info", r#"{}"#, "hostname"),
     ] {
         let rt = round_trip(cap, args, ApprovalDecision::Approved).await;
-        assert!(!saw_approval(&rt.events, cap), "{} must not require approval", cap);
+        assert!(
+            !saw_approval(&rt.events, cap),
+            "{} must not require approval",
+            cap
+        );
         assert!(
             second_request_body(&rt).contains(needle),
             "{} result should contain {}",
@@ -383,7 +462,10 @@ async fn coder_symbols_and_search_round_trip() {
         ApprovalDecision::Approved,
     )
     .await;
-    assert!(saw_approval(&rt.events, "coder.symbols"), "coder.symbols is sensitive");
+    assert!(
+        saw_approval(&rt.events, "coder.symbols"),
+        "coder.symbols is sensitive"
+    );
     assert!(
         second_request_body(&rt).contains("main"),
         "symbols of main.rs must mention main"

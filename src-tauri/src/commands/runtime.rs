@@ -151,11 +151,10 @@ fn summarize_traces(events: &[RuntimeEvent], limit: usize) -> Vec<TraceSummary> 
         })
         .collect();
 
-    summaries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    summaries.sort_by_key(|a| std::cmp::Reverse(a.started_at));
     summaries.truncate(limit);
     summaries
 }
-
 /// List recent execution traces, newest first.
 #[tauri::command]
 pub fn trace_list(app: AppHandle, limit: Option<usize>) -> Result<Vec<TraceSummary>, WeaveError> {

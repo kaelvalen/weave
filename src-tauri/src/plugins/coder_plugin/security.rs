@@ -34,10 +34,7 @@ pub fn canonicalize_secure(path: &Path) -> Result<PathBuf, WeaveError> {
     }
 
     // 2. Deny access to sensitive SSH key folders
-    if resolved
-        .components()
-        .any(|c| c.as_os_str() == ".ssh")
-    {
+    if resolved.components().any(|c| c.as_os_str() == ".ssh") {
         return Err(WeaveError::PermissionDenied(format!(
             "Access denied: SSH key folder is protected: {}",
             resolved.display()

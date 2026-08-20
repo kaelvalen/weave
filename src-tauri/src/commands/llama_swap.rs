@@ -289,7 +289,8 @@ models:
 
     #[test]
     fn test_context_size_parses_c_from_cmd() {
-        let sample = "models:\n  \"m\":\n    cmd: >\n      llama-server -m \"...\" -c 32768 --threads 12\n";
+        let sample =
+            "models:\n  \"m\":\n    cmd: >\n      llama-server -m \"...\" -c 32768 --threads 12\n";
         assert_eq!(context_size_from_content(sample), 32768);
         assert_eq!(context_size_from_content("no -c here"), 8192);
         assert_eq!(context_size_from_content(""), 8192);

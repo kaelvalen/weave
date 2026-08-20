@@ -229,28 +229,51 @@ mod tests {
             "0.0.0.0",
             "224.0.0.1",
         ] {
-            assert!(is_private_ip(ip.parse().unwrap()), "{} should be private", ip);
+            assert!(
+                is_private_ip(ip.parse().unwrap()),
+                "{} should be private",
+                ip
+            );
         }
     }
 
     #[test]
     fn public_ipv4_ranges() {
         for ip in ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.32.0.1"] {
-            assert!(!is_private_ip(ip.parse().unwrap()), "{} should be public", ip);
+            assert!(
+                !is_private_ip(ip.parse().unwrap()),
+                "{} should be public",
+                ip
+            );
         }
     }
 
     #[test]
     fn private_ipv6_ranges() {
-        for ip in ["::1", "::", "fc00::1", "fd12:3456::1", "fe80::1", "::ffff:127.0.0.1"] {
-            assert!(is_private_ip(ip.parse().unwrap()), "{} should be private", ip);
+        for ip in [
+            "::1",
+            "::",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+        ] {
+            assert!(
+                is_private_ip(ip.parse().unwrap()),
+                "{} should be private",
+                ip
+            );
         }
     }
 
     #[test]
     fn public_ipv6_ranges() {
         for ip in ["2606:2800:220:1::1", "2a00:1450:4001::1"] {
-            assert!(!is_private_ip(ip.parse().unwrap()), "{} should be public", ip);
+            assert!(
+                !is_private_ip(ip.parse().unwrap()),
+                "{} should be public",
+                ip
+            );
         }
     }
 
@@ -269,7 +292,14 @@ mod tests {
     #[test]
     fn literal_private_hosts_rejected_without_dns() {
         // These parse as literal IPs, so the guard rejects them before any DNS.
-        for host in ["127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "::1", "::ffff:127.0.0.1"] {
+        for host in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "::1",
+            "::ffff:127.0.0.1",
+        ] {
             assert!(
                 ensure_public_host_sync(host).is_err(),
                 "{} should be rejected",
@@ -283,10 +313,17 @@ mod tests {
     #[test]
     fn cloud_metadata_and_loopback_urls_denied() {
         // The canonical SSRF targets: cloud metadata and the local model server.
-        let meta = Url::parse("http://169.254.169.254/latest/meta-data/iam/security-credentials").unwrap();
-        assert!(ensure_safe_url_sync(&meta).is_err(), "cloud metadata must be denied");
+        let meta =
+            Url::parse("http://169.254.169.254/latest/meta-data/iam/security-credentials").unwrap();
+        assert!(
+            ensure_safe_url_sync(&meta).is_err(),
+            "cloud metadata must be denied"
+        );
         let loopback = Url::parse("http://127.0.0.1:11434/api/chat").unwrap();
-        assert!(ensure_safe_url_sync(&loopback).is_err(), "local model endpoint must be denied");
+        assert!(
+            ensure_safe_url_sync(&loopback).is_err(),
+            "local model endpoint must be denied"
+        );
     }
 
     #[test]

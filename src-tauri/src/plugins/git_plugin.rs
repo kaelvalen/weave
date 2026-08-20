@@ -76,7 +76,7 @@ impl GitPlugin {
     fn status(params: Value) -> Result<Value, WeaveError> {
         let cwd = params.get("directory").and_then(|v| v.as_str());
         let mut cmd = Command::new("git");
-        cmd.args(&["status", "-s"]);
+        cmd.args(["status", "-s"]);
         if let Some(dir) = cwd {
             cmd.current_dir(Self::resolve_work_dir(Some(dir))?);
         }

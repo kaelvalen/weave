@@ -319,12 +319,13 @@ impl Harness {
 
         let mut events = Vec::new();
         loop {
-            let event = match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
-                .await
-            {
-                Ok(Some(e)) => e,
-                _ => break,
-            };
+            let event =
+                match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
+                    .await
+                {
+                    Ok(Some(e)) => e,
+                    _ => break,
+                };
             if let AgentEvent::PendingApproval { call_id, .. } = &event {
                 approvals.resolve(call_id, decision).unwrap();
             }
@@ -388,14 +389,17 @@ impl Harness {
 
         let mut events = Vec::new();
         loop {
-            let event = match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
-                .await
-            {
-                Ok(Some(e)) => e,
-                _ => break,
-            };
+            let event =
+                match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv())
+                    .await
+                {
+                    Ok(Some(e)) => e,
+                    _ => break,
+                };
             if let AgentEvent::PendingApproval { call_id, .. } = &event {
-                approvals.resolve(call_id, ApprovalDecision::Approved).unwrap();
+                approvals
+                    .resolve(call_id, ApprovalDecision::Approved)
+                    .unwrap();
             }
             if let AgentEvent::QuestionsAsked { question_id, .. } = &event {
                 let next = answers.lock().unwrap().pop().unwrap_or_default();
@@ -447,9 +451,9 @@ pub async fn round_trip(
 }
 
 pub fn saw_approval(events: &[AgentEvent], capability: &str) -> bool {
-    events.iter().any(|e| {
-        matches!(e, AgentEvent::PendingApproval { capability: c, .. } if c == capability)
-    })
+    events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::PendingApproval { capability: c, .. } if c == capability))
 }
 
 /// The second request body — the one that must carry the paired tool result.
@@ -465,11 +469,9 @@ pub fn second_request_body(rt: &RoundTrip) -> &str {
 /// result `tool_call_id`s — a dangling id would make the provider reject the
 /// request with 400, so this is the "next request is not malformed" proof.
 pub fn assert_completion_rule(body: &str) {
-    let json_start = body
-        .find('{')
-        .expect("request body must contain JSON");
-    let json: Value = serde_json::from_str(&body[json_start..])
-        .expect("second request must be valid JSON");
+    let json_start = body.find('{').expect("request body must contain JSON");
+    let json: Value =
+        serde_json::from_str(&body[json_start..]).expect("second request must be valid JSON");
     let messages = json["messages"]
         .as_array()
         .expect("second request must carry messages");

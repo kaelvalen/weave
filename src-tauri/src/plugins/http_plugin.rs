@@ -136,7 +136,7 @@ impl HttpPlugin {
                     "body": body,
                     "method": method,
                     "url": url,
-                    "success": status >= 200 && status < 300
+                    "success": (200..300).contains(&status)
                 }))
             })
         })

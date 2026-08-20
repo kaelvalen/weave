@@ -185,7 +185,11 @@ mod tests {
     fn mcp_capability_with_no_allowlist_entry_is_gated() {
         let plugin = mcp_plugin_fixture("weather");
         let config = crate::utils::config::AppConfig::default();
-        assert!(requires_approval_for_call("mcp.weather.get_forecast", &plugin, &config));
+        assert!(requires_approval_for_call(
+            "mcp.weather.get_forecast",
+            &plugin,
+            &config
+        ));
     }
 
     #[test]
@@ -195,7 +199,11 @@ mod tests {
         // gate, because the server's actual behavior is opaque.
         let plugin = mcp_plugin_fixture("weather");
         let config = crate::utils::config::AppConfig::default();
-        assert!(requires_approval_for_call("mcp.weather.get_time", &plugin, &config));
+        assert!(requires_approval_for_call(
+            "mcp.weather.get_time",
+            &plugin,
+            &config
+        ));
     }
 
     #[test]
@@ -287,15 +295,22 @@ mod tests {
             .join("src")
             .join("lib")
             .join("capabilities.ts");
-        let content = std::fs::read_to_string(&mirror_path)
-            .unwrap_or_else(|e| panic!("cannot read frontend mirror {}: {}", mirror_path.display(), e));
+        let content = std::fs::read_to_string(&mirror_path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read frontend mirror {}: {}",
+                mirror_path.display(),
+                e
+            )
+        });
 
         fn extract_set(content: &str, name: &str) -> Vec<String> {
             let start = content
                 .find(&format!("{}: ReadonlySet<string> = new Set([", name))
                 .unwrap_or_else(|| panic!("cannot find {} in mirror", name));
             let rest = &content[start..];
-            let end = rest.find("]);").unwrap_or_else(|| panic!("cannot find end of {}", name));
+            let end = rest
+                .find("]);")
+                .unwrap_or_else(|| panic!("cannot find end of {}", name));
             let mut caps: Vec<String> = rest[..end]
                 .split('\'')
                 .filter(|t| t.contains('.'))

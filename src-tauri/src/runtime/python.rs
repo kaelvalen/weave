@@ -3,7 +3,7 @@
 //! Executes Python plugins via an embedded CPython interpreter using PyO3.
 
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pyo3::prelude::*;
@@ -30,11 +30,11 @@ impl PythonRuntime {
             })
     }
 
-    fn venv_path(plugin_path: &PathBuf) -> PathBuf {
+    fn venv_path(plugin_path: &Path) -> PathBuf {
         plugin_path.join(".venv")
     }
 
-    fn venv_python_executable(venv_path: &PathBuf) -> PathBuf {
+    fn venv_python_executable(venv_path: &Path) -> PathBuf {
         #[cfg(target_os = "windows")]
         {
             venv_path.join("Scripts").join("python.exe")
@@ -253,7 +253,7 @@ impl PythonRuntime {
         })
     }
 
-    fn site_packages_path(venv_path: &PathBuf) -> PathBuf {
+    fn site_packages_path(venv_path: &Path) -> PathBuf {
         #[cfg(target_os = "windows")]
         {
             venv_path.join("Lib").join("site-packages")

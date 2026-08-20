@@ -57,10 +57,7 @@ fn write_to_keychain(account: &str, secret: &str) -> bool {
 fn read_from_keychain(account: &str) -> Option<String> {
     let _guard = K_LOCK.lock().unwrap();
     let entry = Entry::new(SERVICE, account).ok()?;
-    match entry.get_password() {
-        Ok(v) => Some(v),
-        Err(_) => None,
-    }
+    entry.get_password().ok()
 }
 
 fn delete_from_keychain(account: &str) {
@@ -165,7 +162,12 @@ pub fn redact_json(pretty: &str) -> String {
         Ok(v) => v,
         Err(_) => return pretty.to_string(),
     };
-    for path in ["ai.openai.api_key", "ai.anthropic.api_key", "ai.kimi.api_key", "ai.opencode.api_key"] {
+    for path in [
+        "ai.openai.api_key",
+        "ai.anthropic.api_key",
+        "ai.kimi.api_key",
+        "ai.opencode.api_key",
+    ] {
         let mut cursor: Option<&mut serde_json::Value> = Some(&mut value);
         for seg in path.split('.') {
             match cursor {
@@ -247,8 +249,13 @@ mod tests {
         );
         let cols = collect_secrets(&cfg);
         assert!(cols.iter().any(|(a, v)| a == ACCT_OPENAI && v == "sk-a"));
-        assert!(!cols.iter().any(|(a, _)| a == ACCT_KIMI), "empty keys are skipped");
-        assert!(cols.iter().any(|(a, v)| a == &mcp_access_account("s") && v == "tok"));
+        assert!(
+            !cols.iter().any(|(a, _)| a == ACCT_KIMI),
+            "empty keys are skipped"
+        );
+        assert!(cols
+            .iter()
+            .any(|(a, v)| a == &mcp_access_account("s") && v == "tok"));
         assert!(!cols.iter().any(|(a, _)| a == &mcp_refresh_account("s")));
     }
 }

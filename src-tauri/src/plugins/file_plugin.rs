@@ -280,7 +280,8 @@ impl FilePlugin {
             let denied = if blocked_is_absolute {
                 path_str == *blocked || path_str.starts_with(&format!("{}/", blocked))
             } else {
-                path.components().any(|c| c.as_os_str() == Path::new(blocked).as_os_str())
+                path.components()
+                    .any(|c| c.as_os_str() == Path::new(blocked).as_os_str())
             };
             if denied {
                 return Err(WeaveError::PermissionDenied(format!(
@@ -317,9 +318,9 @@ impl FilePlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use parking_lot::RwLock;
     use runtime_kernel::event_bus::EventBus;
+    use std::sync::Arc;
 
     fn test_ctx() -> runtime_kernel::execution_context::ExecutionContext {
         runtime_kernel::execution_context::ExecutionContext::new(
@@ -432,7 +433,10 @@ mod tests {
             escaped.push("..");
         }
         escaped.push("tmp");
-        let victim = escaped.join(format!("{}_victim.txt", outside.file_name().unwrap().to_string_lossy().as_ref()));
+        let victim = escaped.join(format!(
+            "{}_victim.txt",
+            outside.file_name().unwrap().to_string_lossy().as_ref()
+        ));
         std::fs::File::create(&victim).unwrap();
 
         let result = FilePlugin::execute(

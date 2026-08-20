@@ -124,7 +124,7 @@ impl NotePlugin {
 
     fn list() -> Result<Value, WeaveError> {
         let notes = Self::load_all_notes()?;
-        let note_jsons: Vec<Value> = notes.iter().map(|n| Self::note_to_json(n)).collect();
+        let note_jsons: Vec<Value> = notes.iter().map(Self::note_to_json).collect();
         info!("Listed {} notes", note_jsons.len());
         Ok(json!({"notes": note_jsons, "count": note_jsons.len(), "success": true}))
     }
@@ -239,7 +239,7 @@ impl NotePlugin {
                         .iter()
                         .any(|t| t.to_lowercase().contains(&query_lower))
             })
-            .map(|n| Self::note_to_json(n))
+            .map(Self::note_to_json)
             .collect();
         info!("Search '{}': {} matches", query, matches.len());
         Ok(json!({"query": query, "results": matches, "count": matches.len(), "success": true}))
@@ -281,8 +281,8 @@ impl NotePlugin {
 mod tests {
     use super::*;
     use parking_lot::RwLock;
-    use std::sync::Arc;
     use runtime_kernel::event_bus::EventBus;
+    use std::sync::Arc;
 
     fn test_ctx() -> runtime_kernel::execution_context::ExecutionContext {
         runtime_kernel::execution_context::ExecutionContext::new(

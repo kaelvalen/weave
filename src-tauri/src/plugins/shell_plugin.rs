@@ -221,17 +221,13 @@ impl ShellPlugin {
         // place is the /tmp tmpfs, which is convention ephemeral scratch
         // (never host-visible).
         cmd.args(["--setenv", "HOME", "/workspace/.weave-home"]);
-        cmd.args([
-            "--bind",
-            &workspace.to_string_lossy().to_string(),
-            "/workspace",
-        ]);
+        cmd.args(["--bind", workspace.to_string_lossy().as_ref(), "/workspace"]);
         // Binds first (bwrap creates their mount points), then the whole
         // rootfs turns read-only: the only writable places left are the
         // /workspace bind and the /tmp tmpfs.
         cmd.args(["--remount-ro", "/"]);
         cmd.args(["--chdir", &sandbox_cwd]);
-        cmd.args(["--", &sh.to_string_lossy().to_string(), "-c", command_str]);
+        cmd.args(["--", sh.to_string_lossy().as_ref(), "-c", command_str]);
 
         // Execute with timeout using a thread
         let timeout_duration = std::time::Duration::from_secs(timeout_secs);
@@ -287,12 +283,8 @@ mod tests {
     }
 
     fn run(command: &str) -> Value {
-        ShellPlugin::execute(
-            "shell.exec",
-            json!({ "command": command }),
-            &test_ctx(),
-        )
-        .expect("shell.exec must return a result")
+        ShellPlugin::execute("shell.exec", json!({ "command": command }), &test_ctx())
+            .expect("shell.exec must return a result")
     }
 
     fn run_json(params: Value) -> Value {
@@ -340,10 +332,8 @@ mod tests {
         // A real host system directory whose parent does not exist inside
         // the sandbox rootfs — mkdir fails with an OS error, and nothing is
         // ever created on the host.
-        let outside = std::path::Path::new("/var/lib").join(format!(
-            "weave_sandbox_{}",
-            uuid::Uuid::new_v4()
-        ));
+        let outside = std::path::Path::new("/var/lib")
+            .join(format!("weave_sandbox_{}", uuid::Uuid::new_v4()));
         let res = run(&format!("mkdir {}", outside.display()));
         assert!(
             res["success"] == false,
@@ -537,10 +527,8 @@ mod tests {
         // with a clear error, never a panic or an unsandboxed fallback.
         let dir = std::env::temp_dir().join(format!("weave_no_bwrap_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let result = ShellPlugin::exec_with_path(
-            json!({ "command": "echo hi" }),
-            &dir.to_string_lossy(),
-        );
+        let result =
+            ShellPlugin::exec_with_path(json!({ "command": "echo hi" }), &dir.to_string_lossy());
         let _ = std::fs::remove_dir_all(&dir);
         match result {
             Err(WeaveError::PluginError(msg)) => {

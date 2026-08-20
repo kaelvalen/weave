@@ -1,9 +1,9 @@
 use parking_lot::RwLock;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
-use sha2::{Digest, Sha256};
 
 use crate::mcp_client::{self, McpExecutor, McpTool, McpToolCache};
 use crate::models::manifest::Manifest;
@@ -169,7 +169,7 @@ impl PluginManager {
         self.plugins
             .write()
             .remove(&id)
-            .ok_or_else(|| WeaveError::PluginNotFound(id))?;
+            .ok_or(WeaveError::PluginNotFound(id))?;
         Ok(())
     }
 
@@ -223,11 +223,17 @@ impl PluginManager {
                 };
                 let listed = match &token {
                     Some(t) => {
-                        if protocol_version.as_deref() == Some(mcp_client::LEGACY_PROTOCOL_VERSION) {
+                        if protocol_version.as_deref() == Some(mcp_client::LEGACY_PROTOCOL_VERSION)
+                        {
                             rt.block_on(async {
-                                let supported = vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()];
-                                match mcp_client::establish_session(&url, &supported, Some(t)).await {
-                                    Ok(session) => mcp_client::list_tools_with_session(&url, &session, Some(t)).await,
+                                let supported =
+                                    vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()];
+                                match mcp_client::establish_session(&url, &supported, Some(t)).await
+                                {
+                                    Ok(session) => {
+                                        mcp_client::list_tools_with_session(&url, &session, Some(t))
+                                            .await
+                                    }
                                     Err(e) => Err(e),
                                 }
                             })
@@ -253,9 +259,15 @@ impl PluginManager {
                         }
                     }
                 };
-                this.mcp_tool_cache
-                    .store(&server_id, listed.clone());
-                this.add_mcp_server(&server_id, &name, &url, token, listed.tools, protocol_version);
+                this.mcp_tool_cache.store(&server_id, listed.clone());
+                this.add_mcp_server(
+                    &server_id,
+                    &name,
+                    &url,
+                    token,
+                    listed.tools,
+                    protocol_version,
+                );
                 info!("Restored MCP server: {} ({})", name, server_id);
             });
         }
@@ -529,11 +541,11 @@ impl PluginManager {
         Ok(plugin)
     }
 
-    fn load_directory_plugin(&self, path: &PathBuf) -> Result<Plugin, WeaveError> {
+    fn load_directory_plugin(&self, path: &Path) -> Result<Plugin, WeaveError> {
         let manifest_path = path.join("manifest.toml");
         let content = std::fs::read_to_string(&manifest_path)?;
         let manifest = Manifest::from_toml(&content)?;
-        let mut plugin = manifest.to_plugin(Some(path.clone()), false);
+        let mut plugin = manifest.to_plugin(Some(path.to_path_buf()), false);
         plugin.state = PluginState::Discovered;
         Ok(plugin)
     }
@@ -695,7 +707,13 @@ impl PluginManager {
     pub fn provider_tool_name(capability: &str) -> String {
         let readable: String = capability
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .take(48)
             .collect();
         let digest = Sha256::digest(capability.as_bytes());
@@ -703,7 +721,15 @@ impl PluginManager {
             .iter()
             .map(|byte| format!("{:02x}", byte))
             .collect();
-        format!("weave_{}_{}", if readable.is_empty() { "tool" } else { &readable }, suffix)
+        format!(
+            "weave_{}_{}",
+            if readable.is_empty() {
+                "tool"
+            } else {
+                &readable
+            },
+            suffix
+        )
     }
 
     /// Resolve a provider-safe function name back to its canonical capability
@@ -768,7 +794,10 @@ impl PluginManager {
     ///
     /// OpenAI and Ollama use the `{"type":"function",...}` envelope;
     /// Anthropic uses `{"name","description","input_schema"}`.
-    pub fn tools_for_provider(&self, provider: &crate::utils::config::Provider) -> Vec<serde_json::Value> {
+    pub fn tools_for_provider(
+        &self,
+        provider: &crate::utils::config::Provider,
+    ) -> Vec<serde_json::Value> {
         let mut tools: Vec<serde_json::Value> = Vec::new();
 
         // Reserved human-in-the-loop tool — always offered, never a plugin.
@@ -925,7 +954,7 @@ impl PluginManager {
                     prompt.push_str(&format!("{}\n", fact));
                 }
             }
-            prompt.push_str("\n");
+            prompt.push('\n');
         }
 
         prompt
@@ -945,7 +974,11 @@ mod tests {
             .collect();
 
         for name in &names {
-            assert!(!name.contains('.'), "provider name contains a dot: {}", name);
+            assert!(
+                !name.contains('.'),
+                "provider name contains a dot: {}",
+                name
+            );
             assert!(
                 name.chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),

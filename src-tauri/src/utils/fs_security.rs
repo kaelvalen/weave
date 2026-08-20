@@ -47,7 +47,9 @@ pub fn canonicalize_checked(path: &Path) -> Result<PathBuf, WeaveError> {
     };
 
     if abs.exists() {
-        return abs.canonicalize().map_err(|e| WeaveError::Io(e.to_string()));
+        return abs
+            .canonicalize()
+            .map_err(|e| WeaveError::Io(e.to_string()));
     }
 
     // Walk up to the deepest existing ancestor and canonicalize that.
@@ -126,7 +128,11 @@ mod tests {
     use super::*;
 
     fn temp_root(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("weave_fs_security_{}_{}", tag, uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!(
+            "weave_fs_security_{}_{}",
+            tag,
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -138,11 +144,11 @@ mod tests {
         // canonicalize to the parent, which is outside `root`.
         let traversal = root.join("..").join("null_does_not_matter");
         let canonical = canonicalize_checked(&traversal).unwrap();
-        assert!(!is_within_any(&canonical, &[root.clone()]));
+        assert!(!is_within_any(&canonical, std::slice::from_ref(&root)));
         // Symmetry: a real child is allowed.
         std::fs::create_dir_all(root.join("child")).unwrap();
         let child_canon = canonicalize_checked(&root.join("child")).unwrap();
-        assert!(is_within_any(&child_canon, &[root.clone()]));
+        assert!(is_within_any(&child_canon, std::slice::from_ref(&root)));
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -159,7 +165,7 @@ mod tests {
             // pass; canonicalization must resolve it and deny it.
             symlink(&outside, &link).unwrap();
             let canonical = canonicalize_checked(&link.join("secret.txt")).unwrap();
-            assert!(!is_within_any(&canonical, &[root.clone()]));
+            assert!(!is_within_any(&canonical, std::slice::from_ref(&root)));
             let _ = std::fs::remove_dir_all(&root);
             let _ = std::fs::remove_dir_all(&outside);
         }
@@ -173,7 +179,7 @@ mod tests {
         let canonical = canonicalize_checked(&target).unwrap();
         assert!(canonical.starts_with(root.join("sub")));
         assert!(canonical.ends_with("file.txt"));
-        assert!(is_within_any(&canonical, &[root.clone()]));
+        assert!(is_within_any(&canonical, std::slice::from_ref(&root)));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

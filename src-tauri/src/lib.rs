@@ -1,3 +1,19 @@
+//! Weave backend: agent loop, plugins, MCP, security policy, and the Tauri
+//! command surface. See `docs/architecture.md` and `docs/defensive-patterns.md`.
+
+// Deliberate project-wide allowance for a few style lints that fire on
+// long-lived, intentionally-shaped legacy code (6–10 argument APIs, manual
+// loop counters, a lock spanning an await in the async fetch, test fixtures
+// built via `Default::default()` + field mutation). These are style, not
+// correctness; correctness is enforced separately via
+// `clippy -- -D clippy::correctness` in CI and the local toolchain.
+#![allow(
+    clippy::too_many_arguments,
+    clippy::explicit_counter_loop,
+    clippy::await_holding_lock,
+    clippy::field_reassign_with_default
+)]
+
 use parking_lot::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

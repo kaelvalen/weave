@@ -74,7 +74,9 @@ pub async fn mcp_add_server(
     app_state: State<'_, AppState>,
 ) -> Result<Plugin, WeaveError> {
     if url.trim().is_empty() {
-        return Err(WeaveError::PluginError("Server URL is required".to_string()));
+        return Err(WeaveError::PluginError(
+            "Server URL is required".to_string(),
+        ));
     }
     let display_name = if name.trim().is_empty() {
         url.clone()
@@ -104,19 +106,23 @@ pub async fn mcp_add_server(
         .and_then(mcp_client::choose_session)
         .map(|s| s.protocol_version);
 
-    let listed_result: Result<mcp_client::ToolsListResult, WeaveError> = if protocol_version
-        .as_deref()
-        == Some(mcp_client::LEGACY_PROTOCOL_VERSION)
-    {
-        // Legacy session-based server: establish an initialize session, then
-        // list tools over it.
-        match mcp_client::establish_session(&url, &vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()], None).await {
-            Ok(session) => mcp_client::list_tools_with_session(&url, &session, None).await,
-            Err(e) => Err(e),
-        }
-    } else {
-        mcp_client::list_tools(&url, None).await
-    };
+    let listed_result: Result<mcp_client::ToolsListResult, WeaveError> =
+        if protocol_version.as_deref() == Some(mcp_client::LEGACY_PROTOCOL_VERSION) {
+            // Legacy session-based server: establish an initialize session, then
+            // list tools over it.
+            match mcp_client::establish_session(
+                &url,
+                &[mcp_client::LEGACY_PROTOCOL_VERSION.to_string()],
+                None,
+            )
+            .await
+            {
+                Ok(session) => mcp_client::list_tools_with_session(&url, &session, None).await,
+                Err(e) => Err(e),
+            }
+        } else {
+            mcp_client::list_tools(&url, None).await
+        };
     let listed = match listed_result {
         Ok(l) => l,
         Err(WeaveError::AuthRequired(challenge)) => {
@@ -135,8 +141,7 @@ pub async fn mcp_add_server(
         Some(challenge) => {
             // RFC 9728: a resource_metadata URL is a metadata *document*,
             // not the AS base — resolve it before RFC 8414 discovery.
-            let resolved =
-                mcp_client::resolve_authorization_server(challenge).await?;
+            let resolved = mcp_client::resolve_authorization_server(challenge).await?;
             let mut md = mcp_client::discover_authorization_server(&resolved.base_url).await?;
             if md.scopes_supported.is_empty() {
                 md.scopes_supported = resolved.scopes_supported;
@@ -199,13 +204,13 @@ pub async fn mcp_add_server(
         }
     }
 
-    app_state
-        .plugin_manager
-        .mcp_tool_cache()
-        .store(&server_id, mcp_client::ToolsListResult {
+    app_state.plugin_manager.mcp_tool_cache().store(
+        &server_id,
+        mcp_client::ToolsListResult {
             tools: listed.tools.clone(),
             ttl_ms: listed.ttl_ms,
-        });
+        },
+    );
 
     let plugin = app_state.plugin_manager.add_mcp_server(
         &server_id,
@@ -266,9 +271,15 @@ pub fn mcp_remove_server(
 }
 
 #[tauri::command]
-pub fn mcp_list_servers(app_state: State<'_, AppState>) -> Result<Vec<McpServerSummary>, WeaveError> {
+pub fn mcp_list_servers(
+    app_state: State<'_, AppState>,
+) -> Result<Vec<McpServerSummary>, WeaveError> {
     let config = app_state.config.read();
-    let mut servers: Vec<McpServerSummary> = config.mcp_servers.values().map(McpServerSummary::from).collect();
+    let mut servers: Vec<McpServerSummary> = config
+        .mcp_servers
+        .values()
+        .map(McpServerSummary::from)
+        .collect();
     servers.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(servers)
 }
@@ -408,8 +419,7 @@ pub async fn mcp_oauth_authorize(
     // scope after the app is upgraded.
     let mut oauth_scopes = cfg.oauth_scopes.clone();
     if oauth_scopes.is_empty() {
-        if let Err(WeaveError::AuthRequired(challenge)) =
-            mcp_client::discover(&cfg.url, None).await
+        if let Err(WeaveError::AuthRequired(challenge)) = mcp_client::discover(&cfg.url, None).await
         {
             oauth_scopes = mcp_client::resolve_authorization_server(&challenge)
                 .await?
@@ -429,20 +439,16 @@ pub async fn mcp_oauth_authorize(
     // browser so the redirect cannot arrive early. Port comes from the
     // (possibly overridden) redirect URI, not a hardcoded constant.
     let redirect = mcp_client::oauth_redirect_uri();
-    let redirect_url = reqwest::Url::parse(&redirect)
-        .map_err(|e| WeaveError::PluginError(format!("invalid OAuth redirect URI {}: {}", redirect, e)))?;
-    let bind_host = redirect_url
-        .host_str()
-        .unwrap_or("127.0.0.1")
-        .to_string();
-    let bind_port = redirect_url
-        .port()
-        .ok_or_else(|| {
-            WeaveError::PluginError(format!(
-                "OAuth redirect URI {} must include a loopback port",
-                redirect
-            ))
-        })?;
+    let redirect_url = reqwest::Url::parse(&redirect).map_err(|e| {
+        WeaveError::PluginError(format!("invalid OAuth redirect URI {}: {}", redirect, e))
+    })?;
+    let bind_host = redirect_url.host_str().unwrap_or("127.0.0.1").to_string();
+    let bind_port = redirect_url.port().ok_or_else(|| {
+        WeaveError::PluginError(format!(
+            "OAuth redirect URI {} must include a loopback port",
+            redirect
+        ))
+    })?;
     let bind_addr = format!("{}:{}", bind_host, bind_port);
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
@@ -462,9 +468,7 @@ pub async fn mcp_oauth_authorize(
     );
     app.opener()
         .open_url(&authorization_url, None::<&str>)
-        .map_err(|e| {
-            WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e))
-        })?;
+        .map_err(|e| WeaveError::PluginError(format!("cannot open browser for OAuth: {}", e)))?;
 
     let (code, state_back) = tokio::time::timeout(
         std::time::Duration::from_secs(120),
@@ -486,7 +490,8 @@ pub async fn mcp_oauth_authorize(
 
     if state_back != state {
         return Err(WeaveError::PluginError(
-            "OAuth state mismatch — the redirect did not come from our authorization request".to_string(),
+            "OAuth state mismatch — the redirect did not come from our authorization request"
+                .to_string(),
         ));
     }
 
@@ -510,12 +515,10 @@ pub async fn mcp_oauth_authorize(
     // Tools could not be listed without a token; re-list and re-register
     // them now that the executor carries one. Legacy session-based servers
     // need an initialize session for the re-list.
-    let listed = if cfg.protocol_version.as_deref()
-        == Some(mcp_client::LEGACY_PROTOCOL_VERSION)
-    {
+    let listed = if cfg.protocol_version.as_deref() == Some(mcp_client::LEGACY_PROTOCOL_VERSION) {
         let session = mcp_client::establish_session(
             &cfg.url,
-            &vec![mcp_client::LEGACY_PROTOCOL_VERSION.to_string()],
+            &[mcp_client::LEGACY_PROTOCOL_VERSION.to_string()],
             Some(&tokens.access_token),
         )
         .await?;
