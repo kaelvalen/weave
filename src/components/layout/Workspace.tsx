@@ -1,30 +1,51 @@
+import { lazy, Suspense, useEffect } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
 import { ChatCommandCenter } from '@/components/chat/ChatCommandCenter';
-import { PluginMarket } from '@/components/plugins/PluginMarket';
-import { SettingsPanel } from '@/components/settings/SettingsPanel';
-import { FileManager } from '@/components/files/FileManager';
 import { StatusBar } from '@/components/layout/StatusBar';
-import { KnowledgeView } from '@/components/workspace/KnowledgeView';
-import { useEffect } from 'react';
+
+// Heavier views are code-split so the initial chat bundle stays small — these
+// only cost a network+parse hit when the user actually opens that view.
+const KnowledgeView = lazy(() =>
+  import('@/components/workspace/KnowledgeView').then((m) => ({ default: m.KnowledgeView }))
+);
+const PluginMarket = lazy(() =>
+  import('@/components/plugins/PluginMarket').then((m) => ({ default: m.PluginMarket }))
+);
+const SettingsPanel = lazy(() =>
+  import('@/components/settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel }))
+);
+const FileManager = lazy(() =>
+  import('@/components/files/FileManager').then((m) => ({ default: m.FileManager }))
+);
+
+function ViewFallback() {
+  // Keeps the layout stable while a lazy view chunk loads.
+  return <div className="flex h-full items-center justify-center text-muted-foreground" />;
+}
 
 export function Workspace() {
   const { activeView } = useAppStore();
 
   const renderView = () => {
+    let view: React.ReactNode;
     switch (activeView) {
       case 'chat':
         return <ChatCommandCenter />;
       case 'knowledge':
-        return <KnowledgeView />;
+        view = <KnowledgeView />;
+        break;
       case 'plugins':
-        return <PluginMarket />;
+        view = <PluginMarket />;
+        break;
       case 'settings':
-        return <SettingsPanel />;
+        view = <SettingsPanel />;
+        break;
       case 'files':
-        return <FileManager />;
       default:
-        return <FileManager />;
+        view = <FileManager />;
+        break;
     }
+    return <Suspense fallback={<ViewFallback />}>{view}</Suspense>;
   };
 
   useEffect(() => {
